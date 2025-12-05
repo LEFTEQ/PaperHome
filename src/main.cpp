@@ -1,138 +1,92 @@
 /* PaperHome - Smart Home E-Ink Controller
- * Based on LaskaKit GDEQ0426T82 example
  *
  * Board:   LaskaKit ESPink ESP32 e-Paper   https://www.laskakit.cz/laskakit-espink-esp32-e-paper-pcb-antenna/
  * Display: Good Display GDEQ0426T82        https://www.laskakit.cz/good-display-gdeq0426t82-4-26--800x480-epaper-displej-grayscale/
  */
 
-#define ENABLE_GxEPD2_GFX 0
+#include <Arduino.h>
+#include "config.h"
+#include "display_manager.h"
+#include "homekit_manager.h"
 
-#include <GxEPD2_BW.h>
-#include <Fonts/FreeMonoBold9pt7b.h>
-#include <Fonts/FreeMonoBold24pt7b.h>
+// Track WiFi state for display updates
+bool lastWiFiState = false;
 
-// ESPink v3.5 pin definitions
-// MOSI/SDI  11
-// CLK/SCK   12
-// SS/CS     10
-#define DC    48
-#define RST   45
-#define BUSY  38
-#define POWER 47
+// Callback when accessory state changes
+void onAccessoryStateChange(const char* name, bool on, int brightness) {
+    Serial.printf("[Main] Accessory '%s' changed: power=%s, brightness=%d\n",
+                  name, on ? "ON" : "OFF", brightness);
 
-// ESP32-S3 has an onboard RGB LED on GPIO 48 - but that's our DC pin
-// We'll use the built-in LED if available (GPIO 2 on some boards)
-#define LED_BUILTIN_MANUAL 2
-
-// Display instance - using SS (GPIO 10) for CS as in LaskaKit example
-GxEPD2_BW<GxEPD2_426_GDEQ0426T82, GxEPD2_426_GDEQ0426T82::HEIGHT> display(
-    GxEPD2_426_GDEQ0426T82(SS, DC, RST, BUSY)
-);
-
-const char* PRODUCT_NAME = "PaperHome";
-
-void blinkLed(int times, int delayMs = 200) {
-    for (int i = 0; i < times; i++) {
-        digitalWrite(LED_BUILTIN_MANUAL, HIGH);
-        delay(delayMs);
-        digitalWrite(LED_BUILTIN_MANUAL, LOW);
-        delay(delayMs);
-    }
+    // TODO: Update display to show accessory states
 }
 
-void testRectangle()
-{
-    Serial.println("[TEST] Drawing simple black rectangle...");
+void showStatus() {
+    DisplayType& display = displayManager.getDisplay();
 
-    display.setRotation(0);  // No rotation for simplest test
+    display.setRotation(DISPLAY_ROTATION);
     display.setFullWindow();
-
-    Serial.printf("[TEST] Display size: %d x %d\n", display.width(), display.height());
-
-    Serial.println("[TEST] Calling firstPage()...");
     display.firstPage();
 
-    int pageCount = 0;
-    do
-    {
-        pageCount++;
-        Serial.printf("[TEST] Drawing page %d...\n", pageCount);
-
-        // Fill white background
+    do {
         display.fillScreen(GxEPD_WHITE);
 
-        // Draw a big black rectangle in the center
-        int rectW = 200;
-        int rectH = 100;
-        int rectX = (display.width() - rectW) / 2;
-        int rectY = (display.height() - rectH) / 2;
+        // Title
+        display.setFont(&FreeMonoBold24pt7b);
+        display.setTextColor(GxEPD_BLACK);
+        display.setCursor(20, 50);
+        display.print(PRODUCT_NAME);
 
-        display.fillRect(rectX, rectY, rectW, rectH, GxEPD_BLACK);
+        // Version
+        display.setFont(&FreeMonoBold9pt7b);
+        display.setCursor(20, 80);
+        display.printf("v%s", PRODUCT_VERSION);
 
-        // Also draw border rectangles in corners
-        display.fillRect(0, 0, 50, 50, GxEPD_BLACK);  // Top-left
-        display.fillRect(display.width() - 50, 0, 50, 50, GxEPD_BLACK);  // Top-right
-        display.fillRect(0, display.height() - 50, 50, 50, GxEPD_BLACK);  // Bottom-left
-        display.fillRect(display.width() - 50, display.height() - 50, 50, 50, GxEPD_BLACK);  // Bottom-right
+        // Divider line
+        display.drawLine(20, 100, displayManager.width() - 20, 100, GxEPD_BLACK);
+
+        // WiFi Status
+        display.setFont(&FreeMonoBold12pt7b);
+        display.setCursor(20, 140);
+        if (homeKitManager.isWiFiConnected()) {
+            display.printf("WiFi: %s", homeKitManager.getWiFiSSID());
+        } else {
+            display.print("WiFi: Not connected");
+            display.setCursor(20, 170);
+            display.setFont(&FreeMonoBold9pt7b);
+            display.print("Connect to 'HomeSpan-Setup' network");
+        }
+
+        // HomeKit pairing code
+        display.setFont(&FreeMonoBold12pt7b);
+        display.setCursor(20, 210);
+        display.print("HomeKit Setup Code:");
+
+        display.setFont(&FreeMonoBold24pt7b);
+        display.setCursor(20, 260);
+        const char* code = homeKitManager.getPairingCode();
+        display.printf("%c%c%c-%c%c-%c%c%c",
+                      code[0], code[1], code[2],
+                      code[3], code[4],
+                      code[5], code[6], code[7]);
+
+        // Instructions
+        display.setFont(&FreeMonoBold9pt7b);
+        display.setCursor(20, 320);
+        display.print("1. Open Home app on iPhone/iPad");
+        display.setCursor(20, 345);
+        display.print("2. Tap '+' > Add Accessory");
+        display.setCursor(20, 370);
+        display.print("3. Enter code or scan QR");
+
+        // Accessories info
+        display.setCursor(20, 420);
+        display.print("Accessories: Living Room Light, Main Switch");
 
     } while (display.nextPage());
-
-    Serial.printf("[TEST] Rectangle drawn! Total pages: %d\n", pageCount);
 }
 
-void helloWorld()
-{
-    Serial.println("[HELLO] Starting helloWorld...");
-
-    display.setRotation(1);
-    display.setFont(&FreeMonoBold24pt7b);
-    display.setTextColor(GxEPD_BLACK);
-
-    int16_t tbx, tby;
-    uint16_t tbw, tbh;
-    display.getTextBounds(PRODUCT_NAME, 0, 0, &tbx, &tby, &tbw, &tbh);
-
-    // Center text
-    uint16_t x = ((display.width() - tbw) / 2) - tbx;
-    uint16_t y = ((display.height() - tbh) / 2) - tby;
-
-    Serial.printf("[HELLO] Text bounds: tbx=%d, tby=%d, tbw=%d, tbh=%d\n", tbx, tby, tbw, tbh);
-    Serial.printf("[HELLO] Cursor position: x=%d, y=%d\n", x, y);
-    Serial.printf("[HELLO] Display size (rotated): %d x %d\n", display.width(), display.height());
-
-    display.setFullWindow();
-
-    Serial.println("[HELLO] Calling firstPage()...");
-    display.firstPage();
-
-    int pageCount = 0;
-    do
-    {
-        pageCount++;
-        Serial.printf("[HELLO] Drawing page %d...\n", pageCount);
-        display.fillScreen(GxEPD_WHITE);
-        display.setCursor(x, y);
-        display.print(PRODUCT_NAME);
-    }
-    while (display.nextPage());
-
-    Serial.printf("[HELLO] Done! Total pages: %d\n", pageCount);
-}
-
-void checkBusyPin() {
-    Serial.println("[BUSY] Checking BUSY pin status...");
-    pinMode(BUSY, INPUT);
-
-    for (int i = 0; i < 10; i++) {
-        int busyState = digitalRead(BUSY);
-        Serial.printf("[BUSY] Read %d: BUSY pin = %d (%s)\n", i, busyState, busyState ? "HIGH/BUSY" : "LOW/READY");
-        delay(100);
-    }
-}
-
-void setup()
-{
-    Serial.begin(115200);
+void setup() {
+    Serial.begin(SERIAL_BAUD);
 
     // Wait for serial with timeout
     unsigned long startWait = millis();
@@ -142,87 +96,45 @@ void setup()
 
     Serial.println();
     Serial.println("=========================================");
-    Serial.println("  PaperHome - Debug Mode");
+    Serial.printf("  %s v%s\n", PRODUCT_NAME, PRODUCT_VERSION);
+    Serial.println("  Smart Home E-Ink Controller");
     Serial.println("=========================================");
     Serial.println();
-
-    // Setup LED for visual feedback
-    pinMode(LED_BUILTIN_MANUAL, OUTPUT);
-    digitalWrite(LED_BUILTIN_MANUAL, LOW);
-
-    Serial.println("[INIT] Blinking LED 3 times to show we're alive...");
-    blinkLed(3);
-
-    // Print pin configuration
-    Serial.println("[INIT] Pin configuration:");
-    Serial.printf("  SS (CS):  %d\n", SS);
-    Serial.printf("  DC:       %d\n", DC);
-    Serial.printf("  RST:      %d\n", RST);
-    Serial.printf("  BUSY:     %d\n", BUSY);
-    Serial.printf("  POWER:    %d\n", POWER);
-    Serial.println();
-
-    // Check BUSY pin before power on
-    Serial.println("[INIT] Checking BUSY pin BEFORE power on...");
-    checkBusyPin();
-
-    // Turn on power to display
-    Serial.println("[INIT] Turning on display power (GPIO 47 HIGH)...");
-    pinMode(POWER, OUTPUT);
-    digitalWrite(POWER, HIGH);
-    Serial.println("[INIT] Display power ON - waiting 1 second...");
-    delay(1000);
-
-    // Check BUSY pin after power on
-    Serial.println("[INIT] Checking BUSY pin AFTER power on...");
-    checkBusyPin();
-
-    // Blink to show power is on
-    blinkLed(2);
 
     // Initialize display
-    Serial.println("[INIT] Calling display.init()...");
-    display.init(115200, true, 2, false);  // With serial debug output
-    Serial.println("[INIT] display.init() completed!");
+    Serial.println("[Main] Initializing display...");
+    displayManager.init();
 
-    // Check BUSY pin after init
-    Serial.println("[INIT] Checking BUSY pin AFTER init...");
-    checkBusyPin();
+    // Show initial loading message
+    displayManager.showCenteredText("Starting...", &FreeMonoBold18pt7b);
 
-    // Blink to show init done
-    blinkLed(2);
+    // Initialize HomeKit
+    Serial.println("[Main] Initializing HomeKit...");
+    homeKitManager.setStateCallback(onAccessoryStateChange);
+    homeKitManager.init();
 
-    // First test: simple rectangle
+    // Add accessories
+    homeKitManager.addLight("Living Room Light");
+    homeKitManager.addSwitch("Main Switch");
+
+    // Show status screen
+    Serial.println("[Main] Updating display...");
+    showStatus();
+
+    Serial.println("[Main] Setup complete!");
     Serial.println();
-    Serial.println("========== TEST 1: Rectangle ==========");
-    testRectangle();
-    Serial.println("[TEST] Rectangle test complete!");
-
-    blinkLed(5, 100);  // Fast blinks to show test 1 done
-
-    delay(3000);  // Wait to see the rectangle
-
-    // Second test: text
-    Serial.println();
-    Serial.println("========== TEST 2: Hello World ==========");
-    helloWorld();
-    Serial.println("[TEST] Hello World test complete!");
-
-    blinkLed(5, 100);  // Fast blinks to show test 2 done
-
-    Serial.println();
-    Serial.println("=========================================");
-    Serial.println("  Setup complete!");
-    Serial.println("=========================================");
 }
 
-void loop()
-{
-    // Slow blink to show we're running
-    static unsigned long lastBlink = 0;
-    if (millis() - lastBlink > 2000) {
-        lastBlink = millis();
-        digitalWrite(LED_BUILTIN_MANUAL, !digitalRead(LED_BUILTIN_MANUAL));
-        Serial.println("[LOOP] Still running...");
+void loop() {
+    // Poll HomeSpan (required!)
+    homeKitManager.poll();
+
+    // Check for WiFi state change and update display
+    bool currentWiFiState = homeKitManager.isWiFiConnected();
+    if (currentWiFiState != lastWiFiState) {
+        lastWiFiState = currentWiFiState;
+        Serial.printf("[Main] WiFi state changed: %s\n",
+                      currentWiFiState ? "Connected" : "Disconnected");
+        showStatus();
     }
 }

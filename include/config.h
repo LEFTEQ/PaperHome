@@ -12,7 +12,7 @@
 // -----------------------------------------------------------------------------
 #define EPAPER_MOSI     11      // SPI MOSI (SDI)
 #define EPAPER_CLK      12      // SPI Clock (SCK)
-#define EPAPER_CS       10      // Chip Select (SS)
+#define EPAPER_CS       10      // Chip Select (directly using SS)
 #define EPAPER_DC       48      // Data/Command
 #define EPAPER_RST      45      // Reset
 #define EPAPER_BUSY     38      // Busy signal
@@ -23,7 +23,7 @@
 // -----------------------------------------------------------------------------
 #define DISPLAY_WIDTH   800
 #define DISPLAY_HEIGHT  480
-#define DISPLAY_ROTATION 0      // 0, 1, 2, or 3 (90 degree increments)
+#define DISPLAY_ROTATION 1      // 0=portrait, 1=landscape, 2=portrait flipped, 3=landscape flipped
 
 // -----------------------------------------------------------------------------
 // I2C Pins (uSup connector - STEMMA/QWIIC compatible)
@@ -52,9 +52,23 @@
 #define PRODUCT_VERSION "0.1.0"
 
 // -----------------------------------------------------------------------------
+// WiFi Configuration
+// -----------------------------------------------------------------------------
+#define WIFI_SSID           "158NESNASIM"
+#define WIFI_PASSWORD       "1478965Pejsek"
+
+// -----------------------------------------------------------------------------
+// HomeKit Configuration
+// -----------------------------------------------------------------------------
+#define HOMEKIT_NAME        "PaperHome"
+#define HOMEKIT_PAIRING_CODE "11122333"  // Default pairing code (format: XXX-XX-XXX shown as 111-22-333)
+#define HOMEKIT_QR_ID       "PAPR"       // 4-char setup ID for QR code
+
+// -----------------------------------------------------------------------------
 // Debug Configuration
 // -----------------------------------------------------------------------------
-#define DEBUG_SERIAL    true
+#define DEBUG_DISPLAY   true
+#define DEBUG_HOMEKIT   true
 #define SERIAL_BAUD     115200
 
 #endif // CONFIG_H
