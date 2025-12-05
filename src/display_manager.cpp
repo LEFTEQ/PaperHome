@@ -13,14 +13,18 @@ void DisplayManager::init() {
     // Configure display power control pin
     pinMode(EPAPER_POWER, OUTPUT);
 
-    // Power on the display
+    // Power on the display (must be done BEFORE display init)
     powerOn();
 
-    // Initialize SPI with ESPink v3.5 pins
+    // Initialize display
+    // For ESP32-S3, we need to set up SPI pins before GxEPD2 init
+    // GxEPD2 will call SPI.begin() internally, but we set the pins first
+    SPI.end();  // Reset any previous SPI state
     SPI.begin(EPAPER_CLK, -1, EPAPER_MOSI, EPAPER_CS);
 
-    // Initialize display
-    display.init(SERIAL_BAUD, true, 2, false);
+    display.epd2.selectSPI(SPI, SPISettings(4000000, MSBFIRST, SPI_MODE0));
+    display.init(115200);  // Init with serial baud for debug output
+
     display.setRotation(DISPLAY_ROTATION);
     display.setTextColor(GxEPD_BLACK);
     display.setTextWrap(false);
@@ -33,7 +37,7 @@ void DisplayManager::init() {
 void DisplayManager::powerOn() {
     if (!isPowered) {
         digitalWrite(EPAPER_POWER, HIGH);
-        delay(10);  // Allow power to stabilize
+        delay(1000);  // Allow power to stabilize (1 second as per LaskaKit example)
         isPowered = true;
 
         if (DEBUG_SERIAL) {
