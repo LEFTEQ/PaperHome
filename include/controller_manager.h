@@ -23,6 +23,7 @@ enum class ControllerInput {
     // Action buttons
     BUTTON_A,       // Accept/Select
     BUTTON_B,       // Back/Cancel
+    BUTTON_MENU,    // Menu/Start button (settings)
     // Triggers for brightness
     TRIGGER_LEFT,   // Decrease brightness
     TRIGGER_RIGHT   // Increase brightness
@@ -89,6 +90,7 @@ private:
     // Input state tracking for edge detection
     bool _lastButtonA;
     bool _lastButtonB;
+    bool _lastButtonMenu;
     bool _lastDpadLeft;
     bool _lastDpadRight;
     bool _lastDpadUp;

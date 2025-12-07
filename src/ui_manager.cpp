@@ -1,4 +1,5 @@
 #include "ui_manager.h"
+#include "controller_manager.h"
 #include <stdarg.h>
 
 // Global instance
@@ -295,7 +296,7 @@ void UIManager::updateRoomControl(const HueRoom& room) {
 }
 
 void UIManager::goBackToDashboard() {
-    if (_currentScreen != UIScreen::ROOM_CONTROL) return;
+    if (_currentScreen != UIScreen::ROOM_CONTROL && _currentScreen != UIScreen::SETTINGS) return;
 
     log("Going back to dashboard");
 
@@ -303,6 +304,157 @@ void UIManager::goBackToDashboard() {
     if (!_cachedRooms.empty()) {
         showDashboard(_cachedRooms, _previousBridgeIP);
     }
+}
+
+void UIManager::showSettings() {
+    log("Showing settings screen");
+    _currentScreen = UIScreen::SETTINGS;
+
+    DisplayType& display = displayManager.getDisplay();
+
+    display.setFullWindow();
+    display.firstPage();
+    do {
+        display.fillScreen(GxEPD_WHITE);
+        drawSettingsContent();
+    } while (display.nextPage());
+
+    _partialUpdateCount = 0;
+    _lastFullRefreshTime = millis();
+}
+
+void UIManager::goBackFromSettings() {
+    if (_currentScreen != UIScreen::SETTINGS) return;
+    goBackToDashboard();
+}
+
+void UIManager::drawSettingsContent() {
+    DisplayType& display = displayManager.getDisplay();
+    int y = 60;
+    int lineHeight = 32;
+    int labelX = 40;
+    int valueX = 280;
+
+    // Title
+    display.setTextColor(GxEPD_BLACK);
+    display.setFont(&FreeMonoBold18pt7b);
+    display.setCursor(labelX, y);
+    display.print("Settings");
+
+    y += 20;
+
+    // Horizontal line
+    display.drawFastHLine(labelX, y, displayManager.width() - 80, GxEPD_BLACK);
+
+    y += lineHeight + 10;
+
+    // Settings content
+    display.setFont(&FreeMonoBold12pt7b);
+
+    // WiFi Section
+    display.setCursor(labelX, y);
+    display.print("WiFi");
+    y += lineHeight;
+
+    display.setFont(&FreeMonoBold9pt7b);
+
+    display.setCursor(labelX + 20, y);
+    display.print("SSID:");
+    display.setCursor(valueX, y);
+    display.print(WiFi.SSID());
+    y += lineHeight - 8;
+
+    display.setCursor(labelX + 20, y);
+    display.print("IP:");
+    display.setCursor(valueX, y);
+    display.print(WiFi.localIP().toString());
+    y += lineHeight - 8;
+
+    display.setCursor(labelX + 20, y);
+    display.print("Signal:");
+    display.setCursor(valueX, y);
+    display.printf("%d dBm", WiFi.RSSI());
+    y += lineHeight;
+
+    // Hue Section
+    display.setFont(&FreeMonoBold12pt7b);
+    display.setCursor(labelX, y);
+    display.print("Philips Hue");
+    y += lineHeight;
+
+    display.setFont(&FreeMonoBold9pt7b);
+
+    display.setCursor(labelX + 20, y);
+    display.print("Bridge:");
+    display.setCursor(valueX, y);
+    display.print(hueManager.getBridgeIP());
+    y += lineHeight - 8;
+
+    display.setCursor(labelX + 20, y);
+    display.print("Status:");
+    display.setCursor(valueX, y);
+    display.print(hueManager.isConnected() ? "Connected" : "Disconnected");
+    y += lineHeight - 8;
+
+    display.setCursor(labelX + 20, y);
+    display.print("Rooms:");
+    display.setCursor(valueX, y);
+    display.printf("%d", hueManager.getRooms().size());
+    y += lineHeight;
+
+    // Controller Section
+    display.setFont(&FreeMonoBold12pt7b);
+    display.setCursor(labelX, y);
+    display.print("Controller");
+    y += lineHeight;
+
+    display.setFont(&FreeMonoBold9pt7b);
+
+    display.setCursor(labelX + 20, y);
+    display.print("Status:");
+    display.setCursor(valueX, y);
+    const char* ctrlStates[] = {"Disconnected", "Scanning", "Connected", "Active"};
+    display.print(ctrlStates[(int)controllerManager.getState()]);
+    y += lineHeight;
+
+    // Device Section
+    display.setFont(&FreeMonoBold12pt7b);
+    display.setCursor(labelX, y);
+    display.print("Device");
+    y += lineHeight;
+
+    display.setFont(&FreeMonoBold9pt7b);
+
+    display.setCursor(labelX + 20, y);
+    display.print("Version:");
+    display.setCursor(valueX, y);
+    display.print(PRODUCT_VERSION);
+    y += lineHeight - 8;
+
+    display.setCursor(labelX + 20, y);
+    display.print("Free Heap:");
+    display.setCursor(valueX, y);
+    display.printf("%d KB", ESP.getFreeHeap() / 1024);
+    y += lineHeight - 8;
+
+    display.setCursor(labelX + 20, y);
+    display.print("Uptime:");
+    display.setCursor(valueX, y);
+    unsigned long uptime = millis() / 1000;
+    if (uptime < 60) {
+        display.printf("%lu sec", uptime);
+    } else if (uptime < 3600) {
+        display.printf("%lu min", uptime / 60);
+    } else {
+        display.printf("%lu hr %lu min", uptime / 3600, (uptime % 3600) / 60);
+    }
+
+    // Instructions at bottom
+    y = displayManager.height() - 40;
+    display.setFont(&FreeMonoBold9pt7b);
+    display.setTextColor(GxEPD_BLACK);
+    display.setCursor(labelX, y);
+    display.print("Press B to go back");
 }
 
 void UIManager::drawStatusBar(bool wifiConnected, const String& bridgeIP) {

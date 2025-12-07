@@ -97,6 +97,34 @@ void handleDashboardInput(ControllerInput input, int16_t value) {
             }
             break;
 
+        case ControllerInput::TRIGGER_RIGHT:
+            {
+                // Increase brightness of selected room
+                const HueRoom& room = rooms[selectedRoomIndex];
+                uint8_t newBrightness = min(254, room.brightness + value);
+                Serial.printf("[Main] Dashboard brightness UP: %s %d -> %d\n", room.name.c_str(), room.brightness, newBrightness);
+                hueManager.setRoomBrightness(room.id, newBrightness);
+            }
+            break;
+
+        case ControllerInput::TRIGGER_LEFT:
+            {
+                // Decrease brightness of selected room
+                const HueRoom& room = rooms[selectedRoomIndex];
+                uint8_t newBrightness = max(1, room.brightness - value);
+                Serial.printf("[Main] Dashboard brightness DOWN: %s %d -> %d\n", room.name.c_str(), room.brightness, newBrightness);
+                hueManager.setRoomBrightness(room.id, newBrightness);
+            }
+            break;
+
+        case ControllerInput::BUTTON_MENU:
+            {
+                // Open settings screen
+                Serial.println("[Main] Opening settings");
+                uiManager.showSettings();
+            }
+            break;
+
         default:
             break;
     }
@@ -150,6 +178,23 @@ void handleRoomControlInput(ControllerInput input, int16_t value) {
     }
 }
 
+// Handle input on Settings screen
+void handleSettingsInput(ControllerInput input, int16_t value) {
+    switch (input) {
+        case ControllerInput::BUTTON_B:
+        case ControllerInput::BUTTON_MENU:
+            {
+                // Go back to dashboard
+                Serial.println("[Main] Leaving settings");
+                uiManager.goBackFromSettings();
+            }
+            break;
+
+        default:
+            break;
+    }
+}
+
 // Callback for controller input events
 void onControllerInput(ControllerInput input, int16_t value) {
     UIScreen currentScreen = uiManager.getCurrentScreen();
@@ -161,6 +206,10 @@ void onControllerInput(ControllerInput input, int16_t value) {
 
         case UIScreen::ROOM_CONTROL:
             handleRoomControlInput(input, value);
+            break;
+
+        case UIScreen::SETTINGS:
+            handleSettingsInput(input, value);
             break;
 
         default:

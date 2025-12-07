@@ -10,6 +10,7 @@ ControllerManager::ControllerManager()
     : _state(ControllerState::DISCONNECTED)
     , _lastButtonA(false)
     , _lastButtonB(false)
+    , _lastButtonMenu(false)
     , _lastDpadLeft(false)
     , _lastDpadRight(false)
     , _lastDpadUp(false)
@@ -98,6 +99,17 @@ void ControllerManager::processInput() {
         }
     }
     _lastButtonB = buttonB;
+
+    // Menu button - Settings (edge detection)
+    bool buttonMenu = _controller.xboxNotif.btnStart;
+    if (buttonMenu && !_lastButtonMenu) {
+        log("Menu button pressed (Settings)");
+        vibrateShort();
+        if (_inputCallback) {
+            _inputCallback(ControllerInput::BUTTON_MENU, 0);
+        }
+    }
+    _lastButtonMenu = buttonMenu;
 
     // Navigation with debouncing (left stick + D-pad)
     if (now - _lastNavTime > NAV_DEBOUNCE_MS) {

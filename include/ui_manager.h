@@ -14,6 +14,7 @@ enum class UIScreen {
     WAITING_FOR_BUTTON,
     DASHBOARD,        // Room grid view
     ROOM_CONTROL,     // Single room control view (after pressing A on a room)
+    SETTINGS,         // Settings/info screen
     ERROR
 };
 
@@ -77,6 +78,16 @@ public:
      * Go back from room control to dashboard
      */
     void goBackToDashboard();
+
+    /**
+     * Show settings screen
+     */
+    void showSettings();
+
+    /**
+     * Go back from settings to dashboard
+     */
+    void goBackFromSettings();
 
     /**
      * Update status bar only (partial refresh)
@@ -156,6 +167,9 @@ private:
     // Room control screen helpers
     void drawRoomControlContent(const HueRoom& room);
     void drawLargeBrightnessBar(int x, int y, int width, int height, uint8_t brightness, bool isOn);
+
+    // Settings screen helpers
+    void drawSettingsContent();
 
     void log(const char* message);
     void logf(const char* format, ...);
