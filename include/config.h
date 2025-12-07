@@ -49,7 +49,7 @@
 // Product Information
 // -----------------------------------------------------------------------------
 #define PRODUCT_NAME    "PaperHome"
-#define PRODUCT_VERSION "0.1.0"
+#define PRODUCT_VERSION "0.2.0"
 
 // -----------------------------------------------------------------------------
 // WiFi Configuration
@@ -58,17 +58,29 @@
 #define WIFI_PASSWORD       "1478965Pejsek"
 
 // -----------------------------------------------------------------------------
-// HomeKit Configuration
+// Philips Hue Configuration
 // -----------------------------------------------------------------------------
-#define HOMEKIT_NAME        "PaperHome"
-#define HOMEKIT_PAIRING_CODE "11122333"  // Default pairing code (format: XXX-XX-XXX shown as 111-22-333)
-#define HOMEKIT_QR_ID       "PAPR"       // 4-char setup ID for QR code
+#define HUE_DEVICE_TYPE         "paperhome#espink"
+#define HUE_POLL_INTERVAL_MS    5000        // Poll for state changes every 5 seconds
+#define HUE_REQUEST_TIMEOUT_MS  5000        // HTTP request timeout
+#define HUE_NVS_NAMESPACE       "hue"       // NVS namespace for storing credentials
+#define HUE_NVS_KEY_IP          "bridge_ip"
+#define HUE_NVS_KEY_USERNAME    "username"
+
+// -----------------------------------------------------------------------------
+// UI Configuration
+// -----------------------------------------------------------------------------
+#define UI_TILE_COLS            3           // Number of tile columns
+#define UI_TILE_ROWS            2           // Number of tile rows
+#define UI_TILE_PADDING         10          // Padding between tiles
+#define UI_STATUS_BAR_HEIGHT    40          // Height of status bar at top
 
 // -----------------------------------------------------------------------------
 // Debug Configuration
 // -----------------------------------------------------------------------------
 #define DEBUG_DISPLAY   true
-#define DEBUG_HOMEKIT   true
+#define DEBUG_HUE       true
+#define DEBUG_UI        true
 #define SERIAL_BAUD     115200
 
 #endif // CONFIG_H

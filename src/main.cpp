@@ -2,87 +2,83 @@
  *
  * Board:   LaskaKit ESPink ESP32 e-Paper   https://www.laskakit.cz/laskakit-espink-esp32-e-paper-pcb-antenna/
  * Display: Good Display GDEQ0426T82        https://www.laskakit.cz/good-display-gdeq0426t82-4-26--800x480-epaper-displej-grayscale/
+ *
+ * Controls Philips Hue lights via local API
  */
 
 #include <Arduino.h>
+#include <WiFi.h>
 #include "config.h"
 #include "display_manager.h"
-#include "homekit_manager.h"
+#include "hue_manager.h"
+#include "ui_manager.h"
 
-// Track WiFi state for display updates
-bool lastWiFiState = false;
+// Track states for display updates
+HueState lastHueState = HueState::DISCONNECTED;
+bool needsDisplayUpdate = false;
 
-// Callback when accessory state changes
-void onAccessoryStateChange(const char* name, bool on, int brightness) {
-    Serial.printf("[Main] Accessory '%s' changed: power=%s, brightness=%d\n",
-                  name, on ? "ON" : "OFF", brightness);
+// Callback when Hue state changes
+void onHueStateChange(HueState state, const char* message) {
+    Serial.printf("[Main] Hue state changed: %d - %s\n", (int)state, message ? message : "");
 
-    // TODO: Update display to show accessory states
+    if (state != lastHueState) {
+        lastHueState = state;
+        needsDisplayUpdate = true;
+    }
 }
 
-void showStatus() {
-    DisplayType& display = displayManager.getDisplay();
+// Callback when rooms are updated
+void onRoomsUpdate(const std::vector<HueRoom>& rooms) {
+    Serial.printf("[Main] Rooms updated: %d rooms\n", rooms.size());
 
-    display.setRotation(DISPLAY_ROTATION);
-    display.setFullWindow();
-    display.firstPage();
+    // Only update display if we're on the dashboard
+    if (uiManager.getCurrentScreen() == UIScreen::DASHBOARD) {
+        uiManager.showDashboard(rooms, hueManager.getBridgeIP());
+    }
+}
 
-    do {
-        display.fillScreen(GxEPD_WHITE);
+void connectToWiFi() {
+    Serial.printf("[Main] Connecting to WiFi: %s\n", WIFI_SSID);
 
-        // Title
-        display.setFont(&FreeMonoBold24pt7b);
-        display.setTextColor(GxEPD_BLACK);
-        display.setCursor(20, 50);
-        display.print(PRODUCT_NAME);
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
-        // Version
-        display.setFont(&FreeMonoBold9pt7b);
-        display.setCursor(20, 80);
-        display.printf("v%s", PRODUCT_VERSION);
+    int attempts = 0;
+    while (WiFi.status() != WL_CONNECTED && attempts < 30) {
+        delay(500);
+        Serial.print(".");
+        attempts++;
+    }
+    Serial.println();
 
-        // Divider line
-        display.drawLine(20, 100, displayManager.width() - 20, 100, GxEPD_BLACK);
+    if (WiFi.status() == WL_CONNECTED) {
+        Serial.printf("[Main] WiFi connected! IP: %s\n", WiFi.localIP().toString().c_str());
+    } else {
+        Serial.println("[Main] WiFi connection failed!");
+    }
+}
 
-        // WiFi Status
-        display.setFont(&FreeMonoBold12pt7b);
-        display.setCursor(20, 140);
-        if (homeKitManager.isWiFiConnected()) {
-            display.printf("WiFi: %s", homeKitManager.getWiFiSSID());
-        } else {
-            display.print("WiFi: Not connected");
-            display.setCursor(20, 170);
-            display.setFont(&FreeMonoBold9pt7b);
-            display.print("Connect to 'HomeSpan-Setup' network");
-        }
+void updateDisplay() {
+    switch (hueManager.getState()) {
+        case HueState::DISCONNECTED:
+        case HueState::DISCOVERING:
+            uiManager.showDiscovering();
+            break;
 
-        // HomeKit pairing code
-        display.setFont(&FreeMonoBold12pt7b);
-        display.setCursor(20, 210);
-        display.print("HomeKit Setup Code:");
+        case HueState::WAITING_FOR_BUTTON:
+            uiManager.showWaitingForButton();
+            break;
 
-        display.setFont(&FreeMonoBold24pt7b);
-        display.setCursor(20, 260);
-        const char* code = homeKitManager.getPairingCode();
-        display.printf("%c%c%c-%c%c-%c%c%c",
-                      code[0], code[1], code[2],
-                      code[3], code[4],
-                      code[5], code[6], code[7]);
+        case HueState::CONNECTED:
+            uiManager.showDashboard(hueManager.getRooms(), hueManager.getBridgeIP());
+            break;
 
-        // Instructions
-        display.setFont(&FreeMonoBold9pt7b);
-        display.setCursor(20, 320);
-        display.print("1. Open Home app on iPhone/iPad");
-        display.setCursor(20, 345);
-        display.print("2. Tap '+' > Add Accessory");
-        display.setCursor(20, 370);
-        display.print("3. Enter code or scan QR");
+        case HueState::ERROR:
+            uiManager.showError("Connection error");
+            break;
 
-        // Accessories info
-        display.setCursor(20, 420);
-        display.print("Accessories: Living Room Light, Main Switch");
-
-    } while (display.nextPage());
+        default:
+            break;
+    }
 }
 
 void setup() {
@@ -97,7 +93,7 @@ void setup() {
     Serial.println();
     Serial.println("=========================================");
     Serial.printf("  %s v%s\n", PRODUCT_NAME, PRODUCT_VERSION);
-    Serial.println("  Smart Home E-Ink Controller");
+    Serial.println("  Philips Hue Dashboard");
     Serial.println("=========================================");
     Serial.println();
 
@@ -105,36 +101,47 @@ void setup() {
     Serial.println("[Main] Initializing display...");
     displayManager.init();
 
-    // Show initial loading message
-    displayManager.showCenteredText("Starting...", &FreeMonoBold18pt7b);
+    // Initialize UI
+    Serial.println("[Main] Initializing UI...");
+    uiManager.init();
 
-    // Initialize HomeKit
-    Serial.println("[Main] Initializing HomeKit...");
-    homeKitManager.setStateCallback(onAccessoryStateChange);
-    homeKitManager.init();
+    // Show startup screen
+    uiManager.showStartup();
+    delay(1000);
 
-    // Add accessories
-    homeKitManager.addLight("Living Room Light");
-    homeKitManager.addSwitch("Main Switch");
+    // Connect to WiFi
+    Serial.println("[Main] Connecting to WiFi...");
+    uiManager.showDiscovering(); // Show discovering while connecting
+    connectToWiFi();
 
-    // Show status screen
-    Serial.println("[Main] Updating display...");
-    showStatus();
+    if (WiFi.status() != WL_CONNECTED) {
+        uiManager.showError("WiFi connection failed");
+        return;
+    }
+
+    // Initialize Hue Manager
+    Serial.println("[Main] Initializing Hue Manager...");
+    hueManager.setStateCallback(onHueStateChange);
+    hueManager.setRoomsCallback(onRoomsUpdate);
+    hueManager.init();
+
+    // Update display based on Hue state
+    updateDisplay();
 
     Serial.println("[Main] Setup complete!");
     Serial.println();
 }
 
 void loop() {
-    // Poll HomeSpan (required!)
-    homeKitManager.poll();
+    // Update Hue Manager (handles discovery, auth, polling)
+    hueManager.update();
 
-    // Check for WiFi state change and update display
-    bool currentWiFiState = homeKitManager.isWiFiConnected();
-    if (currentWiFiState != lastWiFiState) {
-        lastWiFiState = currentWiFiState;
-        Serial.printf("[Main] WiFi state changed: %s\n",
-                      currentWiFiState ? "Connected" : "Disconnected");
-        showStatus();
+    // Update display if state changed
+    if (needsDisplayUpdate) {
+        needsDisplayUpdate = false;
+        updateDisplay();
     }
+
+    // Small delay to prevent busy loop
+    delay(10);
 }
