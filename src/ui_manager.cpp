@@ -8,12 +8,18 @@ UIManager::UIManager()
     : _currentScreen(UIScreen::STARTUP)
     , _tileWidth(0)
     , _tileHeight(0)
-    , _contentStartY(0) {
+    , _contentStartY(0)
+    , _selectedIndex(0)
+    , _lastDisplayedBrightness(0)
+    , _previousWifiConnected(false)
+    , _lastFullRefreshTime(0)
+    , _partialUpdateCount(0) {
 }
 
 void UIManager::init() {
     log("Initializing UI Manager...");
     calculateTileDimensions();
+    _lastFullRefreshTime = millis();
 }
 
 void UIManager::calculateTileDimensions() {
@@ -110,7 +116,7 @@ void UIManager::showDashboard(const std::vector<HueRoom>& rooms, const String& b
     _currentScreen = UIScreen::DASHBOARD;
     _cachedRooms = rooms;
 
-    logf("Showing dashboard with %d rooms", rooms.size());
+    logf("Showing dashboard with %d rooms (full refresh)", rooms.size());
 
     DisplayType& display = displayManager.getDisplay();
 
@@ -128,7 +134,8 @@ void UIManager::showDashboard(const std::vector<HueRoom>& rooms, const String& b
         int roomIndex = 0;
         for (int row = 0; row < UI_TILE_ROWS && roomIndex < rooms.size(); row++) {
             for (int col = 0; col < UI_TILE_COLS && roomIndex < rooms.size(); col++) {
-                drawRoomTile(col, row, rooms[roomIndex]);
+                bool isSelected = (roomIndex == _selectedIndex);
+                drawRoomTile(col, row, rooms[roomIndex], isSelected);
                 roomIndex++;
             }
         }
@@ -142,6 +149,13 @@ void UIManager::showDashboard(const std::vector<HueRoom>& rooms, const String& b
         }
 
     } while (display.nextPage());
+
+    // Update tracking state for partial refresh
+    _previousRooms = rooms;
+    _previousBridgeIP = bridgeIP;
+    _previousWifiConnected = WiFi.status() == WL_CONNECTED;
+    _lastFullRefreshTime = millis();
+    _partialUpdateCount = 0;
 }
 
 void UIManager::showError(const char* message) {
@@ -167,6 +181,128 @@ void UIManager::showError(const char* message) {
         drawCenteredText(message, displayManager.height() / 2 + 20, &FreeMonoBold12pt7b);
 
     } while (display.nextPage());
+}
+
+void UIManager::showRoomControl(const HueRoom& room, const String& bridgeIP) {
+    _currentScreen = UIScreen::ROOM_CONTROL;
+    _activeRoom = room;
+    _lastDisplayedBrightness = room.brightness;
+
+    logf("Showing room control: %s", room.name.c_str());
+
+    DisplayType& display = displayManager.getDisplay();
+
+    display.setRotation(DISPLAY_ROTATION);
+    display.setFullWindow();
+    display.firstPage();
+
+    do {
+        display.fillScreen(GxEPD_WHITE);
+
+        // Draw status bar
+        drawStatusBar(WiFi.status() == WL_CONNECTED, bridgeIP);
+
+        // Draw room control content
+        drawRoomControlContent(room);
+
+    } while (display.nextPage());
+
+    _lastFullRefreshTime = millis();
+    _partialUpdateCount = 0;
+}
+
+void UIManager::drawRoomControlContent(const HueRoom& room) {
+    DisplayType& display = displayManager.getDisplay();
+
+    int centerX = displayManager.width() / 2;
+    int contentY = _contentStartY + 20;
+
+    // Room name (large)
+    display.setFont(&FreeMonoBold24pt7b);
+    display.setTextColor(GxEPD_BLACK);
+    drawCenteredText(room.name.c_str(), contentY + 40, &FreeMonoBold24pt7b);
+
+    // ON/OFF status
+    display.setFont(&FreeMonoBold18pt7b);
+    const char* statusText = room.anyOn ? "ON" : "OFF";
+    drawCenteredText(statusText, contentY + 100, &FreeMonoBold18pt7b);
+
+    // Brightness percentage
+    if (room.anyOn) {
+        int brightnessPercent = (room.brightness * 100) / 254;
+        char brightnessText[16];
+        snprintf(brightnessText, sizeof(brightnessText), "%d%%", brightnessPercent);
+        display.setFont(&FreeMonoBold24pt7b);
+        drawCenteredText(brightnessText, contentY + 180, &FreeMonoBold24pt7b);
+    }
+
+    // Large brightness bar
+    int barWidth = displayManager.width() - 100;
+    int barHeight = 40;
+    int barX = 50;
+    int barY = contentY + 220;
+    drawLargeBrightnessBar(barX, barY, barWidth, barHeight, room.brightness, room.anyOn);
+
+    // Instructions at bottom
+    display.setFont(&FreeMonoBold9pt7b);
+    int instructionY = displayManager.height() - 80;
+    drawCenteredText("A: Toggle ON/OFF    B: Back", instructionY, &FreeMonoBold9pt7b);
+    drawCenteredText("LT/RT: Adjust Brightness", instructionY + 25, &FreeMonoBold9pt7b);
+}
+
+void UIManager::drawLargeBrightnessBar(int x, int y, int width, int height, uint8_t brightness, bool isOn) {
+    DisplayType& display = displayManager.getDisplay();
+
+    // Outer border (thick)
+    display.drawRect(x, y, width, height, GxEPD_BLACK);
+    display.drawRect(x + 1, y + 1, width - 2, height - 2, GxEPD_BLACK);
+
+    if (isOn && brightness > 0) {
+        // Fill based on brightness (0-254 mapped to bar width)
+        int fillWidth = (brightness * (width - 8)) / 254;
+        display.fillRect(x + 4, y + 4, fillWidth, height - 8, GxEPD_BLACK);
+    }
+}
+
+void UIManager::updateRoomControl(const HueRoom& room) {
+    // Only update if brightness changed significantly or state changed
+    if (abs(room.brightness - _lastDisplayedBrightness) < 5 &&
+        room.anyOn == _activeRoom.anyOn) {
+        return;
+    }
+
+    _activeRoom = room;
+    _lastDisplayedBrightness = room.brightness;
+
+    logf("Updating room control: brightness=%d, on=%d", room.brightness, room.anyOn);
+
+    DisplayType& display = displayManager.getDisplay();
+
+    // Partial refresh for the content area (below status bar)
+    int16_t x = 0;
+    int16_t y = UI_STATUS_BAR_HEIGHT;
+    int16_t w = displayManager.width();
+    int16_t h = displayManager.height() - UI_STATUS_BAR_HEIGHT;
+
+    display.setPartialWindow(x, y, w, h);
+    display.firstPage();
+    do {
+        display.fillScreen(GxEPD_WHITE);
+        drawRoomControlContent(room);
+    } while (display.nextPage());
+
+    _partialUpdateCount++;
+}
+
+void UIManager::goBackToDashboard() {
+    if (_currentScreen != UIScreen::ROOM_CONTROL) return;
+
+    log("Going back to dashboard");
+
+    // Show dashboard with current rooms
+    if (!_cachedRooms.empty()) {
+        showDashboard(_cachedRooms, _previousBridgeIP);
+    }
 }
 
 void UIManager::drawStatusBar(bool wifiConnected, const String& bridgeIP) {
@@ -201,24 +337,23 @@ void UIManager::drawStatusBar(bool wifiConnected, const String& bridgeIP) {
     display.setTextColor(GxEPD_BLACK);
 }
 
-void UIManager::drawRoomTile(int col, int row, const HueRoom& room) {
+void UIManager::drawRoomTile(int col, int row, const HueRoom& room, bool isSelected) {
     DisplayType& display = displayManager.getDisplay();
 
     // Calculate tile position
     int x = UI_TILE_PADDING + col * (_tileWidth + UI_TILE_PADDING);
     int y = _contentStartY + row * (_tileHeight + UI_TILE_PADDING);
 
-    // Draw tile border
-    display.drawRect(x, y, _tileWidth, _tileHeight, GxEPD_BLACK);
-
-    // If room is on, fill with light gray pattern (dithered)
-    if (room.anyOn) {
-        // Draw a subtle pattern to indicate "on" state
-        for (int py = y + 2; py < y + _tileHeight - 2; py += 3) {
-            for (int px = x + 2; px < x + _tileWidth - 2; px += 3) {
-                display.drawPixel(px, py, GxEPD_BLACK);
-            }
-        }
+    // Draw selection highlight (thick border) or normal border
+    if (isSelected) {
+        // Draw thick 4px selection border
+        display.drawRect(x, y, _tileWidth, _tileHeight, GxEPD_BLACK);
+        display.drawRect(x + 1, y + 1, _tileWidth - 2, _tileHeight - 2, GxEPD_BLACK);
+        display.drawRect(x + 2, y + 2, _tileWidth - 4, _tileHeight - 4, GxEPD_BLACK);
+        display.drawRect(x + 3, y + 3, _tileWidth - 6, _tileHeight - 6, GxEPD_BLACK);
+    } else {
+        // Normal single-pixel border
+        display.drawRect(x, y, _tileWidth, _tileHeight, GxEPD_BLACK);
     }
 
     // Room name
@@ -295,6 +430,179 @@ void UIManager::drawCenteredText(const char* text, int y, const GFXfont* font) {
     int x = (displayManager.width() - w) / 2;
     display.setCursor(x, y);
     display.print(text);
+}
+
+// --- Partial Refresh Methods ---
+
+DashboardDiff UIManager::calculateDiff(const std::vector<HueRoom>& rooms, const String& bridgeIP) {
+    DashboardDiff diff;
+    diff.statusBarChanged = false;
+
+    // Check WiFi status change
+    bool wifiConnected = WiFi.status() == WL_CONNECTED;
+    if (wifiConnected != _previousWifiConnected || bridgeIP != _previousBridgeIP) {
+        diff.statusBarChanged = true;
+    }
+
+    // Check room changes
+    size_t maxRooms = min(rooms.size(), _previousRooms.size());
+    for (size_t i = 0; i < maxRooms; i++) {
+        const HueRoom& curr = rooms[i];
+        const HueRoom& prev = _previousRooms[i];
+
+        if (curr.anyOn != prev.anyOn ||
+            curr.allOn != prev.allOn ||
+            curr.brightness != prev.brightness ||
+            curr.name != prev.name) {
+            diff.changedRoomIndices.push_back(i);
+        }
+    }
+
+    // Handle added/removed rooms (all affected need refresh)
+    if (rooms.size() != _previousRooms.size()) {
+        diff.changedRoomIndices.clear();
+        for (size_t i = 0; i < rooms.size(); i++) {
+            diff.changedRoomIndices.push_back(i);
+        }
+    }
+
+    return diff;
+}
+
+void UIManager::getTileBounds(int col, int row, int16_t& x, int16_t& y, int16_t& w, int16_t& h) {
+    x = UI_TILE_PADDING + col * (_tileWidth + UI_TILE_PADDING);
+    y = _contentStartY + row * (_tileHeight + UI_TILE_PADDING);
+    w = _tileWidth;
+    h = _tileHeight;
+
+    // GxEPD2 requires x and w to be multiple of 8 for partial window
+    int16_t x_aligned = (x / 8) * 8;
+    int16_t w_expansion = x - x_aligned;
+    x = x_aligned;
+    w = ((w + w_expansion + 7) / 8) * 8;
+}
+
+void UIManager::refreshRoomTile(int col, int row, const HueRoom& room, bool isSelected) {
+    DisplayType& display = displayManager.getDisplay();
+
+    int16_t x, y, w, h;
+    getTileBounds(col, row, x, y, w, h);
+
+    logf("Partial refresh tile [%d,%d] at (%d,%d) %dx%d", col, row, x, y, w, h);
+
+    display.setPartialWindow(x, y, w, h);
+    display.firstPage();
+    do {
+        display.fillScreen(GxEPD_WHITE);
+        drawRoomTile(col, row, room, isSelected);
+    } while (display.nextPage());
+}
+
+void UIManager::refreshStatusBarPartial(bool wifiConnected, const String& bridgeIP) {
+    DisplayType& display = displayManager.getDisplay();
+
+    // Status bar spans full width
+    int16_t x = 0;
+    int16_t y = 0;
+    int16_t w = displayManager.width();
+    int16_t h = ((UI_STATUS_BAR_HEIGHT + 7) / 8) * 8;  // Round up to 8
+
+    log("Partial refresh status bar");
+
+    display.setPartialWindow(x, y, w, h);
+    display.firstPage();
+    do {
+        display.fillScreen(GxEPD_WHITE);
+        drawStatusBar(wifiConnected, bridgeIP);
+    } while (display.nextPage());
+}
+
+bool UIManager::updateDashboardPartial(const std::vector<HueRoom>& rooms, const String& bridgeIP) {
+    // First call or not on dashboard - do full refresh
+    if (_previousRooms.empty() || _currentScreen != UIScreen::DASHBOARD) {
+        showDashboard(rooms, bridgeIP);
+        return true;
+    }
+
+    unsigned long now = millis();
+
+    // Check if periodic full refresh needed (anti-ghosting)
+    if (now - _lastFullRefreshTime > FULL_REFRESH_INTERVAL_MS ||
+        _partialUpdateCount >= MAX_PARTIAL_UPDATES) {
+        log("Forcing full refresh to clear ghosting");
+        showDashboard(rooms, bridgeIP);
+        return true;
+    }
+
+    DashboardDiff diff = calculateDiff(rooms, bridgeIP);
+
+    // If too many tiles changed, full refresh is more efficient
+    if (diff.changedRoomIndices.size() > PARTIAL_REFRESH_THRESHOLD) {
+        logf("Too many changes (%d tiles), using full refresh", diff.changedRoomIndices.size());
+        showDashboard(rooms, bridgeIP);
+        return true;
+    }
+
+    // No changes at all
+    if (!diff.statusBarChanged && diff.changedRoomIndices.empty()) {
+        log("No changes detected, skipping refresh");
+        return false;
+    }
+
+    // Partial updates
+    _cachedRooms = rooms;
+
+    if (diff.statusBarChanged) {
+        refreshStatusBarPartial(WiFi.status() == WL_CONNECTED, bridgeIP);
+        _partialUpdateCount++;
+    }
+
+    for (int idx : diff.changedRoomIndices) {
+        int row = idx / UI_TILE_COLS;
+        int col = idx % UI_TILE_COLS;
+        if (row < UI_TILE_ROWS && idx < rooms.size()) {
+            bool isSelected = (idx == _selectedIndex);
+            refreshRoomTile(col, row, rooms[idx], isSelected);
+            _partialUpdateCount++;
+        }
+    }
+
+    // Update cached state
+    _previousRooms = rooms;
+    _previousBridgeIP = bridgeIP;
+    _previousWifiConnected = WiFi.status() == WL_CONNECTED;
+
+    logf("Partial update complete (%d partial updates total)", _partialUpdateCount);
+    return true;
+}
+
+void UIManager::updateTileSelection(int oldIndex, int newIndex) {
+    if (oldIndex == newIndex) return;
+    if (_cachedRooms.empty()) return;
+
+    _selectedIndex = newIndex;
+
+    // Redraw old tile without selection
+    if (oldIndex >= 0 && oldIndex < _cachedRooms.size()) {
+        int col = oldIndex % UI_TILE_COLS;
+        int row = oldIndex / UI_TILE_COLS;
+        if (row < UI_TILE_ROWS) {
+            refreshRoomTile(col, row, _cachedRooms[oldIndex], false);
+            _partialUpdateCount++;
+        }
+    }
+
+    // Redraw new tile with selection
+    if (newIndex >= 0 && newIndex < _cachedRooms.size()) {
+        int col = newIndex % UI_TILE_COLS;
+        int row = newIndex / UI_TILE_COLS;
+        if (row < UI_TILE_ROWS) {
+            refreshRoomTile(col, row, _cachedRooms[newIndex], true);
+            _partialUpdateCount++;
+        }
+    }
+
+    logf("Selection changed: %d -> %d", oldIndex, newIndex);
 }
 
 void UIManager::log(const char* message) {

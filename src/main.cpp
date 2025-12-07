@@ -12,10 +12,14 @@
 #include "display_manager.h"
 #include "hue_manager.h"
 #include "ui_manager.h"
+#include "controller_manager.h"
 
 // Track states for display updates
 HueState lastHueState = HueState::DISCONNECTED;
 bool needsDisplayUpdate = false;
+
+// Selection state for controller navigation
+int selectedRoomIndex = 0;
 
 // Callback when Hue state changes
 void onHueStateChange(HueState state, const char* message) {
@@ -31,10 +35,144 @@ void onHueStateChange(HueState state, const char* message) {
 void onRoomsUpdate(const std::vector<HueRoom>& rooms) {
     Serial.printf("[Main] Rooms updated: %d rooms\n", rooms.size());
 
-    // Only update display if we're on the dashboard
-    if (uiManager.getCurrentScreen() == UIScreen::DASHBOARD) {
-        uiManager.showDashboard(rooms, hueManager.getBridgeIP());
+    UIScreen currentScreen = uiManager.getCurrentScreen();
+
+    if (currentScreen == UIScreen::DASHBOARD) {
+        // Use partial update for efficiency
+        uiManager.updateDashboardPartial(rooms, hueManager.getBridgeIP());
+    } else if (currentScreen == UIScreen::ROOM_CONTROL) {
+        // Update room control screen if we're viewing it
+        if (selectedRoomIndex < rooms.size()) {
+            uiManager.updateRoomControl(rooms[selectedRoomIndex]);
+        }
     }
+}
+
+// Handle input on Dashboard screen
+void handleDashboardInput(ControllerInput input, int16_t value) {
+    const auto& rooms = hueManager.getRooms();
+    if (rooms.empty()) return;
+
+    switch (input) {
+        case ControllerInput::NAV_LEFT:
+            {
+                int oldIndex = selectedRoomIndex;
+                selectedRoomIndex = (selectedRoomIndex - 1 + rooms.size()) % rooms.size();
+                uiManager.updateTileSelection(oldIndex, selectedRoomIndex);
+            }
+            break;
+
+        case ControllerInput::NAV_RIGHT:
+            {
+                int oldIndex = selectedRoomIndex;
+                selectedRoomIndex = (selectedRoomIndex + 1) % rooms.size();
+                uiManager.updateTileSelection(oldIndex, selectedRoomIndex);
+            }
+            break;
+
+        case ControllerInput::NAV_UP:
+            {
+                // Move up a row (subtract columns count)
+                int oldIndex = selectedRoomIndex;
+                selectedRoomIndex = (selectedRoomIndex - UI_TILE_COLS + rooms.size()) % rooms.size();
+                uiManager.updateTileSelection(oldIndex, selectedRoomIndex);
+            }
+            break;
+
+        case ControllerInput::NAV_DOWN:
+            {
+                // Move down a row (add columns count)
+                int oldIndex = selectedRoomIndex;
+                selectedRoomIndex = (selectedRoomIndex + UI_TILE_COLS) % rooms.size();
+                uiManager.updateTileSelection(oldIndex, selectedRoomIndex);
+            }
+            break;
+
+        case ControllerInput::BUTTON_A:
+            {
+                // Enter room control screen
+                const HueRoom& room = rooms[selectedRoomIndex];
+                Serial.printf("[Main] Entering room control: %s\n", room.name.c_str());
+                uiManager.showRoomControl(room, hueManager.getBridgeIP());
+            }
+            break;
+
+        default:
+            break;
+    }
+}
+
+// Handle input on Room Control screen
+void handleRoomControlInput(ControllerInput input, int16_t value) {
+    const auto& rooms = hueManager.getRooms();
+    if (selectedRoomIndex >= rooms.size()) return;
+
+    const HueRoom& room = rooms[selectedRoomIndex];
+
+    switch (input) {
+        case ControllerInput::BUTTON_A:
+            {
+                // Toggle room on/off
+                Serial.printf("[Main] Toggling room %s (%s)\n", room.name.c_str(), room.anyOn ? "OFF" : "ON");
+                controllerManager.vibrateLong();  // Strong feedback for toggle action
+                hueManager.setRoomState(room.id, !room.anyOn);
+            }
+            break;
+
+        case ControllerInput::BUTTON_B:
+            {
+                // Go back to dashboard
+                Serial.println("[Main] Going back to dashboard");
+                uiManager.goBackToDashboard();
+            }
+            break;
+
+        case ControllerInput::TRIGGER_RIGHT:
+            {
+                // Increase brightness
+                uint8_t newBrightness = min(254, room.brightness + value);
+                Serial.printf("[Main] Brightness UP: %d -> %d\n", room.brightness, newBrightness);
+                hueManager.setRoomBrightness(room.id, newBrightness);
+            }
+            break;
+
+        case ControllerInput::TRIGGER_LEFT:
+            {
+                // Decrease brightness
+                uint8_t newBrightness = max(1, room.brightness - value);
+                Serial.printf("[Main] Brightness DOWN: %d -> %d\n", room.brightness, newBrightness);
+                hueManager.setRoomBrightness(room.id, newBrightness);
+            }
+            break;
+
+        default:
+            break;
+    }
+}
+
+// Callback for controller input events
+void onControllerInput(ControllerInput input, int16_t value) {
+    UIScreen currentScreen = uiManager.getCurrentScreen();
+
+    switch (currentScreen) {
+        case UIScreen::DASHBOARD:
+            handleDashboardInput(input, value);
+            break;
+
+        case UIScreen::ROOM_CONTROL:
+            handleRoomControlInput(input, value);
+            break;
+
+        default:
+            // Other screens don't handle controller input
+            break;
+    }
+}
+
+// Callback for controller state changes
+void onControllerState(ControllerState state) {
+    const char* stateNames[] = {"DISCONNECTED", "SCANNING", "CONNECTED", "ACTIVE"};
+    Serial.printf("[Main] Controller state: %s\n", stateNames[(int)state]);
 }
 
 void connectToWiFi() {
@@ -125,14 +263,24 @@ void setup() {
     hueManager.setRoomsCallback(onRoomsUpdate);
     hueManager.init();
 
+    // Initialize Controller Manager
+    Serial.println("[Main] Initializing Controller Manager...");
+    controllerManager.setInputCallback(onControllerInput);
+    controllerManager.setStateCallback(onControllerState);
+    controllerManager.init();
+
     // Update display based on Hue state
     updateDisplay();
 
     Serial.println("[Main] Setup complete!");
+    Serial.println("[Main] Press Xbox button on controller to pair");
     Serial.println();
 }
 
 void loop() {
+    // Update Controller Manager (handles BLE connection and input)
+    controllerManager.update();
+
     // Update Hue Manager (handles discovery, auth, polling)
     hueManager.update();
 

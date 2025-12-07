@@ -24,6 +24,9 @@ void DisplayManager::init() {
     _display.setTextColor(GxEPD_BLACK);
     _display.setTextWrap(false);
 
+    // Perform full clear to initialize both buffers for solid white background
+    clearScreenFull();
+
     logf("Display initialized: %dx%d (rotation %d)", width(), height(), DISPLAY_ROTATION);
 }
 
@@ -55,6 +58,19 @@ void DisplayManager::clear() {
     } while (_display.nextPage());
 
     log("Display cleared");
+}
+
+void DisplayManager::clearScreenFull() {
+    log("Performing full clear (both buffers)...");
+
+    // clearScreen() writes white to both the current (0x24) and previous (0x26) buffers
+    // then performs a full refresh. This ensures:
+    // 1. Display shows solid white (not dark gray)
+    // 2. Subsequent partial updates have a clean reference state
+    // Use 0xFF directly as clearScreen expects uint8_t (not uint16_t GxEPD_WHITE)
+    _display.clearScreen(0xFF);
+
+    log("Full clear complete - display should be solid white");
 }
 
 void DisplayManager::showCenteredText(const char* text, const GFXfont* font) {

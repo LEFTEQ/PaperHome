@@ -12,8 +12,15 @@ enum class UIScreen {
     STARTUP,
     DISCOVERING,
     WAITING_FOR_BUTTON,
-    DASHBOARD,
+    DASHBOARD,        // Room grid view
+    ROOM_CONTROL,     // Single room control view (after pressing A on a room)
     ERROR
+};
+
+// Tracks what changed for partial refresh decisions
+struct DashboardDiff {
+    bool statusBarChanged;
+    std::vector<int> changedRoomIndices;
 };
 
 class UIManager {
@@ -54,6 +61,24 @@ public:
     void showError(const char* message);
 
     /**
+     * Show room control screen for a specific room
+     * @param room The room to control
+     * @param bridgeIP Hue Bridge IP address
+     */
+    void showRoomControl(const HueRoom& room, const String& bridgeIP);
+
+    /**
+     * Update room control screen (partial refresh for brightness changes)
+     * @param room The room data
+     */
+    void updateRoomControl(const HueRoom& room);
+
+    /**
+     * Go back from room control to dashboard
+     */
+    void goBackToDashboard();
+
+    /**
      * Update status bar only (partial refresh)
      * @param wifiConnected WiFi connection status
      * @param bridgeIP Hue Bridge IP (empty if not connected)
@@ -61,9 +86,36 @@ public:
     void updateStatusBar(bool wifiConnected, const String& bridgeIP);
 
     /**
+     * Update dashboard with partial refresh (only changed tiles)
+     * Falls back to full refresh if too many changes or periodic refresh needed
+     * @param rooms Vector of room data
+     * @param bridgeIP Hue Bridge IP address
+     * @return true if update was performed
+     */
+    bool updateDashboardPartial(const std::vector<HueRoom>& rooms, const String& bridgeIP);
+
+    /**
+     * Update only the selection highlight (for controller navigation)
+     * @param oldIndex Previously selected tile index
+     * @param newIndex Newly selected tile index
+     */
+    void updateTileSelection(int oldIndex, int newIndex);
+
+    /**
      * Get current screen
      */
     UIScreen getCurrentScreen() const { return _currentScreen; }
+
+    /**
+     * Get/set selected room index for controller navigation
+     */
+    int getSelectedIndex() const { return _selectedIndex; }
+    void setSelectedIndex(int index) { _selectedIndex = index; }
+
+    /**
+     * Get number of cached rooms
+     */
+    int getRoomCount() const { return _cachedRooms.size(); }
 
 private:
     UIScreen _currentScreen;
@@ -74,12 +126,36 @@ private:
     int _tileHeight;
     int _contentStartY;
 
+    // Selection state for controller navigation
+    int _selectedIndex;
+
+    // Room control state
+    HueRoom _activeRoom;              // Room currently being controlled
+    uint8_t _lastDisplayedBrightness; // For partial refresh optimization
+
+    // State tracking for partial refresh
+    std::vector<HueRoom> _previousRooms;
+    String _previousBridgeIP;
+    bool _previousWifiConnected;
+    unsigned long _lastFullRefreshTime;
+    int _partialUpdateCount;
+
     void calculateTileDimensions();
 
     void drawStatusBar(bool wifiConnected, const String& bridgeIP);
-    void drawRoomTile(int col, int row, const HueRoom& room);
+    void drawRoomTile(int col, int row, const HueRoom& room, bool isSelected = false);
     void drawBrightnessBar(int x, int y, int width, int height, uint8_t brightness, bool isOn);
     void drawCenteredText(const char* text, int y, const GFXfont* font);
+
+    // Partial refresh helpers
+    DashboardDiff calculateDiff(const std::vector<HueRoom>& rooms, const String& bridgeIP);
+    void getTileBounds(int col, int row, int16_t& x, int16_t& y, int16_t& w, int16_t& h);
+    void refreshRoomTile(int col, int row, const HueRoom& room, bool isSelected);
+    void refreshStatusBarPartial(bool wifiConnected, const String& bridgeIP);
+
+    // Room control screen helpers
+    void drawRoomControlContent(const HueRoom& room);
+    void drawLargeBrightnessBar(int x, int y, int width, int height, uint8_t brightness, bool isOn);
 
     void log(const char* message);
     void logf(const char* format, ...);

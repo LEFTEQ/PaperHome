@@ -76,11 +76,19 @@
 #define UI_STATUS_BAR_HEIGHT    40          // Height of status bar at top
 
 // -----------------------------------------------------------------------------
+// Display Refresh Configuration
+// -----------------------------------------------------------------------------
+#define FULL_REFRESH_INTERVAL_MS    300000  // Force full refresh every 5 minutes to clear ghosting
+#define MAX_PARTIAL_UPDATES         50      // Or after this many partial updates
+#define PARTIAL_REFRESH_THRESHOLD   3       // If more than this many tiles change, do full refresh
+
+// -----------------------------------------------------------------------------
 // Debug Configuration
 // -----------------------------------------------------------------------------
-#define DEBUG_DISPLAY   true
-#define DEBUG_HUE       true
-#define DEBUG_UI        true
-#define SERIAL_BAUD     115200
+#define DEBUG_DISPLAY       true
+#define DEBUG_HUE           true
+#define DEBUG_UI            true
+#define DEBUG_CONTROLLER    true
+#define SERIAL_BAUD         115200
 
 #endif // CONFIG_H

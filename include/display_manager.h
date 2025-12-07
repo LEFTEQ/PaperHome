@@ -41,6 +41,12 @@ public:
     void clear();
 
     /**
+     * Perform a full clear that initializes both display buffers
+     * This ensures proper white background for subsequent partial updates
+     */
+    void clearScreenFull();
+
+    /**
      * Display centered text on screen
      * @param text The text to display
      * @param font The font to use (default: FreeMonoBold24pt7b)

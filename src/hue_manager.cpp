@@ -272,17 +272,40 @@ bool HueManager::parseRoomsResponse(const String& response) {
         newRooms.push_back(room);
     }
 
-    // Update cached rooms
-    _rooms = newRooms;
+    logf("Fetched %d rooms", newRooms.size());
 
-    logf("Fetched %d rooms", _rooms.size());
+    // Only update and notify if data actually changed
+    if (roomsChanged(_rooms, newRooms)) {
+        log("Room data changed, notifying callback");
+        _rooms = newRooms;
 
-    // Notify callback
-    if (_roomsCallback) {
-        _roomsCallback(_rooms);
+        if (_roomsCallback) {
+            _roomsCallback(_rooms);
+        }
+    } else {
+        log("Room data unchanged, skipping display update");
     }
 
     return true;
+}
+
+bool HueManager::roomsChanged(const std::vector<HueRoom>& oldRooms, const std::vector<HueRoom>& newRooms) {
+    if (oldRooms.size() != newRooms.size()) {
+        return true;
+    }
+
+    for (size_t i = 0; i < oldRooms.size(); i++) {
+        const HueRoom& oldRoom = oldRooms[i];
+        const HueRoom& newRoom = newRooms[i];
+
+        if (oldRoom.id != newRoom.id) return true;
+        if (oldRoom.name != newRoom.name) return true;
+        if (oldRoom.anyOn != newRoom.anyOn) return true;
+        if (oldRoom.allOn != newRoom.allOn) return true;
+        if (oldRoom.brightness != newRoom.brightness) return true;
+    }
+
+    return false;
 }
 
 bool HueManager::setRoomState(const String& roomId, bool on) {

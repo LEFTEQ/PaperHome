@@ -145,6 +145,7 @@ private:
     bool parseDiscoveryResponse(const char* response);
     bool sendAuthRequest();
     bool parseRoomsResponse(const String& response);
+    bool roomsChanged(const std::vector<HueRoom>& oldRooms, const std::vector<HueRoom>& newRooms);
 
     String buildUrl(const String& path);
     bool httpGet(const String& url, String& response);
