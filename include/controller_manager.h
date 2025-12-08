@@ -108,11 +108,11 @@ private:
     ControllerInputCallback _inputCallback;
     ControllerStateCallback _stateCallback;
 
-    // Constants
-    static const unsigned long NAV_DEBOUNCE_MS = 200;
-    static const unsigned long TRIGGER_DEBOUNCE_MS = 100;
-    static const int16_t STICK_NAV_THRESHOLD = 20000;     // Out of ~32767
-    static const uint16_t TRIGGER_THRESHOLD = 100;        // Out of 1023 (maxTrig)
+    // Constants - reduced for faster response
+    static const unsigned long NAV_DEBOUNCE_MS = 16;      // Was 200ms - faster navigation
+    static const unsigned long TRIGGER_DEBOUNCE_MS = 50;   // Was 100ms - smoother brightness
+    static const int16_t STICK_NAV_THRESHOLD = 16000;      // Was 20000 - more sensitive
+    static const uint16_t TRIGGER_THRESHOLD = 16;          // Was 100 - more sensitive triggers
 
     void processInput();
     void setState(ControllerState state);

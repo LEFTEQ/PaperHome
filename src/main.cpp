@@ -21,6 +21,14 @@ bool needsDisplayUpdate = false;
 // Selection state for controller navigation
 int selectedRoomIndex = 0;
 
+// Deferred display update system - process inputs immediately, batch display updates
+unsigned long lastInputTime = 0;
+unsigned long lastDisplayUpdateTime = 0;
+bool pendingSelectionUpdate = false;
+int pendingOldIndex = -1;
+int pendingNewIndex = -1;
+const unsigned long DISPLAY_UPDATE_DELAY_MS = 150;  // Wait for rapid inputs to settle
+
 // Callback when Hue state changes
 void onHueStateChange(HueState state, const char* message) {
     Serial.printf("[Main] Hue state changed: %d - %s\n", (int)state, message ? message : "");
@@ -48,6 +56,17 @@ void onRoomsUpdate(const std::vector<HueRoom>& rooms) {
     }
 }
 
+// Helper to queue a selection update (deferred display refresh)
+void queueSelectionUpdate(int oldIdx, int newIdx) {
+    // Track the original position if this is the first in a rapid sequence
+    if (!pendingSelectionUpdate) {
+        pendingOldIndex = oldIdx;
+    }
+    pendingNewIndex = newIdx;
+    pendingSelectionUpdate = true;
+    lastInputTime = millis();
+}
+
 // Handle input on Dashboard screen
 void handleDashboardInput(ControllerInput input, int16_t value) {
     const auto& rooms = hueManager.getRooms();
@@ -58,7 +77,7 @@ void handleDashboardInput(ControllerInput input, int16_t value) {
             {
                 int oldIndex = selectedRoomIndex;
                 selectedRoomIndex = (selectedRoomIndex - 1 + rooms.size()) % rooms.size();
-                uiManager.updateTileSelection(oldIndex, selectedRoomIndex);
+                queueSelectionUpdate(oldIndex, selectedRoomIndex);
             }
             break;
 
@@ -66,7 +85,7 @@ void handleDashboardInput(ControllerInput input, int16_t value) {
             {
                 int oldIndex = selectedRoomIndex;
                 selectedRoomIndex = (selectedRoomIndex + 1) % rooms.size();
-                uiManager.updateTileSelection(oldIndex, selectedRoomIndex);
+                queueSelectionUpdate(oldIndex, selectedRoomIndex);
             }
             break;
 
@@ -75,7 +94,7 @@ void handleDashboardInput(ControllerInput input, int16_t value) {
                 // Move up a row (subtract columns count)
                 int oldIndex = selectedRoomIndex;
                 selectedRoomIndex = (selectedRoomIndex - UI_TILE_COLS + rooms.size()) % rooms.size();
-                uiManager.updateTileSelection(oldIndex, selectedRoomIndex);
+                queueSelectionUpdate(oldIndex, selectedRoomIndex);
             }
             break;
 
@@ -84,7 +103,7 @@ void handleDashboardInput(ControllerInput input, int16_t value) {
                 // Move down a row (add columns count)
                 int oldIndex = selectedRoomIndex;
                 selectedRoomIndex = (selectedRoomIndex + UI_TILE_COLS) % rooms.size();
-                uiManager.updateTileSelection(oldIndex, selectedRoomIndex);
+                queueSelectionUpdate(oldIndex, selectedRoomIndex);
             }
             break;
 
@@ -339,6 +358,20 @@ void loop() {
         updateDisplay();
     }
 
-    // Small delay to prevent busy loop
-    delay(10);
+    // Process deferred selection updates (batches rapid navigation)
+    if (pendingSelectionUpdate) {
+        unsigned long now = millis();
+        // Wait for inputs to settle before updating display
+        if (now - lastInputTime >= DISPLAY_UPDATE_DELAY_MS) {
+            pendingSelectionUpdate = false;
+            // Only update display if we're on dashboard
+            if (uiManager.getCurrentScreen() == UIScreen::DASHBOARD) {
+                uiManager.updateTileSelection(pendingOldIndex, pendingNewIndex);
+            }
+            lastDisplayUpdateTime = now;
+        }
+    }
+
+    // Minimal delay - just yield to other tasks
+    delay(5);
 }
