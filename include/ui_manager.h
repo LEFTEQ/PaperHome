@@ -7,6 +7,7 @@
 #include "display_manager.h"
 #include "hue_manager.h"
 #include "sensor_manager.h"
+#include "power_manager.h"
 
 // UI Screen states
 enum class UIScreen {

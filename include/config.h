@@ -46,6 +46,18 @@
 #define VBAT_COEFF      1.769388f   // Voltage divider coefficient
 
 // -----------------------------------------------------------------------------
+// Power Management
+// -----------------------------------------------------------------------------
+#define POWER_USB_THRESHOLD_MV  4300    // Above this = USB powered (charging)
+#define POWER_LOW_BATTERY_MV    3400    // Low battery warning threshold
+#define POWER_CRITICAL_MV       3200    // Critical battery level
+#define POWER_IDLE_TIMEOUT_MS   5000    // 5 seconds before entering idle mode
+#define POWER_CPU_ACTIVE_MHZ    240     // Full speed when active
+#define POWER_CPU_IDLE_MHZ      80      // Reduced speed when idle
+#define POWER_ADC_SAMPLES       16      // ADC oversampling for stability
+#define POWER_SAMPLE_INTERVAL_MS 10000  // Battery voltage check every 10s
+
+// -----------------------------------------------------------------------------
 // Product Information
 // -----------------------------------------------------------------------------
 #define PRODUCT_NAME    "PaperHome"
@@ -104,6 +116,7 @@
 #define DEBUG_UI            true
 #define DEBUG_CONTROLLER    true
 #define DEBUG_SENSOR        true
+#define DEBUG_POWER         true
 #define SERIAL_BAUD         115200
 
 #endif // CONFIG_H

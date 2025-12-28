@@ -29,6 +29,7 @@ pio device monitor   # Serial (115200)
 | `src/ui_manager.cpp` | Screens: Dashboard, Room Control, Sensor views, status flows |
 | `src/controller_manager.cpp` | Xbox BLE connection, input events with debouncing |
 | `src/sensor_manager.cpp` | STCC4 I2C driver, sampling, ring buffer history |
+| `src/power_manager.cpp` | Battery ADC, CPU frequency scaling, idle timeout |
 | `include/config.h` | Pins, WiFi, UI constants, refresh thresholds |
 | `include/ring_buffer.h` | Template ring buffer for sensor history storage |
 | `include/sensor_manager.h` | SensorManager class, SensorSample/SensorStats structs |
@@ -60,10 +61,16 @@ main.cpp
     |       +-- Triggers for brightness
     |
     +-- sensorManager --> STCC4 Sensor (I2C)
-            +-- CO2, Temperature, Humidity readings
-            +-- 1-minute sampling interval
-            +-- 48-hour ring buffer history (2880 samples)
-            +-- 2-hour warmup period for stable readings
+    |       +-- CO2, Temperature, Humidity readings
+    |       +-- 1-minute sampling interval
+    |       +-- 48-hour ring buffer history (2880 samples)
+    |       +-- 2-hour warmup period for stable readings
+    |
+    +-- powerManager --> Battery & CPU Management
+            +-- Battery voltage ADC (GPIO 9)
+            +-- Auto-detect USB vs battery power
+            +-- CPU frequency scaling (240MHz active, 80MHz idle)
+            +-- 5-second idle timeout for power saving
 ```
 
 ## UI Screens & Navigation
@@ -89,9 +96,11 @@ main.cpp
 
 ## Status Bar
 
-The status bar (40px height) displays:
+The status bar (40px height) displays (left to right):
 - **WiFi signal bars** (4 bars based on RSSI)
-- **Sensor widgets** (always visible): CO2 ppm, Temperature, Humidity
+- **Battery widget** (icon + percentage, or "USB" when charging)
+- **CPU frequency** (80M or 240M)
+- **Sensor widgets**: CO2 ppm, Temperature, Humidity
 - **Hue connection dot** (filled = connected, empty = disconnected)
 
 ## Key Patterns
@@ -100,6 +109,7 @@ The status bar (40px height) displays:
 - HueManager: `DISCONNECTED -> DISCOVERING -> WAITING_FOR_BUTTON -> CONNECTED`
 - ControllerManager: `DISCONNECTED -> SCANNING -> CONNECTED -> ACTIVE`
 - SensorManager: `DISCONNECTED -> INITIALIZING -> WARMING_UP -> ACTIVE`
+- PowerManager: `USB_POWERED` or `BATTERY_ACTIVE <-> BATTERY_IDLE` (5s idle timeout)
 - UIManager: `UIScreen` enum for current view
 
 **Callbacks:**
@@ -110,6 +120,7 @@ controllerManager.setInputCallback(onControllerInput);
 controllerManager.setStateCallback(onControllerState);
 sensorManager.setStateCallback(onSensorStateChange);
 sensorManager.setDataCallback(onSensorData);
+powerManager.setStateCallback(onPowerStateChange);
 ```
 
 **Sensor Data Access:**
@@ -125,6 +136,16 @@ SensorStats stats = sensorManager.getStats(SensorMetric::CO2);
 // Extract samples for charts
 float samples[720];
 size_t count = sensorManager.getSamples(samples, 720, SensorMetric::CO2, stride);
+```
+
+**Power Data Access:**
+```cpp
+float percent = powerManager.getBatteryPercent();  // 0-100
+float voltage = powerManager.getBatteryVoltage();  // millivolts
+int cpuMhz = powerManager.getCpuFrequency();       // 80 or 240
+bool onBattery = powerManager.isOnBattery();
+bool charging = powerManager.isCharging();
+powerManager.wakeFromIdle();  // Boost CPU to 240MHz
 ```
 
 **Change Detection (HueManager):**
@@ -166,6 +187,10 @@ do { /* draw region */ } while (display.nextPage());
 | `SENSOR_BUFFER_SIZE` | 2880 | 48 hours of history at 1-min intervals |
 | `SENSOR_WARMUP_TIME_MS` | 7200000 | 2 hours for stable CO2 readings |
 | `CHART_DATA_POINTS` | 720 | Points to render on charts |
+| `POWER_IDLE_TIMEOUT_MS` | 5000 | 5 seconds before CPU idle mode |
+| `POWER_CPU_ACTIVE_MHZ` | 240 | Full speed when active |
+| `POWER_CPU_IDLE_MHZ` | 80 | Reduced speed when idle |
+| `POWER_USB_THRESHOLD_MV` | 4300 | Voltage above = USB powered |
 
 ## Pin Configuration
 
@@ -196,10 +221,13 @@ do { /* draw region */ } while (display.nextPage());
 - STCC4 CO2/Temperature/Humidity sensor integration
 - Sensor dashboard with 3 metric panels and mini charts
 - Sensor detail view with full-screen historical charts
-- Status bar with WiFi signal, sensor readings, Hue status
+- Status bar with WiFi signal, battery %, CPU MHz, sensor readings, Hue status
+- Battery monitoring via ADC with LiPo discharge curve
+- Smart power management with CPU frequency scaling (240MHz active, 80MHz idle)
+- Auto-detect USB vs battery power
 
 **Not Implemented:**
-- Deep sleep / battery monitoring
+- Deep sleep mode
 - OTA updates
 - Multiple pages for >6 rooms
 

@@ -496,38 +496,69 @@ void UIManager::drawStatusBar(bool wifiConnected, const String& bridgeIP) {
         }
     }
 
-    // === CENTER: Sensor widgets ===
     display.setFont(&FreeMonoBold9pt7b);
 
+    // === Battery widget ===
+    int batX = 50;
+    int batY = 8;
+
+    // Battery icon (16x10 outline with terminal nub)
+    display.drawRect(batX, batY + 7, 16, 10, GxEPD_WHITE);           // Main body
+    display.fillRect(batX + 16, batY + 10, 2, 4, GxEPD_WHITE);       // Terminal
+
+    // Fill based on percentage
+    float batPercent = powerManager.getBatteryPercent();
+    int fillWidth = (int)(14.0f * batPercent / 100.0f);
+    if (fillWidth > 0) {
+        display.fillRect(batX + 1, batY + 8, fillWidth, 8, GxEPD_WHITE);
+    }
+
+    // Battery text
+    char batStr[8];
+    if (powerManager.isCharging()) {
+        snprintf(batStr, sizeof(batStr), "USB");
+    } else {
+        snprintf(batStr, sizeof(batStr), "%d%%", (int)batPercent);
+    }
+    display.setCursor(batX + 22, 26);
+    display.print(batStr);
+
+    // === CPU frequency widget ===
+    char cpuStr[8];
+    snprintf(cpuStr, sizeof(cpuStr), "%dM", powerManager.getCpuFrequency());
+    display.setCursor(115, 26);
+    display.print(cpuStr);
+
+    // === Sensor widgets ===
     if (sensorManager.isOperational()) {
         // CO2 widget
         char co2Str[16];
         snprintf(co2Str, sizeof(co2Str), "%.0f ppm", sensorManager.getCO2());
-        display.setCursor(120, 26);
+        display.setCursor(200, 26);
         display.print(co2Str);
 
         // Separator
-        display.setCursor(230, 26);
+        display.setCursor(310, 26);
         display.print("|");
 
         // Temperature widget
         char tempStr[16];
         snprintf(tempStr, sizeof(tempStr), "%.1fC", sensorManager.getTemperature());
-        display.setCursor(260, 26);
+        display.setCursor(340, 26);
         display.print(tempStr);
 
         // Separator
-        display.setCursor(360, 26);
+        display.setCursor(440, 26);
         display.print("|");
 
         // Humidity widget
         char humStr[16];
         snprintf(humStr, sizeof(humStr), "%.0f%%", sensorManager.getHumidity());
-        display.setCursor(390, 26);
+        display.setCursor(470, 26);
         display.print(humStr);
     } else {
         // Sensor not ready
-        display.setCursor(200, 26);
+        display.setCursor(280, 26);
         if (sensorManager.getState() == SensorConnectionState::WARMING_UP) {
             display.print("Sensor warming up...");
         } else {

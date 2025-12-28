@@ -14,6 +14,7 @@
 #include "ui_manager.h"
 #include "controller_manager.h"
 #include "sensor_manager.h"
+#include "power_manager.h"
 
 // Track states for display updates
 HueState lastHueState = HueState::DISCONNECTED;
@@ -325,6 +326,11 @@ void onControllerState(ControllerState state) {
     Serial.printf("[Main] Controller state: %s\n", stateNames[(int)state]);
 }
 
+// Callback for power state changes
+void onPowerStateChange(PowerState state) {
+    Serial.printf("[Main] Power state: %s\n", PowerManager::stateToString(state));
+}
+
 void connectToWiFi() {
     Serial.printf("[Main] Connecting to WiFi: %s\n", WIFI_SSID);
 
@@ -427,6 +433,11 @@ void setup() {
         Serial.println("[Main] Warning: STCC4 sensor not found or initialization failed");
     }
 
+    // Initialize Power Manager
+    Serial.println("[Main] Initializing Power Manager...");
+    powerManager.setStateCallback(onPowerStateChange);
+    powerManager.init();
+
     // Update display based on Hue state
     updateDisplay();
 
@@ -444,6 +455,9 @@ void loop() {
 
     // Update Sensor Manager (handles sampling)
     sensorManager.update();
+
+    // Update Power Manager (handles battery monitoring and idle timeout)
+    powerManager.update();
 
     // Update display if state changed
     if (needsDisplayUpdate) {

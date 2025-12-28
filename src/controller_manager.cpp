@@ -1,5 +1,6 @@
 #include "controller_manager.h"
 #include "config.h"
+#include "power_manager.h"
 #include <stdarg.h>
 #include <XboxSeriesXHIDReportBuilder_asukiaaa.hpp>
 
@@ -62,6 +63,9 @@ bool ControllerManager::isConnected() const {
 }
 
 void ControllerManager::processInput() {
+    // Wake from idle before processing any input (boost CPU if needed)
+    powerManager.wakeFromIdle();
+
     unsigned long now = millis();
 
     // Read analog stick values
