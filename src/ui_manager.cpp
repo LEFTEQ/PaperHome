@@ -14,7 +14,9 @@ UIManager::UIManager()
     , _lastDisplayedBrightness(0)
     , _previousWifiConnected(false)
     , _lastFullRefreshTime(0)
-    , _partialUpdateCount(0) {
+    , _partialUpdateCount(0)
+    , _currentMetric(SensorMetric::CO2)
+    , _lastSensorUpdateTime(0) {
 }
 
 void UIManager::init() {
@@ -463,26 +465,87 @@ void UIManager::drawStatusBar(bool wifiConnected, const String& bridgeIP) {
     // Background
     display.fillRect(0, 0, displayManager.width(), UI_STATUS_BAR_HEIGHT, GxEPD_BLACK);
 
-    // Text color (white on black)
     display.setTextColor(GxEPD_WHITE);
-    display.setFont(&FreeMonoBold9pt7b);
 
-    // WiFi status (left side)
-    display.setCursor(10, 26);
-    if (wifiConnected) {
-        display.printf("WiFi: %s", WiFi.SSID().c_str());
-    } else {
-        display.print("WiFi: Disconnected");
+    // === LEFT: WiFi signal strength bars ===
+    int barX = 10;
+    int barY = 8;
+    int barWidth = 4;
+    int barSpacing = 3;
+    int barMaxHeight = 24;
+
+    // Get signal strength (RSSI: -30 = excellent, -90 = poor)
+    int rssi = wifiConnected ? WiFi.RSSI() : -100;
+    int bars = 0;
+    if (rssi > -50) bars = 4;
+    else if (rssi > -60) bars = 3;
+    else if (rssi > -70) bars = 2;
+    else if (rssi > -85) bars = 1;
+
+    // Draw 4 bars (outline for empty, filled for signal)
+    for (int i = 0; i < 4; i++) {
+        int height = 6 + (i * 6);  // 6, 12, 18, 24
+        int y = barY + (barMaxHeight - height);
+
+        if (i < bars) {
+            // Filled bar
+            display.fillRect(barX + i * (barWidth + barSpacing), y, barWidth, height, GxEPD_WHITE);
+        } else {
+            // Empty bar (just outline)
+            display.drawRect(barX + i * (barWidth + barSpacing), y, barWidth, height, GxEPD_WHITE);
+        }
     }
 
-    // Hue Bridge status (right side)
-    if (!bridgeIP.isEmpty()) {
-        String bridgeText = "Hue: " + bridgeIP;
-        int16_t x1, y1;
-        uint16_t w, h;
-        display.getTextBounds(bridgeText.c_str(), 0, 0, &x1, &y1, &w, &h);
-        display.setCursor(displayManager.width() - w - 10, 26);
-        display.print(bridgeText);
+    // === CENTER: Sensor widgets ===
+    display.setFont(&FreeMonoBold9pt7b);
+
+    if (sensorManager.isOperational()) {
+        // CO2 widget
+        char co2Str[16];
+        snprintf(co2Str, sizeof(co2Str), "%.0f ppm", sensorManager.getCO2());
+        display.setCursor(120, 26);
+        display.print(co2Str);
+
+        // Separator
+        display.setCursor(230, 26);
+        display.print("|");
+
+        // Temperature widget
+        char tempStr[16];
+        snprintf(tempStr, sizeof(tempStr), "%.1fC", sensorManager.getTemperature());
+        display.setCursor(260, 26);
+        display.print(tempStr);
+
+        // Separator
+        display.setCursor(360, 26);
+        display.print("|");
+
+        // Humidity widget
+        char humStr[16];
+        snprintf(humStr, sizeof(humStr), "%.0f%%", sensorManager.getHumidity());
+        display.setCursor(390, 26);
+        display.print(humStr);
+    } else {
+        // Sensor not ready
+        display.setCursor(200, 26);
+        if (sensorManager.getState() == SensorConnectionState::WARMING_UP) {
+            display.print("Sensor warming up...");
+        } else {
+            display.print("Sensor: --");
+        }
+    }
+
+    // === RIGHT: Hue connection dot ===
+    int dotX = displayManager.width() - 25;
+    int dotY = UI_STATUS_BAR_HEIGHT / 2;
+    int dotRadius = 8;
+
+    if (!bridgeIP.isEmpty() && hueManager.isConnected()) {
+        // Filled circle = connected
+        display.fillCircle(dotX, dotY, dotRadius, GxEPD_WHITE);
+    } else {
+        // Empty circle = disconnected
+        display.drawCircle(dotX, dotY, dotRadius, GxEPD_WHITE);
     }
 
     // Reset text color
@@ -755,6 +818,537 @@ void UIManager::updateTileSelection(int oldIndex, int newIndex) {
     }
 
     logf("Selection changed: %d -> %d", oldIndex, newIndex);
+}
+
+// =============================================================================
+// Sensor Screen Methods
+// =============================================================================
+
+void UIManager::showSensorDashboard() {
+    _currentScreen = UIScreen::SENSOR_DASHBOARD;
+    log("Showing sensor dashboard");
+
+    DisplayType& display = displayManager.getDisplay();
+
+    display.setRotation(DISPLAY_ROTATION);
+    display.setFullWindow();
+    display.firstPage();
+
+    do {
+        display.fillScreen(GxEPD_WHITE);
+        drawStatusBar(WiFi.status() == WL_CONNECTED, hueManager.getBridgeIP());
+        drawSensorDashboardContent();
+    } while (display.nextPage());
+
+    _lastFullRefreshTime = millis();
+    _partialUpdateCount = 0;
+}
+
+void UIManager::showSensorDetail(SensorMetric metric) {
+    _currentScreen = UIScreen::SENSOR_DETAIL;
+    _currentMetric = metric;
+    logf("Showing sensor detail: %s", SensorManager::metricToString(metric));
+
+    DisplayType& display = displayManager.getDisplay();
+
+    display.setRotation(DISPLAY_ROTATION);
+    display.setFullWindow();
+    display.firstPage();
+
+    do {
+        display.fillScreen(GxEPD_WHITE);
+        drawStatusBar(WiFi.status() == WL_CONNECTED, hueManager.getBridgeIP());
+        drawSensorDetailContent(metric);
+    } while (display.nextPage());
+
+    _lastFullRefreshTime = millis();
+    _partialUpdateCount = 0;
+}
+
+void UIManager::updateSensorDashboard() {
+    if (_currentScreen != UIScreen::SENSOR_DASHBOARD) return;
+
+    unsigned long now = millis();
+
+    // Check if periodic full refresh needed
+    if (now - _lastFullRefreshTime > FULL_REFRESH_INTERVAL_MS ||
+        _partialUpdateCount >= MAX_PARTIAL_UPDATES) {
+        showSensorDashboard();
+        return;
+    }
+
+    // Partial refresh of content area
+    DisplayType& display = displayManager.getDisplay();
+
+    int16_t x = 0;
+    int16_t y = UI_STATUS_BAR_HEIGHT;
+    int16_t w = displayManager.width();
+    int16_t h = displayManager.height() - UI_STATUS_BAR_HEIGHT;
+
+    display.setPartialWindow(x, y, w, h);
+    display.firstPage();
+    do {
+        display.fillScreen(GxEPD_WHITE);
+        drawSensorDashboardContent();
+    } while (display.nextPage());
+
+    _partialUpdateCount++;
+}
+
+void UIManager::updateSensorDetail() {
+    if (_currentScreen != UIScreen::SENSOR_DETAIL) return;
+
+    unsigned long now = millis();
+
+    // Check if periodic full refresh needed
+    if (now - _lastFullRefreshTime > FULL_REFRESH_INTERVAL_MS ||
+        _partialUpdateCount >= MAX_PARTIAL_UPDATES) {
+        showSensorDetail(_currentMetric);
+        return;
+    }
+
+    // Partial refresh of content area
+    DisplayType& display = displayManager.getDisplay();
+
+    int16_t x = 0;
+    int16_t y = UI_STATUS_BAR_HEIGHT;
+    int16_t w = displayManager.width();
+    int16_t h = displayManager.height() - UI_STATUS_BAR_HEIGHT;
+
+    display.setPartialWindow(x, y, w, h);
+    display.firstPage();
+    do {
+        display.fillScreen(GxEPD_WHITE);
+        drawSensorDetailContent(_currentMetric);
+    } while (display.nextPage());
+
+    _partialUpdateCount++;
+}
+
+void UIManager::navigateSensorMetric(int direction) {
+    int metricIndex = (int)_currentMetric;
+    metricIndex += direction;
+
+    // Wrap around
+    if (metricIndex < 0) metricIndex = 2;
+    if (metricIndex > 2) metricIndex = 0;
+
+    _currentMetric = (SensorMetric)metricIndex;
+
+    logf("Navigating to metric: %s", SensorManager::metricToString(_currentMetric));
+
+    if (_currentScreen == UIScreen::SENSOR_DASHBOARD) {
+        updateSensorDashboard();
+    } else if (_currentScreen == UIScreen::SENSOR_DETAIL) {
+        showSensorDetail(_currentMetric);  // Full refresh for metric change
+    }
+}
+
+void UIManager::goBackFromSensor() {
+    log("Going back from sensor screen");
+
+    if (_currentScreen == UIScreen::SENSOR_DETAIL) {
+        showSensorDashboard();
+    } else if (_currentScreen == UIScreen::SENSOR_DASHBOARD) {
+        goBackToDashboard();
+    }
+}
+
+void UIManager::drawSensorDashboardContent() {
+    DisplayType& display = displayManager.getDisplay();
+
+    int rowPadding = 8;
+    int instructionHeight = 30;
+    int availableHeight = displayManager.height() - UI_STATUS_BAR_HEIGHT - instructionHeight - (rowPadding * 4);
+    int rowHeight = availableHeight / 3;
+    int rowWidth = displayManager.width() - (rowPadding * 2);
+
+    // Draw 3 rows (horizontal layout)
+    SensorMetric metrics[] = {SensorMetric::CO2, SensorMetric::TEMPERATURE, SensorMetric::HUMIDITY};
+
+    for (int i = 0; i < 3; i++) {
+        int rowX = rowPadding;
+        int rowY = UI_STATUS_BAR_HEIGHT + rowPadding + i * (rowHeight + rowPadding);
+        bool isSelected = (metrics[i] == _currentMetric);
+        drawSensorRow(rowX, rowY, rowWidth, rowHeight, metrics[i], isSelected);
+    }
+
+    // Instructions at bottom
+    display.setFont(&FreeMonoBold9pt7b);
+    display.setTextColor(GxEPD_BLACK);
+    int instructionY = displayManager.height() - 10;
+    drawCenteredText("D-pad: Select    A: Detail    B: Back", instructionY, &FreeMonoBold9pt7b);
+}
+
+void UIManager::drawSensorRow(int x, int y, int width, int height, SensorMetric metric, bool isSelected) {
+    DisplayType& display = displayManager.getDisplay();
+
+    // Row border
+    if (isSelected) {
+        // Thick selection border
+        display.drawRect(x, y, width, height, GxEPD_BLACK);
+        display.drawRect(x + 1, y + 1, width - 2, height - 2, GxEPD_BLACK);
+        display.drawRect(x + 2, y + 2, width - 4, height - 4, GxEPD_BLACK);
+    } else {
+        display.drawRect(x, y, width, height, GxEPD_BLACK);
+    }
+
+    // Layout:
+    // +--------------------------------------------------+
+    // | Label                            H: xxx  L: xxx  |  <- Header (25px)
+    // | [================ chart ====================]    |  <- Chart area
+    // | 847 ppm                                          |  <- Value overlaid
+    // +--------------------------------------------------+
+
+    int headerHeight = 25;
+    int padding = 8;
+    int chartX = x + padding;
+    int chartY = y + headerHeight;
+    int chartWidth = width - (padding * 2);
+    int chartHeight = height - headerHeight - padding;
+
+    // === HEADER ROW ===
+    display.setFont(&FreeMonoBold12pt7b);
+    display.setTextColor(GxEPD_BLACK);
+
+    // Metric label (left)
+    display.setCursor(x + padding, y + 18);
+    display.print(SensorManager::metricToString(metric));
+
+    if (sensorManager.isOperational()) {
+        SensorStats stats = sensorManager.getStats(metric);
+
+        // H: and L: values (right side of header)
+        display.setFont(&FreeMonoBold9pt7b);
+        char minMaxStr[32];
+        snprintf(minMaxStr, sizeof(minMaxStr), "H:%.0f  L:%.0f", stats.max, stats.min);
+
+        int16_t x1, y1;
+        uint16_t w, h;
+        display.getTextBounds(minMaxStr, 0, 0, &x1, &y1, &w, &h);
+        display.setCursor(x + width - w - padding, y + 18);
+        display.print(minMaxStr);
+
+        // === CHART ===
+        drawMiniChart(chartX, chartY, chartWidth, chartHeight, metric);
+
+        // === CURRENT VALUE (overlaid on bottom-left of chart) ===
+        char valueStr[32];
+        switch (metric) {
+            case SensorMetric::CO2:
+                snprintf(valueStr, sizeof(valueStr), "%.0f %s", stats.current, SensorManager::metricToUnit(metric));
+                break;
+            case SensorMetric::TEMPERATURE:
+                snprintf(valueStr, sizeof(valueStr), "%.1f%s", stats.current, SensorManager::metricToUnit(metric));
+                break;
+            case SensorMetric::HUMIDITY:
+                snprintf(valueStr, sizeof(valueStr), "%.1f%s", stats.current, SensorManager::metricToUnit(metric));
+                break;
+        }
+
+        // Draw white background box for readability, then black text
+        display.setFont(&FreeMonoBold18pt7b);
+        display.getTextBounds(valueStr, 0, 0, &x1, &y1, &w, &h);
+
+        int valueX = chartX + 10;
+        int valueY = y + height - padding - 5;
+
+        // White background behind text for contrast
+        display.fillRect(valueX - 3, valueY - h - 3, w + 6, h + 6, GxEPD_WHITE);
+        display.setCursor(valueX, valueY);
+        display.print(valueStr);
+
+    } else {
+        // Sensor not ready
+        display.setFont(&FreeMonoBold12pt7b);
+        display.setCursor(chartX + 20, y + height / 2 + 6);
+        if (sensorManager.getState() == SensorConnectionState::WARMING_UP) {
+            int progress = (int)(sensorManager.getWarmupProgress() * 100);
+            display.printf("Warming up... %d%%", progress);
+        } else {
+            display.print("No data");
+        }
+    }
+}
+
+void UIManager::drawSensorPanel(int x, int y, int width, int height, SensorMetric metric, bool isSelected) {
+    // Legacy vertical panel - kept for compatibility but not used in new row layout
+    drawSensorRow(x, y, width, height, metric, isSelected);
+}
+
+void UIManager::drawMiniChart(int x, int y, int width, int height, SensorMetric metric) {
+    DisplayType& display = displayManager.getDisplay();
+
+    // Chart border
+    display.drawRect(x, y, width, height, GxEPD_BLACK);
+
+    if (sensorManager.getSampleCount() < 2) {
+        // Not enough data for chart
+        display.setFont(&FreeMonoBold9pt7b);
+        display.setCursor(x + 10, y + height / 2);
+        display.print("Collecting...");
+        return;
+    }
+
+    // Get samples for chart (downsample to fit width)
+    size_t maxPoints = width - 4;  // Leave 2px margin on each side
+    float samples[256];  // Max points we'll use
+    size_t stride = max((size_t)1, sensorManager.getSampleCount() / maxPoints);
+    size_t count = sensorManager.getSamples(samples, min(maxPoints, (size_t)256), metric, stride);
+
+    if (count < 2) return;
+
+    // Get min/max for scaling
+    SensorStats stats = sensorManager.getStats(metric);
+
+    // Add padding to min/max for visual clarity
+    float range = stats.max - stats.min;
+    float padding = max(range * 0.1f, 1.0f);
+    float scaleMin = stats.min - padding;
+    float scaleMax = stats.max + padding;
+
+    // Draw chart line
+    drawChartLine(x + 2, y + 2, width - 4, height - 4, samples, count, scaleMin, scaleMax);
+}
+
+void UIManager::drawSensorDetailContent(SensorMetric metric) {
+    DisplayType& display = displayManager.getDisplay();
+
+    int contentY = UI_STATUS_BAR_HEIGHT + 10;
+    int labelX = 20;
+
+    // Title and current value
+    display.setFont(&FreeMonoBold18pt7b);
+    display.setTextColor(GxEPD_BLACK);
+    display.setCursor(labelX, contentY + 30);
+    display.print(SensorManager::metricToString(metric));
+
+    if (sensorManager.isOperational()) {
+        SensorStats stats = sensorManager.getStats(metric);
+
+        // Current value on right side
+        char currentStr[32];
+        snprintf(currentStr, sizeof(currentStr), "%.1f %s",
+                 stats.current, SensorManager::metricToUnit(metric));
+        int16_t x1, y1;
+        uint16_t w, h;
+        display.getTextBounds(currentStr, 0, 0, &x1, &y1, &w, &h);
+        display.setCursor(displayManager.width() - w - 20, contentY + 30);
+        display.print(currentStr);
+
+        // Chart area
+        int chartX = 60;
+        int chartY = contentY + 60;
+        int chartWidth = displayManager.width() - 80;
+        int chartHeight = displayManager.height() - chartY - 100;
+
+        // Draw full chart
+        drawFullChart(chartX, chartY, chartWidth, chartHeight, metric);
+
+        // Statistics at bottom
+        display.setFont(&FreeMonoBold12pt7b);
+        int statsY = displayManager.height() - 70;
+
+        char statsStr[128];
+        snprintf(statsStr, sizeof(statsStr), "Min: %.1f %s    Max: %.1f %s    Avg: %.1f %s",
+                 stats.min, SensorManager::metricToUnit(metric),
+                 stats.max, SensorManager::metricToUnit(metric),
+                 stats.avg, SensorManager::metricToUnit(metric));
+        display.setCursor(labelX, statsY);
+        display.print(statsStr);
+
+        // Navigation hints
+        display.setFont(&FreeMonoBold9pt7b);
+        int navY = displayManager.height() - 25;
+
+        // Previous metric
+        int prevIdx = ((int)metric - 1 + 3) % 3;
+        SensorMetric prevMetric = (SensorMetric)prevIdx;
+        display.setCursor(labelX, navY);
+        display.printf("< %s", SensorManager::metricToString(prevMetric));
+
+        // Next metric
+        int nextIdx = ((int)metric + 1) % 3;
+        SensorMetric nextMetric = (SensorMetric)nextIdx;
+        char nextStr[32];
+        snprintf(nextStr, sizeof(nextStr), "%s >", SensorManager::metricToString(nextMetric));
+        display.getTextBounds(nextStr, 0, 0, &x1, &y1, &w, &h);
+        display.setCursor(displayManager.width() - w - 20, navY);
+        display.print(nextStr);
+
+        // Center instruction
+        drawCenteredText("D-pad: Switch    B: Back", navY, &FreeMonoBold9pt7b);
+    } else {
+        // No data state
+        display.setFont(&FreeMonoBold18pt7b);
+        if (sensorManager.getState() == SensorConnectionState::WARMING_UP) {
+            drawCenteredText("Sensor warming up...", displayManager.height() / 2, &FreeMonoBold18pt7b);
+            display.setFont(&FreeMonoBold12pt7b);
+            int progress = (int)(sensorManager.getWarmupProgress() * 100);
+            char progressStr[32];
+            snprintf(progressStr, sizeof(progressStr), "%d%% complete", progress);
+            drawCenteredText(progressStr, displayManager.height() / 2 + 40, &FreeMonoBold12pt7b);
+        } else {
+            drawCenteredText("Sensor not available", displayManager.height() / 2, &FreeMonoBold18pt7b);
+        }
+    }
+}
+
+void UIManager::drawFullChart(int x, int y, int width, int height, SensorMetric metric) {
+    DisplayType& display = displayManager.getDisplay();
+
+    // Get samples
+    size_t maxPoints = min((size_t)CHART_DATA_POINTS, (size_t)width);
+    float* samples = new float[maxPoints];
+    size_t stride = max((size_t)1, sensorManager.getSampleCount() / maxPoints);
+    size_t count = sensorManager.getSamples(samples, maxPoints, metric, stride);
+
+    if (count < 2) {
+        display.setFont(&FreeMonoBold12pt7b);
+        display.setCursor(x + 20, y + height / 2);
+        display.print("Collecting data...");
+        delete[] samples;
+        return;
+    }
+
+    // Get stats for scaling
+    SensorStats stats = sensorManager.getStats(metric);
+
+    // Calculate nice scale values
+    float range = stats.max - stats.min;
+    float padding = max(range * 0.1f, 1.0f);
+    float scaleMin = floor((stats.min - padding) / 10) * 10;
+    float scaleMax = ceil((stats.max + padding) / 10) * 10;
+
+    // Draw axes
+    display.drawFastVLine(x, y, height, GxEPD_BLACK);
+    display.drawFastHLine(x, y + height, width, GxEPD_BLACK);
+
+    // Draw Y-axis labels
+    drawValueAxis(x - 5, y, height, scaleMin, scaleMax, SensorManager::metricToUnit(metric));
+
+    // Draw time axis
+    drawTimeAxis(x, y + height + 5, width);
+
+    // Draw horizontal grid lines (light dashed pattern)
+    int numGridLines = 4;
+    for (int i = 1; i < numGridLines; i++) {
+        int gridY = y + (height * i) / numGridLines;
+        for (int gx = x; gx < x + width; gx += 8) {
+            display.drawPixel(gx, gridY, GxEPD_BLACK);
+        }
+    }
+
+    // Draw chart line
+    drawChartLine(x + 1, y, width - 1, height, samples, count, scaleMin, scaleMax);
+
+    // Draw min/max markers
+    drawMinMaxMarkers(x + 1, y, width - 1, height,
+                      scaleMin, scaleMax,
+                      stats.min, stats.max,
+                      stats.minIndex, stats.maxIndex, count);
+
+    delete[] samples;
+}
+
+void UIManager::drawChartLine(int x, int y, int width, int height,
+                               const float* samples, size_t count,
+                               float minVal, float maxVal) {
+    DisplayType& display = displayManager.getDisplay();
+
+    if (count < 2) return;
+
+    float range = maxVal - minVal;
+    if (range <= 0) range = 1;
+
+    float xStep = (float)width / (count - 1);
+
+    for (size_t i = 1; i < count; i++) {
+        // Previous point
+        int x1 = x + (int)((i - 1) * xStep);
+        float norm1 = (samples[i - 1] - minVal) / range;
+        norm1 = constrain(norm1, 0.0f, 1.0f);
+        int y1 = y + height - (int)(norm1 * height);
+
+        // Current point
+        int x2 = x + (int)(i * xStep);
+        float norm2 = (samples[i] - minVal) / range;
+        norm2 = constrain(norm2, 0.0f, 1.0f);
+        int y2 = y + height - (int)(norm2 * height);
+
+        // Draw line (2px thick for visibility)
+        display.drawLine(x1, y1, x2, y2, GxEPD_BLACK);
+        display.drawLine(x1, y1 + 1, x2, y2 + 1, GxEPD_BLACK);
+    }
+}
+
+void UIManager::drawTimeAxis(int x, int y, int width) {
+    DisplayType& display = displayManager.getDisplay();
+
+    display.setFont(&FreeMonoBold9pt7b);
+    display.setTextColor(GxEPD_BLACK);
+
+    // Time labels for 48h span
+    const char* labels[] = {"-48h", "-24h", "-12h", "Now"};
+    const float positions[] = {0.0f, 0.5f, 0.75f, 1.0f};
+
+    for (int i = 0; i < 4; i++) {
+        int labelX = x + (int)(positions[i] * width);
+        int16_t x1, y1;
+        uint16_t w, h;
+        display.getTextBounds(labels[i], 0, 0, &x1, &y1, &w, &h);
+        display.setCursor(labelX - w / 2, y + 15);
+        display.print(labels[i]);
+    }
+}
+
+void UIManager::drawValueAxis(int x, int y, int height, float minVal, float maxVal, const char* unit) {
+    DisplayType& display = displayManager.getDisplay();
+
+    display.setFont(&FreeMonoBold9pt7b);
+    display.setTextColor(GxEPD_BLACK);
+
+    // Draw 5 labels from top to bottom
+    int numLabels = 5;
+    for (int i = 0; i < numLabels; i++) {
+        float value = maxVal - (maxVal - minVal) * i / (numLabels - 1);
+        int labelY = y + (height * i) / (numLabels - 1);
+
+        char labelStr[16];
+        snprintf(labelStr, sizeof(labelStr), "%.0f", value);
+
+        int16_t x1, y1;
+        uint16_t w, h;
+        display.getTextBounds(labelStr, 0, 0, &x1, &y1, &w, &h);
+        display.setCursor(x - w - 5, labelY + h / 2);
+        display.print(labelStr);
+    }
+}
+
+void UIManager::drawMinMaxMarkers(int chartX, int chartY, int chartWidth, int chartHeight,
+                                   float scaleMin, float scaleMax,
+                                   float actualMin, float actualMax,
+                                   size_t minIdx, size_t maxIdx, size_t totalSamples) {
+    DisplayType& display = displayManager.getDisplay();
+
+    float range = scaleMax - scaleMin;
+    if (range <= 0) range = 1;
+
+    float xStep = (float)chartWidth / (totalSamples - 1);
+
+    // Max marker (filled triangle pointing down)
+    int maxX = chartX + (int)(maxIdx * xStep);
+    float normMax = (actualMax - scaleMin) / range;
+    normMax = constrain(normMax, 0.0f, 1.0f);
+    int maxY = chartY + chartHeight - (int)(normMax * chartHeight);
+    display.fillTriangle(maxX - 5, maxY - 10, maxX + 5, maxY - 10, maxX, maxY - 3, GxEPD_BLACK);
+
+    // Min marker (filled triangle pointing up)
+    int minX = chartX + (int)(minIdx * xStep);
+    float normMin = (actualMin - scaleMin) / range;
+    normMin = constrain(normMin, 0.0f, 1.0f);
+    int minY = chartY + chartHeight - (int)(normMin * chartHeight);
+    display.fillTriangle(minX - 5, minY + 10, minX + 5, minY + 10, minX, minY + 3, GxEPD_BLACK);
 }
 
 void UIManager::log(const char* message) {

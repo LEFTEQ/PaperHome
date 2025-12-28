@@ -10,6 +10,7 @@ ControllerManager::ControllerManager()
     : _state(ControllerState::DISCONNECTED)
     , _lastButtonA(false)
     , _lastButtonB(false)
+    , _lastButtonY(false)
     , _lastButtonMenu(false)
     , _lastDpadLeft(false)
     , _lastDpadRight(false)
@@ -99,6 +100,17 @@ void ControllerManager::processInput() {
         }
     }
     _lastButtonB = buttonB;
+
+    // Button Y - Sensor screen (edge detection)
+    bool buttonY = _controller.xboxNotif.btnY;
+    if (buttonY && !_lastButtonY) {
+        log("Button Y pressed (Sensor)");
+        vibrateShort();
+        if (_inputCallback) {
+            _inputCallback(ControllerInput::BUTTON_Y, 0);
+        }
+    }
+    _lastButtonY = buttonY;
 
     // Menu button - Settings (edge detection)
     bool buttonMenu = _controller.xboxNotif.btnStart;

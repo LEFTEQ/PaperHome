@@ -6,15 +6,18 @@
 #include "config.h"
 #include "display_manager.h"
 #include "hue_manager.h"
+#include "sensor_manager.h"
 
 // UI Screen states
 enum class UIScreen {
     STARTUP,
     DISCOVERING,
     WAITING_FOR_BUTTON,
-    DASHBOARD,        // Room grid view
-    ROOM_CONTROL,     // Single room control view (after pressing A on a room)
-    SETTINGS,         // Settings/info screen
+    DASHBOARD,          // Room grid view
+    ROOM_CONTROL,       // Single room control view (after pressing A on a room)
+    SETTINGS,           // Settings/info screen
+    SENSOR_DASHBOARD,   // Sensor overview with 3 panels
+    SENSOR_DETAIL,      // Full chart for single metric
     ERROR
 };
 
@@ -89,6 +92,47 @@ public:
      */
     void goBackFromSettings();
 
+    // -------------------------------------------------------------------------
+    // Sensor Screen Methods
+    // -------------------------------------------------------------------------
+
+    /**
+     * Show sensor dashboard with all 3 metrics in panels
+     */
+    void showSensorDashboard();
+
+    /**
+     * Show sensor detail chart for a specific metric
+     * @param metric The metric to show (CO2, Temperature, or Humidity)
+     */
+    void showSensorDetail(SensorMetric metric);
+
+    /**
+     * Update sensor dashboard (partial refresh)
+     */
+    void updateSensorDashboard();
+
+    /**
+     * Update sensor detail chart (partial refresh)
+     */
+    void updateSensorDetail();
+
+    /**
+     * Navigate between metrics on sensor screens
+     * @param direction -1 for previous, +1 for next
+     */
+    void navigateSensorMetric(int direction);
+
+    /**
+     * Go back from sensor screens
+     */
+    void goBackFromSensor();
+
+    /**
+     * Get currently selected/displayed metric
+     */
+    SensorMetric getCurrentSensorMetric() const { return _currentMetric; }
+
     /**
      * Update status bar only (partial refresh)
      * @param wifiConnected WiFi connection status
@@ -151,6 +195,10 @@ private:
     unsigned long _lastFullRefreshTime;
     int _partialUpdateCount;
 
+    // Sensor screen state
+    SensorMetric _currentMetric;
+    unsigned long _lastSensorUpdateTime;
+
     void calculateTileDimensions();
 
     void drawStatusBar(bool wifiConnected, const String& bridgeIP);
@@ -170,6 +218,25 @@ private:
 
     // Settings screen helpers
     void drawSettingsContent();
+
+    // Sensor screen helpers
+    void drawSensorDashboardContent();
+    void drawSensorRow(int x, int y, int width, int height,
+                       SensorMetric metric, bool isSelected);
+    void drawSensorPanel(int x, int y, int width, int height,
+                         SensorMetric metric, bool isSelected);
+    void drawMiniChart(int x, int y, int width, int height, SensorMetric metric);
+    void drawSensorDetailContent(SensorMetric metric);
+    void drawFullChart(int x, int y, int width, int height, SensorMetric metric);
+    void drawChartLine(int x, int y, int width, int height,
+                       const float* samples, size_t count,
+                       float minVal, float maxVal);
+    void drawTimeAxis(int x, int y, int width);
+    void drawValueAxis(int x, int y, int height, float minVal, float maxVal, const char* unit);
+    void drawMinMaxMarkers(int chartX, int chartY, int chartWidth, int chartHeight,
+                           float scaleMin, float scaleMax,
+                           float actualMin, float actualMax,
+                           size_t minIdx, size_t maxIdx, size_t totalSamples);
 
     void log(const char* message);
     void logf(const char* format, ...);

@@ -13,6 +13,7 @@
 #include "hue_manager.h"
 #include "ui_manager.h"
 #include "controller_manager.h"
+#include "sensor_manager.h"
 
 // Track states for display updates
 HueState lastHueState = HueState::DISCONNECTED;
@@ -144,6 +145,79 @@ void handleDashboardInput(ControllerInput input, int16_t value) {
             }
             break;
 
+        case ControllerInput::BUTTON_Y:
+            {
+                // Open sensor dashboard
+                Serial.println("[Main] Opening sensor dashboard");
+                uiManager.showSensorDashboard();
+            }
+            break;
+
+        default:
+            break;
+    }
+}
+
+// Handle input on Sensor Dashboard screen
+void handleSensorDashboardInput(ControllerInput input, int16_t value) {
+    switch (input) {
+        case ControllerInput::NAV_LEFT:
+            uiManager.navigateSensorMetric(-1);
+            break;
+
+        case ControllerInput::NAV_RIGHT:
+            uiManager.navigateSensorMetric(1);
+            break;
+
+        case ControllerInput::BUTTON_A:
+            {
+                // Enter detail view for selected metric
+                Serial.println("[Main] Opening sensor detail");
+                uiManager.showSensorDetail(uiManager.getCurrentSensorMetric());
+            }
+            break;
+
+        case ControllerInput::BUTTON_B:
+        case ControllerInput::BUTTON_Y:
+            {
+                // Go back to room dashboard
+                Serial.println("[Main] Returning to room dashboard");
+                uiManager.goBackFromSensor();
+            }
+            break;
+
+        default:
+            break;
+    }
+}
+
+// Handle input on Sensor Detail screen
+void handleSensorDetailInput(ControllerInput input, int16_t value) {
+    switch (input) {
+        case ControllerInput::NAV_LEFT:
+            uiManager.navigateSensorMetric(-1);
+            break;
+
+        case ControllerInput::NAV_RIGHT:
+            uiManager.navigateSensorMetric(1);
+            break;
+
+        case ControllerInput::BUTTON_B:
+            {
+                // Go back to sensor dashboard
+                Serial.println("[Main] Returning to sensor dashboard");
+                uiManager.goBackFromSensor();
+            }
+            break;
+
+        case ControllerInput::BUTTON_Y:
+            {
+                // Go back to room dashboard
+                Serial.println("[Main] Returning to room dashboard from detail");
+                uiManager.goBackToDashboard();
+            }
+            break;
+
         default:
             break;
     }
@@ -229,6 +303,14 @@ void onControllerInput(ControllerInput input, int16_t value) {
 
         case UIScreen::SETTINGS:
             handleSettingsInput(input, value);
+            break;
+
+        case UIScreen::SENSOR_DASHBOARD:
+            handleSensorDashboardInput(input, value);
+            break;
+
+        case UIScreen::SENSOR_DETAIL:
+            handleSensorDetailInput(input, value);
             break;
 
         default:
@@ -337,6 +419,14 @@ void setup() {
     controllerManager.setStateCallback(onControllerState);
     controllerManager.init();
 
+    // Initialize Sensor Manager
+    Serial.println("[Main] Initializing Sensor Manager...");
+    if (sensorManager.init()) {
+        Serial.println("[Main] STCC4 sensor initialized successfully");
+    } else {
+        Serial.println("[Main] Warning: STCC4 sensor not found or initialization failed");
+    }
+
     // Update display based on Hue state
     updateDisplay();
 
@@ -351,6 +441,9 @@ void loop() {
 
     // Update Hue Manager (handles discovery, auth, polling)
     hueManager.update();
+
+    // Update Sensor Manager (handles sampling)
+    sensorManager.update();
 
     // Update display if state changed
     if (needsDisplayUpdate) {

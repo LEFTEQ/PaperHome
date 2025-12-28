@@ -83,12 +83,27 @@
 #define PARTIAL_REFRESH_THRESHOLD   3       // If more than this many tiles change, do full refresh
 
 // -----------------------------------------------------------------------------
+// STCC4 Sensor Configuration
+// -----------------------------------------------------------------------------
+#define SENSOR_I2C_ADDRESS          0x64            // STCC4 default I2C address
+#define SENSOR_SAMPLE_INTERVAL_MS   60000           // 1 minute between samples
+#define SENSOR_BUFFER_SIZE          2880            // 48 hours of history at 1-min intervals
+#define SENSOR_WARMUP_TIME_MS       7200000         // 2 hours for stable readings
+#define SENSOR_ERROR_THRESHOLD      5               // Consecutive errors before marking as failed
+
+// Chart rendering
+#define CHART_DATA_POINTS           720             // Points to render (matches display width)
+#define CHART_LINE_THICKNESS        2               // Line thickness in pixels
+#define CHART_PANEL_COUNT           3               // Number of metric panels on dashboard
+
+// -----------------------------------------------------------------------------
 // Debug Configuration
 // -----------------------------------------------------------------------------
 #define DEBUG_DISPLAY       true
 #define DEBUG_HUE           true
 #define DEBUG_UI            true
 #define DEBUG_CONTROLLER    true
+#define DEBUG_SENSOR        true
 #define SERIAL_BAUD         115200
 
 #endif // CONFIG_H
