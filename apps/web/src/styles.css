@@ -1,0 +1,147 @@
+@import 'tailwindcss';
+
+/* Paper Theme - Custom CSS Variables */
+:root {
+  /* Paper-inspired color palette */
+  --background: 40 20% 96%;      /* Warm recycled paper */
+  --foreground: 30 10% 15%;      /* Dark brown text */
+  --card: 35 15% 94%;            /* Slightly darker paper for cards */
+  --card-foreground: 30 10% 15%;
+  --primary: 25 60% 45%;         /* Earthy terracotta */
+  --primary-foreground: 40 20% 98%;
+  --secondary: 45 20% 88%;       /* Muted tan */
+  --secondary-foreground: 30 10% 20%;
+  --accent: 140 30% 35%;         /* Sage green */
+  --accent-foreground: 40 20% 98%;
+  --muted: 30 10% 85%;           /* Subtle gray-brown */
+  --muted-foreground: 30 10% 40%;
+  --border: 30 15% 80%;          /* Soft border color */
+  --input: 30 15% 80%;
+  --ring: 25 60% 45%;
+  --destructive: 0 60% 50%;
+  --destructive-foreground: 0 0% 98%;
+
+  /* Chart colors - warm earth tones */
+  --chart-1: 25 60% 45%;         /* Terracotta */
+  --chart-2: 140 30% 35%;        /* Sage */
+  --chart-3: 45 40% 50%;         /* Warm amber */
+  --chart-4: 30 20% 60%;         /* Taupe */
+  --chart-5: 10 40% 55%;         /* Rust */
+
+  /* Layout */
+  --radius: 0.625rem;
+  --sidebar-width: 16rem;
+}
+
+/* Base styles */
+* {
+  border-color: hsl(var(--border));
+}
+
+body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Paper texture overlay - subtle */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  opacity: 0.015;
+  z-index: 9999;
+}
+
+/* Monospace for data/numbers */
+.font-mono {
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+/* Custom scrollbar - paper themed */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--muted));
+  border-radius: var(--radius);
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: var(--radius);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(30 15% 70%);
+}
+
+/* Focus ring */
+*:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+/* Card shadows - soft diffused */
+.card-shadow {
+  box-shadow:
+    0 1px 3px 0 rgb(0 0 0 / 0.05),
+    0 1px 2px -1px rgb(0 0 0 / 0.05);
+}
+
+.card-shadow-md {
+  box-shadow:
+    0 4px 6px -1px rgb(0 0 0 / 0.05),
+    0 2px 4px -2px rgb(0 0 0 / 0.05);
+}
+
+/* Transitions - organic and smooth */
+.transition-paper {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Utility classes */
+.bg-background { background-color: hsl(var(--background)); }
+.bg-card { background-color: hsl(var(--card)); }
+.bg-primary { background-color: hsl(var(--primary)); }
+.bg-secondary { background-color: hsl(var(--secondary)); }
+.bg-accent { background-color: hsl(var(--accent)); }
+.bg-muted { background-color: hsl(var(--muted)); }
+
+.text-foreground { color: hsl(var(--foreground)); }
+.text-muted-foreground { color: hsl(var(--muted-foreground)); }
+.text-primary { color: hsl(var(--primary)); }
+.text-accent { color: hsl(var(--accent)); }
+
+.border-border { border-color: hsl(var(--border)); }
+.border-input { border-color: hsl(var(--input)); }
+
+/* Status indicators */
+.status-online {
+  background-color: hsl(var(--accent));
+}
+
+.status-offline {
+  background-color: hsl(var(--muted-foreground));
+}
+
+/* Data visualization helpers */
+.data-value {
+  font-family: 'IBM Plex Mono', monospace;
+  font-weight: 500;
+}
+
+.data-unit {
+  font-size: 0.75em;
+  color: hsl(var(--muted-foreground));
+  margin-left: 0.25em;
+}

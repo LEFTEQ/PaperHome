@@ -1,3 +1,13 @@
+# Node.js
+node_modules/
+pnpm-lock.yaml
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
 # PlatformIO
 .pio/
 .pioenvs/
@@ -8,9 +18,18 @@
 cmake-build-*/
 *.iml
 
-# Build artifacts
-build/
-dist/
+# VS Code
+.vscode/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
 
 # OS files
 .DS_Store
@@ -21,13 +40,21 @@ Thumbs.db
 *.swp
 *.swo
 
-# Environment variables
-.env
-.env.local
+# Cache
+.cache/
+.nx/
+.turbo/
+*.tsbuildinfo
 
-# Logs
-*.log
+# Testing
+coverage/
 
 # Temporary files
 tmp/
 temp/
+
+# Generated API files
+apps/web/src/lib/api/generated/
+
+# TypeORM
+apps/api/uploads/

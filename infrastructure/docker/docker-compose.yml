@@ -1,0 +1,79 @@
+name: paperhome
+
+services:
+  # PostgreSQL with TimescaleDB
+  postgres:
+    image: timescale/timescaledb-ha:pg16
+    container_name: paperhome-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-paperhome}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-paperhome_dev_password}
+      POSTGRES_DB: ${DB_NAME:-paperhome}
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-extensions.sql:/docker-entrypoint-initdb.d/init-extensions.sql:ro
+    ports:
+      - '${DB_PORT:-5433}:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DB_USER:-paperhome}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - paperhome-network
+
+  # Mosquitto MQTT Broker (Development - no auth)
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: paperhome-mosquitto-dev
+    restart: unless-stopped
+    ports:
+      - '1883:1883'   # MQTT
+      - '9001:9001'   # WebSocket
+    volumes:
+      - ./mosquitto/mosquitto.dev.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    healthcheck:
+      test: ['CMD-SHELL', 'mosquitto_sub -t "$$SYS/#" -C 1 || exit 1']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - paperhome-network
+
+  # pgAdmin (optional, for database management)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: paperhome-pgadmin-dev
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@paperhome.local}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    ports:
+      - '5050:80'
+    depends_on:
+      - postgres
+    networks:
+      - paperhome-network
+    profiles:
+      - tools
+
+volumes:
+  postgres_data:
+    driver: local
+  mosquitto_data:
+    driver: local
+  mosquitto_log:
+    driver: local
+  pgadmin_data:
+    driver: local
+
+networks:
+  paperhome-network:
+    driver: bridge

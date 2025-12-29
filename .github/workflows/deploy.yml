@@ -1,0 +1,56 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Image tag to deploy'
+        required: false
+        default: 'latest'
+
+env:
+  API_IMAGE: ghcr.io/lukaspribik/paperhome/api
+  WEB_IMAGE: ghcr.io/lukaspribik/paperhome/web
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd /opt/apps/paperhome
+
+            echo "=== Pulling images ==="
+            docker pull ${{ env.API_IMAGE }}:${{ inputs.image_tag }}
+            docker pull ${{ env.WEB_IMAGE }}:${{ inputs.image_tag }}
+
+            echo "=== Restarting services ==="
+            export IMAGE_TAG=${{ inputs.image_tag }}
+            docker compose up -d --no-build api web
+
+            echo "=== Waiting for services ==="
+            sleep 10
+
+            echo "=== Health check ==="
+            if curl -sf http://localhost/api/v1/health > /dev/null; then
+                echo "Health check passed!"
+            else
+                echo "Health check failed!"
+                docker compose logs --tail=50 api
+                exit 1
+            fi
+
+            echo "=== Status ==="
+            docker compose ps api web
+
+            echo "=== Cleanup ==="
+            docker image prune -f
+
+            echo "Deployment completed successfully!"
