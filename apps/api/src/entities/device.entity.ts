@@ -28,7 +28,7 @@ export class Device {
   @Column({ name: 'is_online', default: false })
   isOnline: boolean;
 
-  @Column({ name: 'last_seen_at', nullable: true })
+  @Column({ name: 'last_seen_at', type: 'timestamptz', nullable: true })
   lastSeenAt: Date | null;
 
   @Column({ name: 'firmware_version', nullable: true, length: 20 })
