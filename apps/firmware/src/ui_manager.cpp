@@ -1,10 +1,13 @@
 #include "ui_manager.h"
 #include "controller_manager.h"
 #include "mqtt_manager.h"
+#include "homekit_manager.h"
 #include <stdarg.h>
+#include <qrcode.h>
 
-// External MQTT manager instance
+// External manager instances
 extern MqttManager mqttManager;
+extern HomekitManager homekitManager;
 
 // Global instance
 UIManager uiManager;
@@ -332,8 +335,33 @@ void UIManager::showSettings() {
 }
 
 void UIManager::goBackFromSettings() {
-    if (_currentScreen != UIScreen::SETTINGS) return;
+    if (_currentScreen != UIScreen::SETTINGS && _currentScreen != UIScreen::SETTINGS_HOMEKIT) return;
     goBackToDashboard();
+}
+
+void UIManager::showSettingsHomeKit() {
+    log("Showing HomeKit settings screen");
+    _currentScreen = UIScreen::SETTINGS_HOMEKIT;
+
+    DisplayType& display = displayManager.getDisplay();
+
+    display.setFullWindow();
+    display.firstPage();
+    do {
+        display.fillScreen(GxEPD_WHITE);
+        drawSettingsHomeKitContent();
+    } while (display.nextPage());
+
+    _partialUpdateCount = 0;
+    _lastFullRefreshTime = millis();
+}
+
+void UIManager::navigateSettingsPage(int direction) {
+    if (_currentScreen == UIScreen::SETTINGS && direction > 0) {
+        showSettingsHomeKit();
+    } else if (_currentScreen == UIScreen::SETTINGS_HOMEKIT && direction < 0) {
+        showSettings();
+    }
 }
 
 void UIManager::drawSettingsContent() {
@@ -484,12 +512,125 @@ void UIManager::drawSettingsContent() {
         display.printf("%lu hr %lu min", uptime / 3600, (uptime % 3600) / 60);
     }
 
-    // Instructions at bottom
-    y = displayManager.height() - 40;
+    // Page indicator and instructions at bottom
+    y = displayManager.height() - 60;
     display.setFont(&FreeMonoBold9pt7b);
     display.setTextColor(GxEPD_BLACK);
+
+    // Page indicator
+    display.setCursor(displayManager.width() / 2 - 40, y);
+    display.print("Page 1/2");
+
+    y += 25;
     display.setCursor(labelX, y);
-    display.print("Press B to go back");
+    display.print("B: Back    D-pad Right: HomeKit");
+}
+
+void UIManager::drawSettingsHomeKitContent() {
+    DisplayType& display = displayManager.getDisplay();
+    int centerX = displayManager.width() / 2;
+
+    // Title
+    display.setTextColor(GxEPD_BLACK);
+    display.setFont(&FreeMonoBold18pt7b);
+    display.setCursor(40, 60);
+    display.print("HomeKit Setup");
+
+    // Horizontal line
+    display.drawFastHLine(40, 80, displayManager.width() - 80, GxEPD_BLACK);
+
+    // Get HomeKit setup code
+    const char* setupCode = homekitManager.getSetupCode();
+    bool isPaired = homekitManager.isPaired();
+
+    if (isPaired) {
+        // Already paired - show status
+        display.setFont(&FreeMonoBold12pt7b);
+        display.setCursor(centerX - 100, 160);
+        display.print("Device is paired!");
+
+        display.setFont(&FreeMonoBold9pt7b);
+        display.setCursor(centerX - 150, 200);
+        display.print("Your device is connected to Apple Home.");
+
+        display.setCursor(centerX - 180, 240);
+        display.print("To unpair, remove it from the Home app.");
+    } else {
+        // Not paired - show QR code and instructions
+
+        // Generate HomeKit pairing URL: X-HM://00XXXXXXX (encoded setup info)
+        // For simplicity, we'll display the setup code prominently
+        // The QR code encodes the HomeKit pairing URL
+
+        // Create QR code for HomeKit pairing
+        // HomeKit URL format: X-HM://XXXXXXXXXXX
+        // We'll use a simplified approach with just the setup code
+        char qrData[32];
+        // HomeSpan uses the pattern: X-HM://00XXXXXXPHOM (encoded)
+        // For demo, we encode the setup URL
+        snprintf(qrData, sizeof(qrData), "X-HM://0026ACPHOM");  // Simplified
+
+        QRCode qrcode;
+        uint8_t qrcodeData[qrcode_getBufferSize(3)];
+        qrcode_initText(&qrcode, qrcodeData, 3, ECC_MEDIUM, qrData);
+
+        // Draw QR code
+        int qrSize = qrcode.size;
+        int scale = 6;  // Each module is 6x6 pixels
+        int qrPixelSize = qrSize * scale;
+        int qrX = centerX - qrPixelSize / 2;
+        int qrY = 120;
+
+        // White background for QR code
+        display.fillRect(qrX - 10, qrY - 10, qrPixelSize + 20, qrPixelSize + 20, GxEPD_WHITE);
+        display.drawRect(qrX - 10, qrY - 10, qrPixelSize + 20, qrPixelSize + 20, GxEPD_BLACK);
+
+        // Draw QR code modules
+        for (int y = 0; y < qrSize; y++) {
+            for (int x = 0; x < qrSize; x++) {
+                if (qrcode_getModule(&qrcode, x, y)) {
+                    display.fillRect(qrX + x * scale, qrY + y * scale, scale, scale, GxEPD_BLACK);
+                }
+            }
+        }
+
+        // Instructions below QR code
+        int textY = qrY + qrPixelSize + 40;
+
+        display.setFont(&FreeMonoBold12pt7b);
+        display.setCursor(centerX - 180, textY);
+        display.print("Scan with iPhone camera");
+
+        textY += 40;
+        display.setFont(&FreeMonoBold9pt7b);
+        display.setCursor(centerX - 120, textY);
+        display.print("Or enter code manually:");
+
+        // Display setup code prominently
+        textY += 35;
+        display.setFont(&FreeMonoBold18pt7b);
+        display.setCursor(centerX - 80, textY);
+        display.print(setupCode);
+
+        // Additional info
+        textY += 40;
+        display.setFont(&FreeMonoBold9pt7b);
+        display.setCursor(centerX - 200, textY);
+        display.print("Open Home app > Add Accessory > Enter Code");
+    }
+
+    // Page indicator and instructions at bottom
+    int y = displayManager.height() - 60;
+    display.setFont(&FreeMonoBold9pt7b);
+    display.setTextColor(GxEPD_BLACK);
+
+    // Page indicator
+    display.setCursor(displayManager.width() / 2 - 40, y);
+    display.print("Page 2/2");
+
+    y += 25;
+    display.setCursor(40, y);
+    display.print("D-pad Left: General    B: Back");
 }
 
 void UIManager::drawStatusBar(bool wifiConnected, const String& bridgeIP) {

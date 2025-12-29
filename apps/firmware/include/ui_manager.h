@@ -17,7 +17,8 @@ enum class UIScreen {
     WAITING_FOR_BUTTON,
     DASHBOARD,          // Room grid view
     ROOM_CONTROL,       // Single room control view (after pressing A on a room)
-    SETTINGS,           // Settings/info screen
+    SETTINGS,           // Settings/info screen (general stats)
+    SETTINGS_HOMEKIT,   // HomeKit pairing screen with QR code
     SENSOR_DASHBOARD,   // Sensor overview with 3 panels
     SENSOR_DETAIL,      // Full chart for single metric
     TADO_AUTH,          // Tado OAuth login screen
@@ -90,6 +91,17 @@ public:
      * Show settings screen
      */
     void showSettings();
+
+    /**
+     * Show HomeKit settings screen with QR code
+     */
+    void showSettingsHomeKit();
+
+    /**
+     * Navigate between settings pages
+     * @param direction -1 for previous page, +1 for next page
+     */
+    void navigateSettingsPage(int direction);
 
     /**
      * Go back from settings to dashboard
@@ -268,6 +280,7 @@ private:
 
     // Settings screen helpers
     void drawSettingsContent();
+    void drawSettingsHomeKitContent();
 
     // Sensor screen helpers
     void drawSensorDashboardContent();

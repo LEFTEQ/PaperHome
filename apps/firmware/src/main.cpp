@@ -325,6 +325,20 @@ void handleSettingsInput(ControllerInput input, int16_t value) {
             }
             break;
 
+        case ControllerInput::NAV_LEFT:
+            {
+                Serial.println("[Main] Settings: previous page");
+                uiManager.navigateSettingsPage(-1);
+            }
+            break;
+
+        case ControllerInput::NAV_RIGHT:
+            {
+                Serial.println("[Main] Settings: next page");
+                uiManager.navigateSettingsPage(1);
+            }
+            break;
+
         default:
             break;
     }
@@ -365,6 +379,7 @@ MainWindow getCurrentMainWindow() {
         case UIScreen::DASHBOARD:
         case UIScreen::ROOM_CONTROL:
         case UIScreen::SETTINGS:
+        case UIScreen::SETTINGS_HOMEKIT:
             return MainWindow::HUE;
 
         case UIScreen::SENSOR_DASHBOARD:
@@ -515,6 +530,7 @@ void onControllerInput(ControllerInput input, int16_t value) {
             break;
 
         case UIScreen::SETTINGS:
+        case UIScreen::SETTINGS_HOMEKIT:
             handleSettingsInput(input, value);
             break;
 
