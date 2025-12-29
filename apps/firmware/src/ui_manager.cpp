@@ -4,6 +4,7 @@
 #include "homekit_manager.h"
 #include <stdarg.h>
 #include <qrcode.h>
+#include <Preferences.h>
 
 // External manager instances
 extern MqttManager mqttManager;
@@ -319,7 +320,13 @@ void UIManager::goBackToDashboard() {
 
 void UIManager::showSettings() {
     log("Showing settings screen");
-    _currentScreen = UIScreen::SETTINGS;
+
+    // Push current screen to stack (only if not already in settings)
+    if (_currentScreen != UIScreen::SETTINGS && _currentScreen != UIScreen::SETTINGS_HOMEKIT) {
+        pushScreen(UIScreen::SETTINGS);
+    } else {
+        _currentScreen = UIScreen::SETTINGS;
+    }
 
     DisplayType& display = displayManager.getDisplay();
 
@@ -336,7 +343,49 @@ void UIManager::showSettings() {
 
 void UIManager::goBackFromSettings() {
     if (_currentScreen != UIScreen::SETTINGS && _currentScreen != UIScreen::SETTINGS_HOMEKIT) return;
-    goBackToDashboard();
+
+    log("Going back from settings");
+
+    // Pop from navigation stack to return to previous screen
+    if (popScreen()) {
+        // Restore the previous screen based on what was on the stack
+        switch (_currentScreen) {
+            case UIScreen::DASHBOARD:
+                if (!_cachedRooms.empty()) {
+                    showDashboard(_cachedRooms, _previousBridgeIP);
+                }
+                break;
+            case UIScreen::ROOM_CONTROL:
+                if (_selectedIndex < _cachedRooms.size()) {
+                    showRoomControl(_cachedRooms[_selectedIndex], _previousBridgeIP);
+                } else {
+                    showDashboard(_cachedRooms, _previousBridgeIP);
+                }
+                break;
+            case UIScreen::SENSOR_DASHBOARD:
+                showSensorDashboard();
+                break;
+            case UIScreen::SENSOR_DETAIL:
+                showSensorDetail(_currentMetric);
+                break;
+            case UIScreen::TADO_DASHBOARD:
+                showTadoDashboard();
+                break;
+            case UIScreen::TADO_AUTH:
+                // Don't go back to auth screen, go to dashboard instead
+                showDashboard(_cachedRooms, _previousBridgeIP);
+                break;
+            default:
+                // Fallback to dashboard
+                if (!_cachedRooms.empty()) {
+                    showDashboard(_cachedRooms, _previousBridgeIP);
+                }
+                break;
+        }
+    } else {
+        // Stack was empty, default to dashboard
+        goBackToDashboard();
+    }
 }
 
 void UIManager::showSettingsHomeKit() {
@@ -487,6 +536,34 @@ void UIManager::drawSettingsContent() {
     y += lineHeight;
 
     display.setFont(&FreeMonoBold9pt7b);
+
+    // MAC Address
+    display.setCursor(labelX + 20, y);
+    display.print("MAC:");
+    display.setCursor(valueX, y);
+    display.print(WiFi.macAddress());
+    y += lineHeight - 8;
+
+    // Chip ID (eFuse MAC as hex)
+    display.setCursor(labelX + 20, y);
+    display.print("Chip ID:");
+    display.setCursor(valueX, y);
+    uint64_t chipId = ESP.getEfuseMac();
+    display.printf("%04X%08X", (uint16_t)(chipId >> 32), (uint32_t)chipId);
+    y += lineHeight - 8;
+
+    // Device Name (from NVS or default)
+    display.setCursor(labelX + 20, y);
+    display.print("Name:");
+    display.setCursor(valueX, y);
+    {
+        Preferences prefs;
+        prefs.begin(DEVICE_NVS_NAMESPACE, true);
+        String deviceName = prefs.getString(DEVICE_NVS_NAME, DEVICE_DEFAULT_NAME);
+        prefs.end();
+        display.print(deviceName);
+    }
+    y += lineHeight - 8;
 
     display.setCursor(labelX + 20, y);
     display.print("Version:");
@@ -1880,6 +1957,68 @@ void UIManager::goBackFromTado() {
     if (_currentScreen == UIScreen::TADO_AUTH || _currentScreen == UIScreen::TADO_DASHBOARD) {
         goBackToDashboard();
     }
+}
+
+// =============================================================================
+// Navigation Stack Methods
+// =============================================================================
+
+void UIManager::pushScreen(UIScreen screen) {
+    // Save current state to stack
+    if (_navigationStack.size() >= MAX_STACK_DEPTH) {
+        // Remove oldest entry if stack is full
+        _navigationStack.erase(_navigationStack.begin());
+    }
+
+    NavigationEntry entry(_currentScreen, _selectedIndex, _currentMetric);
+
+    // For Tado screens, also save the selected room
+    if (_currentScreen == UIScreen::TADO_DASHBOARD) {
+        entry.selectionIndex = _selectedTadoRoom;
+    }
+
+    _navigationStack.push_back(entry);
+    _currentScreen = screen;
+
+    logf("Pushed screen to stack (depth: %d)", _navigationStack.size());
+}
+
+bool UIManager::popScreen() {
+    if (_navigationStack.empty()) {
+        log("Cannot pop - navigation stack is empty");
+        return false;
+    }
+
+    NavigationEntry prev = _navigationStack.back();
+    _navigationStack.pop_back();
+
+    _currentScreen = prev.screen;
+    _selectedIndex = prev.selectionIndex;
+    _currentMetric = prev.metric;
+
+    // Restore Tado room selection if returning to Tado dashboard
+    if (prev.screen == UIScreen::TADO_DASHBOARD) {
+        _selectedTadoRoom = prev.selectionIndex;
+    }
+
+    logf("Popped screen from stack (depth: %d), returning to %d",
+         _navigationStack.size(), (int)prev.screen);
+
+    return true;
+}
+
+void UIManager::replaceScreen(UIScreen screen) {
+    // Clear stack and set new screen (for main window switching)
+    _navigationStack.clear();
+    _currentScreen = screen;
+    log("Replaced screen, cleared navigation stack");
+}
+
+UIScreen UIManager::getPreviousScreen() const {
+    if (_navigationStack.empty()) {
+        return UIScreen::DASHBOARD;  // Default fallback
+    }
+    return _navigationStack.back().screen;
 }
 
 void UIManager::log(const char* message) {

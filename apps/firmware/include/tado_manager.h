@@ -11,6 +11,7 @@
 // Tado connection states
 enum class TadoState {
     DISCONNECTED,       // No tokens stored
+    VERIFYING_TOKENS,   // Stored tokens found, waiting for network to verify
     AWAITING_AUTH,      // Device code generated, waiting for user to login
     AUTHENTICATING,     // Polling for token completion
     CONNECTED,          // Authenticated, polling rooms
@@ -139,6 +140,12 @@ private:
     unsigned long _lastTokenRefresh;
     unsigned long _lastAuthPoll;
     unsigned long _authPollInterval;
+
+    // Token verification retry
+    int _tokenVerifyRetries;
+    unsigned long _lastVerifyAttempt;
+    static const int MAX_VERIFY_RETRIES = 5;
+    static const unsigned long VERIFY_RETRY_INTERVAL_MS = 10000;  // 10 seconds
 
     // NVS
     Preferences _prefs;

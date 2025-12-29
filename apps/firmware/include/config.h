@@ -101,6 +101,14 @@
 #define HOMEKIT_FIRMWARE_REV    "1.0.0"
 
 // -----------------------------------------------------------------------------
+// Device Identification
+// -----------------------------------------------------------------------------
+#define DEVICE_NVS_NAMESPACE    "device"
+#define DEVICE_NVS_NAME         "name"
+#define DEVICE_DEFAULT_NAME     "PaperHome"
+#define DEVICE_NAME_MAX_LEN     32
+
+// -----------------------------------------------------------------------------
 // Tado X Configuration
 // -----------------------------------------------------------------------------
 #define TADO_CLIENT_ID          "1bb50063-6b0c-4d11-bd99-387f4a91cc46"

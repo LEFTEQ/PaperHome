@@ -166,13 +166,7 @@ void handleDashboardInput(ControllerInput input, int16_t value) {
             }
             break;
 
-        case ControllerInput::BUTTON_MENU:
-            {
-                // Open settings screen
-                Serial.println("[Main] Opening settings");
-                uiManager.showSettings();
-            }
-            break;
+        // Note: BUTTON_MENU is handled globally in onControllerInput()
 
         case ControllerInput::BUTTON_Y:
             {
@@ -510,13 +504,59 @@ void handleTadoDashboardInput(ControllerInput input, int16_t value) {
 void onControllerInput(ControllerInput input, int16_t value) {
     UIScreen currentScreen = uiManager.getCurrentScreen();
 
-    // Handle bumpers globally for screen cycling (works on all main screens)
-    if (input == ControllerInput::BUMPER_LEFT) {
-        cycleMainWindow(-1);  // Previous window
-        return;
+    // Handle Menu button globally - opens Settings from ANY screen
+    if (input == ControllerInput::BUTTON_MENU) {
+        if (currentScreen != UIScreen::SETTINGS && currentScreen != UIScreen::SETTINGS_HOMEKIT) {
+            Serial.println("[Main] Opening settings (global)");
+            uiManager.showSettings();
+            return;
+        }
+        // If already in settings, fall through to handleSettingsInput for navigation/close
     }
-    if (input == ControllerInput::BUMPER_RIGHT) {
-        cycleMainWindow(1);   // Next window
+
+    // Context-aware bumper handling
+    if (input == ControllerInput::BUMPER_LEFT || input == ControllerInput::BUMPER_RIGHT) {
+        int direction = (input == ControllerInput::BUMPER_LEFT) ? -1 : 1;
+
+        switch (currentScreen) {
+            // Main windows: cycle between Hue/Sensors/Tado
+            case UIScreen::DASHBOARD:
+            case UIScreen::SENSOR_DASHBOARD:
+            case UIScreen::TADO_DASHBOARD:
+            case UIScreen::TADO_AUTH:
+                cycleMainWindow(direction);
+                break;
+
+            // Room Control: navigate between rooms
+            case UIScreen::ROOM_CONTROL:
+                {
+                    const auto& rooms = hueManager.getRooms();
+                    if (!rooms.empty()) {
+                        int oldIndex = selectedRoomIndex;
+                        selectedRoomIndex = (selectedRoomIndex + direction + rooms.size()) % rooms.size();
+                        if (oldIndex != selectedRoomIndex) {
+                            Serial.printf("[Main] Switching to room: %s\n", rooms[selectedRoomIndex].name.c_str());
+                            uiManager.showRoomControl(rooms[selectedRoomIndex], hueManager.getBridgeIP());
+                        }
+                    }
+                }
+                break;
+
+            // Sensor Detail: cycle between metrics
+            case UIScreen::SENSOR_DETAIL:
+                uiManager.navigateSensorMetric(direction);
+                break;
+
+            // Settings: navigate settings pages
+            case UIScreen::SETTINGS:
+            case UIScreen::SETTINGS_HOMEKIT:
+                uiManager.navigateSettingsPage(direction);
+                break;
+
+            default:
+                // Other screens: no action
+                break;
+        }
         return;
     }
 

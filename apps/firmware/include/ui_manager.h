@@ -32,6 +32,21 @@ struct DashboardDiff {
     std::vector<int> changedRoomIndices;
 };
 
+// Navigation stack entry for screen history
+struct NavigationEntry {
+    UIScreen screen;
+    int selectionIndex;      // Dashboard tile or Tado room index
+    SensorMetric metric;     // For sensor screens
+
+    NavigationEntry()
+        : screen(UIScreen::DASHBOARD)
+        , selectionIndex(0)
+        , metric(SensorMetric::CO2) {}
+
+    NavigationEntry(UIScreen s, int idx, SensorMetric m)
+        : screen(s), selectionIndex(idx), metric(m) {}
+};
+
 class UIManager {
 public:
     UIManager();
@@ -224,6 +239,44 @@ public:
     int getSelectedIndex() const { return _selectedIndex; }
     void setSelectedIndex(int index) { _selectedIndex = index; }
 
+    // -------------------------------------------------------------------------
+    // Navigation Stack Methods
+    // -------------------------------------------------------------------------
+
+    /**
+     * Push current screen onto navigation stack and switch to new screen
+     * Used when entering a sub-screen (Dashboard -> Room Control)
+     */
+    void pushScreen(UIScreen screen);
+
+    /**
+     * Pop screen from navigation stack and restore previous screen
+     * Used when pressing back button
+     * @return true if successful, false if stack was empty
+     */
+    bool popScreen();
+
+    /**
+     * Replace current screen (clears navigation stack)
+     * Used for main window switching (Hue -> Sensors -> Tado)
+     */
+    void replaceScreen(UIScreen screen);
+
+    /**
+     * Check if navigation stack has entries (can go back)
+     */
+    bool canGoBack() const { return !_navigationStack.empty(); }
+
+    /**
+     * Get previous screen from stack (without popping)
+     */
+    UIScreen getPreviousScreen() const;
+
+    /**
+     * Clear navigation stack (reset to root)
+     */
+    void clearNavigationStack() { _navigationStack.clear(); }
+
     /**
      * Get number of cached rooms
      */
@@ -232,6 +285,10 @@ public:
 private:
     UIScreen _currentScreen;
     std::vector<HueRoom> _cachedRooms;
+
+    // Navigation stack for back navigation
+    std::vector<NavigationEntry> _navigationStack;
+    static const size_t MAX_STACK_DEPTH = 8;
 
     // Tile dimensions (calculated based on display size)
     int _tileWidth;

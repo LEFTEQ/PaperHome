@@ -1,5 +1,6 @@
 #include "tado_manager.h"
 #include <ArduinoJson.h>
+#include <WiFi.h>
 #include <stdarg.h>
 
 // Global instance
@@ -12,6 +13,8 @@ TadoManager::TadoManager()
     , _lastTokenRefresh(0)
     , _lastAuthPoll(0)
     , _authPollInterval(TADO_AUTH_POLL_MS)
+    , _tokenVerifyRetries(0)
+    , _lastVerifyAttempt(0)
     , _stateCallback(nullptr)
     , _roomsCallback(nullptr)
     , _authCallback(nullptr) {
@@ -20,20 +23,15 @@ TadoManager::TadoManager()
 void TadoManager::init() {
     log("Initializing Tado Manager...");
 
+    // Reset retry counters
+    _tokenVerifyRetries = 0;
+    _lastVerifyAttempt = 0;
+
     // Try to load stored tokens
     if (loadTokens()) {
-        log("Loaded stored tokens, verifying...");
-
-        // Try to fetch home ID to verify tokens work
-        if (fetchHomeId()) {
-            setState(TadoState::CONNECTED, "Connected to Tado");
-            fetchRooms();
-            _lastTokenRefresh = millis();
-        } else {
-            log("Stored tokens invalid, need re-authentication");
-            clearTokens();
-            setState(TadoState::DISCONNECTED, "Need authentication");
-        }
+        log("Loaded stored tokens, will verify when network available");
+        // Don't verify immediately - wait for WiFi and retry if needed
+        setState(TadoState::VERIFYING_TOKENS, "Verifying tokens...");
     } else {
         log("No stored tokens, authentication required");
         setState(TadoState::DISCONNECTED, "Not authenticated");
@@ -46,6 +44,37 @@ void TadoManager::update() {
     switch (_state) {
         case TadoState::DISCONNECTED:
             // Nothing to do, waiting for startAuth() call
+            break;
+
+        case TadoState::VERIFYING_TOKENS:
+            // Wait for WiFi before attempting verification
+            if (WiFi.status() != WL_CONNECTED) {
+                return;  // Wait for network
+            }
+
+            // Retry verification with interval
+            if (now - _lastVerifyAttempt >= VERIFY_RETRY_INTERVAL_MS) {
+                _lastVerifyAttempt = now;
+
+                log("Attempting token verification...");
+                if (fetchHomeId()) {
+                    log("Token verification successful");
+                    setState(TadoState::CONNECTED, "Connected to Tado");
+                    fetchRooms();
+                    _lastTokenRefresh = millis();
+                } else {
+                    _tokenVerifyRetries++;
+                    logf("Token verification failed (attempt %d/%d)",
+                         _tokenVerifyRetries, MAX_VERIFY_RETRIES);
+
+                    if (_tokenVerifyRetries >= MAX_VERIFY_RETRIES) {
+                        log("Max retries reached, tokens may be expired");
+                        clearTokens();
+                        setState(TadoState::DISCONNECTED, "Authentication required");
+                    }
+                    // Else: Stay in VERIFYING_TOKENS, will retry
+                }
+            }
             break;
 
         case TadoState::AWAITING_AUTH:
@@ -582,12 +611,13 @@ void TadoManager::setState(TadoState state, const char* message) {
 
 const char* TadoManager::stateToString(TadoState state) {
     switch (state) {
-        case TadoState::DISCONNECTED:    return "DISCONNECTED";
-        case TadoState::AWAITING_AUTH:   return "AWAITING_AUTH";
-        case TadoState::AUTHENTICATING:  return "AUTHENTICATING";
-        case TadoState::CONNECTED:       return "CONNECTED";
-        case TadoState::ERROR:           return "ERROR";
-        default:                         return "UNKNOWN";
+        case TadoState::DISCONNECTED:     return "DISCONNECTED";
+        case TadoState::VERIFYING_TOKENS: return "VERIFYING_TOKENS";
+        case TadoState::AWAITING_AUTH:    return "AWAITING_AUTH";
+        case TadoState::AUTHENTICATING:   return "AUTHENTICATING";
+        case TadoState::CONNECTED:        return "CONNECTED";
+        case TadoState::ERROR:            return "ERROR";
+        default:                          return "UNKNOWN";
     }
 }
 
