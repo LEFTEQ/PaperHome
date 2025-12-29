@@ -72,6 +72,10 @@ void HomekitManager::begin(const char* deviceName, const char* setupCode) {
     new Service::AccessoryInformation();
     new Characteristic::Identify();
     new Characteristic::Name("Temperature");
+    new Characteristic::Manufacturer("PaperHome");
+    new Characteristic::Model("Temperature Sensor");
+    new Characteristic::SerialNumber("PH-TEMP-001");
+    new Characteristic::FirmwareRevision("1.0.0");
     tempSensor = new HS_TemperatureSensor();
     _tempChar = tempSensor->temp;
 
@@ -80,6 +84,10 @@ void HomekitManager::begin(const char* deviceName, const char* setupCode) {
     new Service::AccessoryInformation();
     new Characteristic::Identify();
     new Characteristic::Name("Humidity");
+    new Characteristic::Manufacturer("PaperHome");
+    new Characteristic::Model("Humidity Sensor");
+    new Characteristic::SerialNumber("PH-HUM-001");
+    new Characteristic::FirmwareRevision("1.0.0");
     humiditySensor = new HS_HumiditySensor();
     _humidityChar = humiditySensor->humidity;
 
@@ -88,6 +96,10 @@ void HomekitManager::begin(const char* deviceName, const char* setupCode) {
     new Service::AccessoryInformation();
     new Characteristic::Identify();
     new Characteristic::Name("CO2 Sensor");
+    new Characteristic::Manufacturer("PaperHome");
+    new Characteristic::Model("CO2 Sensor");
+    new Characteristic::SerialNumber("PH-CO2-001");
+    new Characteristic::FirmwareRevision("1.0.0");
     co2Sensor = new HS_CarbonDioxideSensor();
     _co2DetectedChar = co2Sensor->detected;
     _co2LevelChar = co2Sensor->level;
@@ -114,23 +126,29 @@ void HomekitManager::onPairStatusChange(boolean paired) {
 }
 
 void HomekitManager::updateTemperature(float celsius) {
-    _temperature = celsius;
-    if (tempSensor) {
+    // Only update HomeKit if value changed significantly (0.1°C threshold)
+    if (tempSensor && abs(celsius - _temperature) >= 0.1f) {
+        _temperature = celsius;
         tempSensor->updateTemperature(celsius);
+        Serial.printf("[HomeKit] Temperature updated: %.1f°C\n", celsius);
     }
 }
 
 void HomekitManager::updateHumidity(float percent) {
-    _humidity = percent;
-    if (humiditySensor) {
+    // Only update HomeKit if value changed significantly (1% threshold)
+    if (humiditySensor && abs(percent - _humidity) >= 1.0f) {
+        _humidity = percent;
         humiditySensor->updateHumidity(percent);
+        Serial.printf("[HomeKit] Humidity updated: %.0f%%\n", percent);
     }
 }
 
 void HomekitManager::updateCO2(float ppm) {
-    _co2 = ppm;
-    if (co2Sensor) {
+    // Only update HomeKit if value changed significantly (10 ppm threshold)
+    if (co2Sensor && abs(ppm - _co2) >= 10.0f) {
+        _co2 = ppm;
         co2Sensor->updateCO2(ppm);
+        Serial.printf("[HomeKit] CO2 updated: %.0f ppm\n", ppm);
     }
 }
 
