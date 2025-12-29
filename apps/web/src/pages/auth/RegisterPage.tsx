@@ -1,10 +1,14 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { Activity } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Home, Eye, EyeOff } from 'lucide-react';
+import { Input, PasswordInput } from '@/components/ui/input';
+import { GlassCard } from '@/components/ui/glass-card';
+import { AnimatedBackground } from '@/components/layout/AnimatedBackground';
+import { staggerContainer, fadeInUp } from '@/lib/animations';
+import { cn } from '@/lib/utils';
 
 export function RegisterPage() {
   const { register } = useAuth();
@@ -13,7 +17,6 @@ export function RegisterPage() {
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -44,41 +47,63 @@ export function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[hsl(40,20%,96%)] px-4 py-12">
-      {/* Decorative background elements */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-1/4 -left-1/4 w-[800px] h-[800px] rounded-full bg-[hsl(140,25%,92%)] opacity-40 blur-3xl" />
-        <div className="absolute -bottom-1/4 -right-1/4 w-[600px] h-[600px] rounded-full bg-[hsl(25,40%,92%)] opacity-30 blur-3xl" />
-      </div>
+    <div className="min-h-screen flex items-center justify-center px-4 py-12">
+      {/* Animated gradient background */}
+      <AnimatedBackground />
 
-      <div className="w-full max-w-md relative">
+      <motion.div
+        className="w-full max-w-md relative z-10"
+        variants={staggerContainer}
+        initial="initial"
+        animate="animate"
+      >
         {/* Logo */}
-        <div className="flex flex-col items-center mb-8">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[hsl(25,60%,45%)] shadow-lg mb-4">
-            <Home className="h-7 w-7 text-white" />
+        <motion.div
+          className="flex flex-col items-center mb-8"
+          variants={fadeInUp}
+        >
+          <div
+            className={cn(
+              'h-16 w-16 rounded-2xl mb-4',
+              'bg-gradient-to-br from-[hsl(187,100%,50%)] to-[hsl(160,84%,39%)]',
+              'flex items-center justify-center',
+              'shadow-[0_0_40px_hsla(187,100%,50%,0.4)]'
+            )}
+          >
+            <Activity className="h-8 w-8 text-[hsl(228,15%,4%)]" />
           </div>
-          <h1 className="text-2xl font-semibold text-[hsl(30,10%,15%)] tracking-tight">
+          <h1 className="text-2xl font-bold text-white tracking-tight">
             PaperHome
           </h1>
-          <p className="text-sm text-[hsl(30,10%,50%)] mt-1">
+          <p className="text-sm text-[hsl(228,10%,50%)] mt-1">
             Create your account
           </p>
-        </div>
+        </motion.div>
 
-        <Card className="shadow-lg border-[hsl(30,15%,88%)]">
-          <CardHeader className="text-center pb-2">
-            <CardTitle className="text-xl">Get started</CardTitle>
-            <CardDescription>
-              Set up your smart home dashboard
-            </CardDescription>
-          </CardHeader>
+        {/* Register Card */}
+        <motion.div variants={fadeInUp}>
+          <GlassCard variant="elevated" size="lg" className="backdrop-blur-2xl">
+            <div className="text-center mb-6">
+              <h2 className="text-xl font-semibold text-white">Get started</h2>
+              <p className="text-sm text-[hsl(228,10%,50%)] mt-1">
+                Set up your smart home dashboard
+              </p>
+            </div>
 
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-5">
               {error && (
-                <div className="rounded-lg bg-[hsl(0,40%,95%)] border border-[hsl(0,40%,85%)] px-4 py-3 text-sm text-[hsl(0,50%,40%)]">
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={cn(
+                    'rounded-xl px-4 py-3 text-sm',
+                    'bg-[hsl(0,72%,51%,0.1)]',
+                    'border border-[hsl(0,72%,51%,0.3)]',
+                    'text-[hsl(0,72%,60%)]'
+                  )}
+                >
                   {error}
-                </div>
+                </motion.div>
               )}
 
               <Input
@@ -95,38 +120,26 @@ export function RegisterPage() {
                 label="Username"
                 type="text"
                 value={username}
-                onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                onChange={(e) =>
+                  setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))
+                }
                 placeholder="Choose a username"
                 required
                 autoComplete="username"
+                helperText="Lowercase letters, numbers, and underscores only"
               />
 
-              <div className="relative">
-                <Input
-                  label="Password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Minimum 8 characters"
-                  required
-                  autoComplete="new-password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-[34px] text-[hsl(30,10%,50%)] hover:text-[hsl(30,10%,30%)] transition-colors"
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
+              <PasswordInput
+                label="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Minimum 8 characters"
+                required
+                autoComplete="new-password"
+              />
 
-              <Input
+              <PasswordInput
                 label="Confirm Password"
-                type={showPassword ? 'text' : 'password'}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="Re-enter your password"
@@ -136,25 +149,27 @@ export function RegisterPage() {
 
               <Button
                 type="submit"
-                className="w-full"
-                disabled={isLoading}
+                fullWidth
+                size="lg"
+                isLoading={isLoading}
+                loadingText="Creating account..."
               >
-                {isLoading ? 'Creating account...' : 'Create account'}
+                Create account
               </Button>
             </form>
 
-            <div className="mt-6 text-center text-sm text-[hsl(30,10%,45%)]">
+            <div className="mt-6 text-center text-sm text-[hsl(228,10%,50%)]">
               Already have an account?{' '}
               <Link
                 to="/login"
-                className="font-medium text-[hsl(25,60%,45%)] hover:text-[hsl(25,60%,35%)] transition-colors"
+                className="font-medium text-[hsl(187,100%,50%)] hover:text-[hsl(187,100%,60%)] transition-colors"
               >
                 Sign in
               </Link>
             </div>
-          </CardContent>
-        </Card>
-      </div>
+          </GlassCard>
+        </motion.div>
+      </motion.div>
     </div>
   );
 }

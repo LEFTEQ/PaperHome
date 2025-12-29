@@ -1,10 +1,14 @@
 import { useState } from 'react';
+import { motion } from 'framer-motion';
 import { useAuth } from '@/context/auth-context';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { GlassCard } from '@/components/ui/glass-card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { User, Key, Shield, Bell, Save } from 'lucide-react';
+import { Toggle } from '@/components/ui/toggle';
+import { staggerContainer, fadeInUp } from '@/lib/animations';
+import { cn } from '@/lib/utils';
+import { User, Key, Shield, Bell, Save, CheckCircle } from 'lucide-react';
 
 export function SettingsPage() {
   const { user } = useAuth();
@@ -22,199 +26,227 @@ export function SettingsPage() {
 
     setSuccessMessage('Profile updated successfully');
     setIsSaving(false);
+
+    // Clear message after 3 seconds
+    setTimeout(() => setSuccessMessage(''), 3000);
   };
 
   return (
-    <div className="p-8 max-w-4xl">
+    <motion.div
+      variants={staggerContainer}
+      initial="initial"
+      animate="animate"
+      className="max-w-4xl space-y-6"
+    >
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-[hsl(30,10%,15%)]">
-          Settings
-        </h1>
-        <p className="text-[hsl(30,10%,45%)] mt-1">
+      <motion.div variants={fadeInUp}>
+        <h1 className="text-2xl font-bold text-white">Settings</h1>
+        <p className="text-[hsl(228,10%,50%)] mt-1">
           Manage your account and preferences
         </p>
-      </div>
+      </motion.div>
 
-      <div className="space-y-6">
-        {/* Profile Section */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[hsl(25,50%,92%)]">
-                <User className="h-5 w-5 text-[hsl(25,60%,45%)]" />
-              </div>
-              <div>
-                <CardTitle>Profile</CardTitle>
-                <CardDescription>
-                  Your personal information
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSaveProfile} className="space-y-4">
-              {successMessage && (
-                <div className="rounded-lg bg-[hsl(140,30%,94%)] border border-[hsl(140,30%,85%)] px-4 py-3 text-sm text-[hsl(140,30%,30%)]">
-                  {successMessage}
-                </div>
+      {/* Profile Section */}
+      <motion.div variants={fadeInUp}>
+        <GlassCard>
+          <div className="flex items-center gap-3 mb-6">
+            <div
+              className={cn(
+                'h-10 w-10 rounded-xl flex items-center justify-center',
+                'bg-[hsl(187,100%,50%,0.1)]'
               )}
+            >
+              <User className="h-5 w-5 text-[hsl(187,100%,50%)]" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-white">Profile</h2>
+              <p className="text-sm text-[hsl(228,10%,50%)]">
+                Your personal information
+              </p>
+            </div>
+          </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  label="Display Name"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  placeholder="Your name"
-                />
-                <Input
-                  label="Username"
-                  value={user?.username || ''}
-                  disabled
-                  className="opacity-60"
-                />
-              </div>
+          <form onSubmit={handleSaveProfile} className="space-y-4">
+            {successMessage && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={cn(
+                  'flex items-center gap-2 rounded-xl px-4 py-3 text-sm',
+                  'bg-[hsl(160,84%,39%,0.1)]',
+                  'border border-[hsl(160,84%,39%,0.3)]',
+                  'text-[hsl(160,84%,55%)]'
+                )}
+              >
+                <CheckCircle className="h-4 w-4" />
+                {successMessage}
+              </motion.div>
+            )}
 
-              <Button type="submit" disabled={isSaving}>
-                <Save className="h-4 w-4 mr-2" />
-                {isSaving ? 'Saving...' : 'Save Changes'}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Input
+                label="Display Name"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="Your name"
+              />
+              <Input
+                label="Username"
+                value={user?.username || ''}
+                disabled
+                helperText="Username cannot be changed"
+              />
+            </div>
 
-        {/* Security Section */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[hsl(140,30%,92%)]">
-                <Key className="h-5 w-5 text-[hsl(140,30%,40%)]" />
-              </div>
+            <Button
+              type="submit"
+              isLoading={isSaving}
+              loadingText="Saving..."
+              leftIcon={<Save className="h-4 w-4" />}
+            >
+              Save Changes
+            </Button>
+          </form>
+        </GlassCard>
+      </motion.div>
+
+      {/* Security Section */}
+      <motion.div variants={fadeInUp}>
+        <GlassCard>
+          <div className="flex items-center gap-3 mb-6">
+            <div
+              className={cn(
+                'h-10 w-10 rounded-xl flex items-center justify-center',
+                'bg-[hsl(160,84%,39%,0.1)]'
+              )}
+            >
+              <Key className="h-5 w-5 text-[hsl(160,84%,45%)]" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-white">Security</h2>
+              <p className="text-sm text-[hsl(228,10%,50%)]">
+                Password and authentication settings
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex items-center justify-between py-3 border-b border-white/[0.06]">
               <div>
-                <CardTitle>Security</CardTitle>
-                <CardDescription>
-                  Password and authentication settings
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between py-3 border-b border-[hsl(30,15%,90%)]">
-                <div>
-                  <p className="font-medium text-[hsl(30,10%,20%)]">Password</p>
-                  <p className="text-sm text-[hsl(30,10%,50%)]">
-                    Last changed 30 days ago
-                  </p>
-                </div>
-                <Button variant="outline" size="sm">
-                  Change Password
-                </Button>
-              </div>
-
-              <div className="flex items-center justify-between py-3">
-                <div>
-                  <p className="font-medium text-[hsl(30,10%,20%)]">
-                    Two-Factor Authentication
-                  </p>
-                  <p className="text-sm text-[hsl(30,10%,50%)]">
-                    Add an extra layer of security
-                  </p>
-                </div>
-                <Badge variant="outline">Coming Soon</Badge>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Notifications Section */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[hsl(200,40%,92%)]">
-                <Bell className="h-5 w-5 text-[hsl(200,40%,45%)]" />
-              </div>
-              <div>
-                <CardTitle>Notifications</CardTitle>
-                <CardDescription>
-                  Configure how you receive alerts
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between py-3 border-b border-[hsl(30,15%,90%)]">
-                <div>
-                  <p className="font-medium text-[hsl(30,10%,20%)]">
-                    Device Offline Alerts
-                  </p>
-                  <p className="text-sm text-[hsl(30,10%,50%)]">
-                    Get notified when a device goes offline
-                  </p>
-                </div>
-                <Badge variant="outline">Coming Soon</Badge>
-              </div>
-
-              <div className="flex items-center justify-between py-3 border-b border-[hsl(30,15%,90%)]">
-                <div>
-                  <p className="font-medium text-[hsl(30,10%,20%)]">
-                    High CO2 Warnings
-                  </p>
-                  <p className="text-sm text-[hsl(30,10%,50%)]">
-                    Alert when CO2 levels exceed 1000 ppm
-                  </p>
-                </div>
-                <Badge variant="outline">Coming Soon</Badge>
-              </div>
-
-              <div className="flex items-center justify-between py-3">
-                <div>
-                  <p className="font-medium text-[hsl(30,10%,20%)]">
-                    Daily Summary
-                  </p>
-                  <p className="text-sm text-[hsl(30,10%,50%)]">
-                    Receive a daily digest of your home status
-                  </p>
-                </div>
-                <Badge variant="outline">Coming Soon</Badge>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Danger Zone */}
-        <Card className="border-[hsl(0,40%,85%)]">
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[hsl(0,40%,94%)]">
-                <Shield className="h-5 w-5 text-[hsl(0,50%,50%)]" />
-              </div>
-              <div>
-                <CardTitle className="text-[hsl(0,50%,45%)]">Danger Zone</CardTitle>
-                <CardDescription>
-                  Irreversible account actions
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium text-[hsl(30,10%,20%)]">
-                  Delete Account
-                </p>
-                <p className="text-sm text-[hsl(30,10%,50%)]">
-                  Permanently delete your account and all data
+                <p className="font-medium text-white">Password</p>
+                <p className="text-sm text-[hsl(228,10%,50%)]">
+                  Last changed 30 days ago
                 </p>
               </div>
-              <Button variant="destructive" size="sm">
-                Delete Account
+              <Button variant="secondary" size="sm">
+                Change Password
               </Button>
             </div>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+
+            <div className="flex items-center justify-between py-3">
+              <div>
+                <p className="font-medium text-white">
+                  Two-Factor Authentication
+                </p>
+                <p className="text-sm text-[hsl(228,10%,50%)]">
+                  Add an extra layer of security
+                </p>
+              </div>
+              <Badge variant="outline">Coming Soon</Badge>
+            </div>
+          </div>
+        </GlassCard>
+      </motion.div>
+
+      {/* Notifications Section */}
+      <motion.div variants={fadeInUp}>
+        <GlassCard>
+          <div className="flex items-center gap-3 mb-6">
+            <div
+              className={cn(
+                'h-10 w-10 rounded-xl flex items-center justify-center',
+                'bg-[hsl(38,92%,50%,0.1)]'
+              )}
+            >
+              <Bell className="h-5 w-5 text-[hsl(38,92%,50%)]" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-white">Notifications</h2>
+              <p className="text-sm text-[hsl(228,10%,50%)]">
+                Configure how you receive alerts
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex items-center justify-between py-3 border-b border-white/[0.06]">
+              <div>
+                <p className="font-medium text-white">Device Offline Alerts</p>
+                <p className="text-sm text-[hsl(228,10%,50%)]">
+                  Get notified when a device goes offline
+                </p>
+              </div>
+              <Toggle disabled />
+            </div>
+
+            <div className="flex items-center justify-between py-3 border-b border-white/[0.06]">
+              <div>
+                <p className="font-medium text-white">High CO₂ Warnings</p>
+                <p className="text-sm text-[hsl(228,10%,50%)]">
+                  Alert when CO₂ levels exceed 1000 ppm
+                </p>
+              </div>
+              <Toggle disabled />
+            </div>
+
+            <div className="flex items-center justify-between py-3">
+              <div>
+                <p className="font-medium text-white">Daily Summary</p>
+                <p className="text-sm text-[hsl(228,10%,50%)]">
+                  Receive a daily digest of your home status
+                </p>
+              </div>
+              <Toggle disabled />
+            </div>
+          </div>
+        </GlassCard>
+      </motion.div>
+
+      {/* Danger Zone */}
+      <motion.div variants={fadeInUp}>
+        <GlassCard className="border-[hsl(0,72%,51%,0.3)]">
+          <div className="flex items-center gap-3 mb-6">
+            <div
+              className={cn(
+                'h-10 w-10 rounded-xl flex items-center justify-center',
+                'bg-[hsl(0,72%,51%,0.1)]'
+              )}
+            >
+              <Shield className="h-5 w-5 text-[hsl(0,72%,51%)]" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-[hsl(0,72%,60%)]">
+                Danger Zone
+              </h2>
+              <p className="text-sm text-[hsl(228,10%,50%)]">
+                Irreversible account actions
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-white">Delete Account</p>
+              <p className="text-sm text-[hsl(228,10%,50%)]">
+                Permanently delete your account and all data
+              </p>
+            </div>
+            <Button variant="destructive" size="sm">
+              Delete Account
+            </Button>
+          </div>
+        </GlassCard>
+      </motion.div>
+    </motion.div>
   );
 }

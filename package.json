@@ -120,6 +120,7 @@
     "date-fns": "^4.1.0",
     "dotenv": "^17.2.3",
     "fastify": "^5.3.2",
+    "framer-motion": "^12.23.26",
     "lucide-react": "^0.554.0",
     "mqtt": "^5.10.3",
     "passport": "^0.7.0",
