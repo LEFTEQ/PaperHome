@@ -141,10 +141,6 @@
    Base Styles
    ───────────────────────────────────────────────────────────────────────────── */
 
-* {
-  border-color: hsl(var(--glass-border));
-}
-
 html {
   scroll-behavior: smooth;
 }
