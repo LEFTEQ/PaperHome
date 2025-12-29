@@ -85,7 +85,7 @@
 #define MQTT_BROKER             "paperhome.lovinka.com"
 #define MQTT_PORT               1884            // External port mapped to mosquitto
 #define MQTT_USERNAME           "paperhome-device"
-#define MQTT_PASSWORD           ""              // Set your device password
+#define MQTT_PASSWORD           "paperhome2024"
 #define MQTT_TELEMETRY_INTERVAL_MS  60000       // Publish telemetry every 60s
 #define MQTT_HUE_STATE_INTERVAL_MS  10000       // Publish Hue state every 10s
 #define MQTT_TADO_STATE_INTERVAL_MS 60000       // Publish Tado state every 60s
