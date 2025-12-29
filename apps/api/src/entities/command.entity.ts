@@ -39,13 +39,13 @@ export class Command {
   @Column({ type: 'enum', enum: CommandStatus, default: CommandStatus.PENDING })
   status: CommandStatus;
 
-  @Column({ name: 'sent_at', nullable: true })
+  @Column({ name: 'sent_at', type: 'timestamptz', nullable: true })
   sentAt: Date | null;
 
-  @Column({ name: 'acknowledged_at', nullable: true })
+  @Column({ name: 'acknowledged_at', type: 'timestamptz', nullable: true })
   acknowledgedAt: Date | null;
 
-  @Column({ name: 'error_message', nullable: true })
+  @Column({ name: 'error_message', type: 'text', nullable: true })
   errorMessage: string | null;
 
   @CreateDateColumn({ name: 'created_at' })

@@ -31,7 +31,7 @@ export class Device {
   @Column({ name: 'last_seen_at', type: 'timestamptz', nullable: true })
   lastSeenAt: Date | null;
 
-  @Column({ name: 'firmware_version', nullable: true, length: 20 })
+  @Column({ name: 'firmware_version', type: 'varchar', length: 20, nullable: true })
   firmwareVersion: string | null;
 
   @CreateDateColumn({ name: 'created_at' })
