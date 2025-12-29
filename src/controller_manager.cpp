@@ -11,8 +11,11 @@ ControllerManager::ControllerManager()
     : _state(ControllerState::DISCONNECTED)
     , _lastButtonA(false)
     , _lastButtonB(false)
+    , _lastButtonX(false)
     , _lastButtonY(false)
     , _lastButtonMenu(false)
+    , _lastBumperL(false)
+    , _lastBumperR(false)
     , _lastDpadLeft(false)
     , _lastDpadRight(false)
     , _lastDpadUp(false)
@@ -105,6 +108,17 @@ void ControllerManager::processInput() {
     }
     _lastButtonB = buttonB;
 
+    // Button X - Tado screen (edge detection)
+    bool buttonX = _controller.xboxNotif.btnX;
+    if (buttonX && !_lastButtonX) {
+        log("Button X pressed (Tado)");
+        vibrateShort();
+        if (_inputCallback) {
+            _inputCallback(ControllerInput::BUTTON_X, 0);
+        }
+    }
+    _lastButtonX = buttonX;
+
     // Button Y - Sensor screen (edge detection)
     bool buttonY = _controller.xboxNotif.btnY;
     if (buttonY && !_lastButtonY) {
@@ -126,6 +140,28 @@ void ControllerManager::processInput() {
         }
     }
     _lastButtonMenu = buttonMenu;
+
+    // Left bumper - Previous screen (edge detection)
+    bool bumperL = _controller.xboxNotif.btnLB;
+    if (bumperL && !_lastBumperL) {
+        log("Left bumper pressed (Previous screen)");
+        vibrateShort();
+        if (_inputCallback) {
+            _inputCallback(ControllerInput::BUMPER_LEFT, 0);
+        }
+    }
+    _lastBumperL = bumperL;
+
+    // Right bumper - Next screen (edge detection)
+    bool bumperR = _controller.xboxNotif.btnRB;
+    if (bumperR && !_lastBumperR) {
+        log("Right bumper pressed (Next screen)");
+        vibrateShort();
+        if (_inputCallback) {
+            _inputCallback(ControllerInput::BUMPER_RIGHT, 0);
+        }
+    }
+    _lastBumperR = bumperR;
 
     // Navigation with debouncing (left stick + D-pad)
     if (now - _lastNavTime > NAV_DEBOUNCE_MS) {

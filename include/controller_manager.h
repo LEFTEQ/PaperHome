@@ -23,11 +23,15 @@ enum class ControllerInput {
     // Action buttons
     BUTTON_A,       // Accept/Select
     BUTTON_B,       // Back/Cancel
+    BUTTON_X,       // Tado screen toggle
     BUTTON_Y,       // Sensor screen toggle
     BUTTON_MENU,    // Menu/Start button (settings)
     // Triggers for brightness
     TRIGGER_LEFT,   // Decrease brightness
-    TRIGGER_RIGHT   // Increase brightness
+    TRIGGER_RIGHT,  // Increase brightness
+    // Bumpers for screen cycling
+    BUMPER_LEFT,    // Previous screen (Tado <- Hue <- Sensors)
+    BUMPER_RIGHT    // Next screen (Hue -> Sensors -> Tado)
 };
 
 // Callback types
@@ -91,8 +95,11 @@ private:
     // Input state tracking for edge detection
     bool _lastButtonA;
     bool _lastButtonB;
+    bool _lastButtonX;
     bool _lastButtonY;
     bool _lastButtonMenu;
+    bool _lastBumperL;
+    bool _lastBumperR;
     bool _lastDpadLeft;
     bool _lastDpadRight;
     bool _lastDpadUp;

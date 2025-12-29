@@ -80,6 +80,25 @@
 #define HUE_NVS_KEY_USERNAME    "username"
 
 // -----------------------------------------------------------------------------
+// Tado X Configuration
+// -----------------------------------------------------------------------------
+#define TADO_CLIENT_ID          "1bb50063-6b0c-4d11-bd99-387f4a91cc46"
+#define TADO_AUTH_URL           "https://login.tado.com/oauth2/device_authorize"
+#define TADO_TOKEN_URL          "https://login.tado.com/oauth2/token"
+#define TADO_API_URL            "https://my.tado.com/api/v2"
+#define TADO_HOPS_URL           "https://hops.tado.com"
+#define TADO_POLL_INTERVAL_MS   60000       // Poll rooms every 60s
+#define TADO_TOKEN_REFRESH_MS   540000      // Refresh token every 9 min (before 10 min expiry)
+#define TADO_AUTH_POLL_MS       5000        // Poll for auth completion every 5s
+#define TADO_REQUEST_TIMEOUT_MS 10000       // HTTPS request timeout
+#define TADO_NVS_NAMESPACE      "tado"
+#define TADO_NVS_ACCESS_TOKEN   "access"
+#define TADO_NVS_REFRESH_TOKEN  "refresh"
+#define TADO_NVS_HOME_ID        "home_id"
+#define TADO_TEMP_THRESHOLD     0.5f        // Override when diff > 0.5°C
+#define TADO_SYNC_INTERVAL_MS   300000      // Sync with sensor every 5 min
+
+// -----------------------------------------------------------------------------
 // UI Configuration
 // -----------------------------------------------------------------------------
 #define UI_TILE_COLS            3           // Number of tile columns
@@ -117,6 +136,7 @@
 #define DEBUG_CONTROLLER    true
 #define DEBUG_SENSOR        true
 #define DEBUG_POWER         true
+#define DEBUG_TADO          true
 #define SERIAL_BAUD         115200
 
 #endif // CONFIG_H

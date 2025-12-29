@@ -16,7 +16,9 @@ UIManager::UIManager()
     , _lastFullRefreshTime(0)
     , _partialUpdateCount(0)
     , _currentMetric(SensorMetric::CO2)
-    , _lastSensorUpdateTime(0) {
+    , _lastSensorUpdateTime(0)
+    , _selectedTadoRoom(0)
+    , _lastTadoUpdateTime(0) {
 }
 
 void UIManager::init() {
@@ -249,8 +251,8 @@ void UIManager::drawRoomControlContent(const HueRoom& room) {
     // Instructions at bottom
     display.setFont(&FreeMonoBold9pt7b);
     int instructionY = displayManager.height() - 80;
-    drawCenteredText("A: Toggle ON/OFF    B: Back", instructionY, &FreeMonoBold9pt7b);
-    drawCenteredText("LT/RT: Adjust Brightness", instructionY + 25, &FreeMonoBold9pt7b);
+    drawCenteredText("A: Toggle    B: Back    LT/RT: Brightness", instructionY, &FreeMonoBold9pt7b);
+    drawCenteredText("LB/RB: Switch Screens", instructionY + 25, &FreeMonoBold9pt7b);
 }
 
 void UIManager::drawLargeBrightnessBar(int x, int y, int width, int height, uint8_t brightness, bool isOn) {
@@ -566,6 +568,21 @@ void UIManager::drawStatusBar(bool wifiConnected, const String& bridgeIP) {
         }
     }
 
+    // === RIGHT: Tado indicator ===
+    int tadoX = displayManager.width() - 60;
+    display.setFont(&FreeMonoBold9pt7b);
+    display.setCursor(tadoX, 26);
+    display.print("T");
+
+    // Tado status dot
+    int tadoDotX = tadoX + 15;
+    int tadoDotY = UI_STATUS_BAR_HEIGHT / 2;
+    if (tadoManager.isAuthenticated()) {
+        display.fillCircle(tadoDotX, tadoDotY, 4, GxEPD_WHITE);
+    } else {
+        display.drawCircle(tadoDotX, tadoDotY, 4, GxEPD_WHITE);
+    }
+
     // === RIGHT: Hue connection dot ===
     int dotX = displayManager.width() - 25;
     int dotY = UI_STATUS_BAR_HEIGHT / 2;
@@ -761,6 +778,11 @@ void UIManager::refreshStatusBarPartial(bool wifiConnected, const String& bridge
         display.fillScreen(GxEPD_WHITE);
         drawStatusBar(wifiConnected, bridgeIP);
     } while (display.nextPage());
+}
+
+void UIManager::updateStatusBar(bool wifiConnected, const String& bridgeIP) {
+    // Public method to trigger status bar refresh (for periodic updates)
+    refreshStatusBarPartial(wifiConnected, bridgeIP);
 }
 
 bool UIManager::updateDashboardPartial(const std::vector<HueRoom>& rooms, const String& bridgeIP) {
@@ -1008,7 +1030,7 @@ void UIManager::drawSensorDashboardContent() {
     display.setFont(&FreeMonoBold9pt7b);
     display.setTextColor(GxEPD_BLACK);
     int instructionY = displayManager.height() - 10;
-    drawCenteredText("D-pad: Select    A: Detail    B: Back", instructionY, &FreeMonoBold9pt7b);
+    drawCenteredText("D-pad: Select    A: Detail    LB/RB: Switch Screens", instructionY, &FreeMonoBold9pt7b);
 }
 
 void UIManager::drawSensorRow(int x, int y, int width, int height, SensorMetric metric, bool isSelected) {
@@ -1208,7 +1230,7 @@ void UIManager::drawSensorDetailContent(SensorMetric metric) {
         display.print(nextStr);
 
         // Center instruction
-        drawCenteredText("D-pad: Switch    B: Back", navY, &FreeMonoBold9pt7b);
+        drawCenteredText("D-pad: Switch    B: Back    LB/RB: Screens", navY, &FreeMonoBold9pt7b);
     } else {
         // No data state
         display.setFont(&FreeMonoBold18pt7b);
@@ -1380,6 +1402,312 @@ void UIManager::drawMinMaxMarkers(int chartX, int chartY, int chartWidth, int ch
     normMin = constrain(normMin, 0.0f, 1.0f);
     int minY = chartY + chartHeight - (int)(normMin * chartHeight);
     display.fillTriangle(minX - 5, minY + 10, minX + 5, minY + 10, minX, minY + 3, GxEPD_BLACK);
+}
+
+// =============================================================================
+// Tado Screen Methods
+// =============================================================================
+
+void UIManager::showTadoAuth(const TadoAuthInfo& authInfo) {
+    _currentScreen = UIScreen::TADO_AUTH;
+    _tadoAuthInfo = authInfo;
+    _lastTadoUpdateTime = millis();
+
+    log("Showing Tado auth screen");
+
+    DisplayType& display = displayManager.getDisplay();
+    display.setRotation(DISPLAY_ROTATION);
+    display.setFullWindow();
+    display.firstPage();
+
+    do {
+        display.fillScreen(GxEPD_WHITE);
+        drawStatusBar(WiFi.status() == WL_CONNECTED, hueManager.getBridgeIP());
+        drawTadoAuthContent(authInfo);
+    } while (display.nextPage());
+
+    _lastFullRefreshTime = millis();
+    _partialUpdateCount = 0;
+}
+
+void UIManager::drawTadoAuthContent(const TadoAuthInfo& authInfo) {
+    DisplayType& display = displayManager.getDisplay();
+
+    int contentY = UI_STATUS_BAR_HEIGHT + 20;
+
+    // Title
+    display.setFont(&FreeMonoBold18pt7b);
+    display.setTextColor(GxEPD_BLACK);
+    drawCenteredText("TADO LOGIN", contentY + 40, &FreeMonoBold18pt7b);
+
+    // Instructions
+    display.setFont(&FreeMonoBold12pt7b);
+    drawCenteredText("Open this URL on your phone:", contentY + 100, &FreeMonoBold12pt7b);
+
+    // URL box
+    int boxX = 30;
+    int boxY = contentY + 120;
+    int boxW = displayManager.width() - 60;
+    int boxH = 50;
+    display.drawRect(boxX, boxY, boxW, boxH, GxEPD_BLACK);
+
+    // URL text - strip domain, show only path
+    display.setFont(&FreeMonoBold12pt7b);
+    String url = authInfo.verifyUrl;
+
+    // Remove https://login.tado.com or similar domain
+    int pathStart = url.indexOf("://");
+    if (pathStart >= 0) {
+        pathStart = url.indexOf("/", pathStart + 3);  // Find first / after ://
+        if (pathStart >= 0) {
+            url = "login.tado.com" + url.substring(pathStart);
+        }
+    }
+
+    // Center the URL in the box
+    int16_t x1, y1;
+    uint16_t w, h;
+    display.getTextBounds(url.c_str(), 0, 0, &x1, &y1, &w, &h);
+    display.setCursor(boxX + (boxW - w) / 2, boxY + 33);
+    display.print(url);
+
+    // Alternative: enter code
+    display.setFont(&FreeMonoBold12pt7b);
+    drawCenteredText("Or enter this code at login.tado.com/device:", contentY + 210, &FreeMonoBold12pt7b);
+
+    // Large user code
+    display.setFont(&FreeMonoBold24pt7b);
+    drawCenteredText(authInfo.userCode.c_str(), contentY + 270, &FreeMonoBold24pt7b);
+
+    // Status with countdown
+    unsigned long now = millis();
+    int remaining = 0;
+    if (authInfo.expiresAt > now) {
+        remaining = (authInfo.expiresAt - now) / 1000;
+    }
+
+    char statusStr[64];
+    if (remaining > 0) {
+        snprintf(statusStr, sizeof(statusStr), "Waiting for login... (expires in %d:%02d)",
+                 remaining / 60, remaining % 60);
+    } else {
+        snprintf(statusStr, sizeof(statusStr), "Code expired - press A to retry");
+    }
+    display.setFont(&FreeMonoBold12pt7b);
+    drawCenteredText(statusStr, contentY + 350, &FreeMonoBold12pt7b);
+
+    // Hint
+    display.setFont(&FreeMonoBold9pt7b);
+    drawCenteredText("[B] Cancel", displayManager.height() - 30, &FreeMonoBold9pt7b);
+}
+
+void UIManager::updateTadoAuth() {
+    if (_currentScreen != UIScreen::TADO_AUTH) return;
+
+    // Update the countdown timer with partial refresh
+    DisplayType& display = displayManager.getDisplay();
+
+    int contentY = UI_STATUS_BAR_HEIGHT + 20;
+    int statusY = contentY + 330;
+
+    // Partial refresh just the status area
+    display.setPartialWindow(0, statusY, displayManager.width(), 40);
+    display.firstPage();
+    do {
+        display.fillScreen(GxEPD_WHITE);
+
+        unsigned long now = millis();
+        int remaining = 0;
+        if (_tadoAuthInfo.expiresAt > now) {
+            remaining = (_tadoAuthInfo.expiresAt - now) / 1000;
+        }
+
+        char statusStr[64];
+        if (remaining > 0) {
+            snprintf(statusStr, sizeof(statusStr), "Waiting for login... (expires in %d:%02d)",
+                     remaining / 60, remaining % 60);
+        } else {
+            snprintf(statusStr, sizeof(statusStr), "Code expired - press A to retry");
+        }
+
+        display.setFont(&FreeMonoBold12pt7b);
+        display.setTextColor(GxEPD_BLACK);
+        drawCenteredText(statusStr, statusY + 20, &FreeMonoBold12pt7b);
+    } while (display.nextPage());
+
+    _partialUpdateCount++;
+}
+
+void UIManager::showTadoDashboard() {
+    _currentScreen = UIScreen::TADO_DASHBOARD;
+    _selectedTadoRoom = 0;
+    _lastTadoUpdateTime = millis();
+
+    log("Showing Tado dashboard");
+
+    DisplayType& display = displayManager.getDisplay();
+    display.setRotation(DISPLAY_ROTATION);
+    display.setFullWindow();
+    display.firstPage();
+
+    do {
+        display.fillScreen(GxEPD_WHITE);
+        drawStatusBar(WiFi.status() == WL_CONNECTED, hueManager.getBridgeIP());
+        drawTadoDashboardContent();
+    } while (display.nextPage());
+
+    _lastFullRefreshTime = millis();
+    _partialUpdateCount = 0;
+}
+
+void UIManager::drawTadoDashboardContent() {
+    DisplayType& display = displayManager.getDisplay();
+
+    int contentY = UI_STATUS_BAR_HEIGHT + 10;
+    int rowHeight = 70;
+    int padding = 10;
+
+    // Title
+    display.setFont(&FreeMonoBold18pt7b);
+    display.setTextColor(GxEPD_BLACK);
+    display.setCursor(20, contentY + 30);
+    display.print("Tado Thermostats");
+
+    // Sensor temperature comparison
+    display.setFont(&FreeMonoBold9pt7b);
+    char sensorStr[48];
+    if (sensorManager.isOperational()) {
+        snprintf(sensorStr, sizeof(sensorStr), "Room Sensor: %.1fC",
+                 sensorManager.getTemperature());
+    } else {
+        snprintf(sensorStr, sizeof(sensorStr), "Room Sensor: --");
+    }
+    display.setCursor(displayManager.width() - 200, contentY + 25);
+    display.print(sensorStr);
+
+    // Draw rooms
+    const auto& rooms = tadoManager.getRooms();
+    int startY = contentY + 50;
+
+    if (rooms.empty()) {
+        display.setFont(&FreeMonoBold12pt7b);
+        drawCenteredText("No rooms found", startY + 100, &FreeMonoBold12pt7b);
+        drawCenteredText("Press B to go back", startY + 140, &FreeMonoBold9pt7b);
+        return;
+    }
+
+    for (size_t i = 0; i < rooms.size() && i < 5; i++) {  // Max 5 rooms on screen
+        bool isSelected = (i == _selectedTadoRoom);
+        drawTadoRoomRow(padding, startY + (i * rowHeight), displayManager.width() - (2 * padding),
+                        rowHeight - 5, rooms[i], isSelected);
+    }
+
+    // Navigation hints
+    display.setFont(&FreeMonoBold9pt7b);
+    display.setCursor(20, displayManager.height() - 20);
+    display.print("D-pad: Select    LT/RT: Temp    A: Toggle    LB/RB: Screens");
+}
+
+void UIManager::drawTadoRoomRow(int x, int y, int width, int height,
+                                 const TadoRoom& room, bool isSelected) {
+    DisplayType& display = displayManager.getDisplay();
+
+    // Selection highlight
+    if (isSelected) {
+        display.drawRect(x, y, width, height, GxEPD_BLACK);
+        display.drawRect(x + 1, y + 1, width - 2, height - 2, GxEPD_BLACK);
+    } else {
+        display.drawRect(x, y, width, height, GxEPD_BLACK);
+    }
+
+    int textY = y + height / 2 + 6;
+
+    // Room name
+    display.setFont(&FreeMonoBold12pt7b);
+    display.setTextColor(GxEPD_BLACK);
+    display.setCursor(x + 15, textY);
+    display.print(room.name);
+
+    // Current temp (from Tado sensor)
+    char tadoTempStr[16];
+    snprintf(tadoTempStr, sizeof(tadoTempStr), "%.1fC", room.currentTemp);
+    display.setCursor(x + 250, textY);
+    display.print(tadoTempStr);
+
+    // Arrow
+    display.setCursor(x + 340, textY);
+    display.print("->");
+
+    // Target temp
+    char targetStr[16];
+    if (room.heating && room.targetTemp > 0) {
+        snprintf(targetStr, sizeof(targetStr), "%.1fC", room.targetTemp);
+    } else {
+        snprintf(targetStr, sizeof(targetStr), "OFF");
+    }
+    display.setCursor(x + 380, textY);
+    display.print(targetStr);
+
+    // Heating indicator (flame)
+    if (room.heating) {
+        int flameX = x + width - 80;
+        int flameY = y + height / 2;
+        // Simple flame shape
+        display.fillTriangle(flameX, flameY + 10, flameX + 10, flameY + 10,
+                            flameX + 5, flameY - 10, GxEPD_BLACK);
+        display.setCursor(flameX + 15, textY);
+        display.setFont(&FreeMonoBold9pt7b);
+        display.print("ON");
+    }
+
+    // Manual override indicator
+    if (room.manualOverride) {
+        display.setFont(&FreeMonoBold9pt7b);
+        display.setCursor(x + width - 40, textY - 15);
+        display.print("M");
+    }
+
+    // Sensor comparison (if sensor operational)
+    if (sensorManager.isOperational()) {
+        float sensorTemp = sensorManager.getTemperature();
+        float diff = sensorTemp - room.currentTemp;
+        if (abs(diff) > 0.5) {
+            display.setFont(&FreeMonoBold9pt7b);
+            char diffStr[16];
+            snprintf(diffStr, sizeof(diffStr), "%+.1f", diff);
+            display.setCursor(x + 480, textY);
+            display.print(diffStr);
+        }
+    }
+}
+
+void UIManager::updateTadoDashboard() {
+    if (_currentScreen != UIScreen::TADO_DASHBOARD) return;
+
+    // Full refresh for simplicity
+    showTadoDashboard();
+}
+
+void UIManager::navigateTadoRoom(int direction) {
+    const auto& rooms = tadoManager.getRooms();
+    if (rooms.empty()) return;
+
+    int oldIndex = _selectedTadoRoom;
+    _selectedTadoRoom += direction;
+
+    // Clamp to valid range
+    if (_selectedTadoRoom < 0) _selectedTadoRoom = 0;
+    if (_selectedTadoRoom >= (int)rooms.size()) _selectedTadoRoom = rooms.size() - 1;
+
+    if (oldIndex != _selectedTadoRoom) {
+        updateTadoDashboard();
+    }
+}
+
+void UIManager::goBackFromTado() {
+    if (_currentScreen == UIScreen::TADO_AUTH || _currentScreen == UIScreen::TADO_DASHBOARD) {
+        goBackToDashboard();
+    }
 }
 
 void UIManager::log(const char* message) {

@@ -8,6 +8,7 @@
 #include "hue_manager.h"
 #include "sensor_manager.h"
 #include "power_manager.h"
+#include "tado_manager.h"
 
 // UI Screen states
 enum class UIScreen {
@@ -19,6 +20,8 @@ enum class UIScreen {
     SETTINGS,           // Settings/info screen
     SENSOR_DASHBOARD,   // Sensor overview with 3 panels
     SENSOR_DETAIL,      // Full chart for single metric
+    TADO_AUTH,          // Tado OAuth login screen
+    TADO_DASHBOARD,     // Tado rooms/thermostats view
     ERROR
 };
 
@@ -134,6 +137,47 @@ public:
      */
     SensorMetric getCurrentSensorMetric() const { return _currentMetric; }
 
+    // -------------------------------------------------------------------------
+    // Tado Screen Methods
+    // -------------------------------------------------------------------------
+
+    /**
+     * Show Tado auth screen with login URL and code
+     * @param authInfo Auth info with URL, code, expiry
+     */
+    void showTadoAuth(const TadoAuthInfo& authInfo);
+
+    /**
+     * Update Tado auth screen (countdown timer)
+     */
+    void updateTadoAuth();
+
+    /**
+     * Show Tado dashboard with rooms and temperatures
+     */
+    void showTadoDashboard();
+
+    /**
+     * Update Tado dashboard (partial refresh)
+     */
+    void updateTadoDashboard();
+
+    /**
+     * Navigate Tado room selection
+     * @param direction -1 for up, +1 for down
+     */
+    void navigateTadoRoom(int direction);
+
+    /**
+     * Go back from Tado screens
+     */
+    void goBackFromTado();
+
+    /**
+     * Get selected Tado room index
+     */
+    int getSelectedTadoRoom() const { return _selectedTadoRoom; }
+
     /**
      * Update status bar only (partial refresh)
      * @param wifiConnected WiFi connection status
@@ -200,6 +244,11 @@ private:
     SensorMetric _currentMetric;
     unsigned long _lastSensorUpdateTime;
 
+    // Tado screen state
+    int _selectedTadoRoom;
+    TadoAuthInfo _tadoAuthInfo;
+    unsigned long _lastTadoUpdateTime;
+
     void calculateTileDimensions();
 
     void drawStatusBar(bool wifiConnected, const String& bridgeIP);
@@ -238,6 +287,12 @@ private:
                            float scaleMin, float scaleMax,
                            float actualMin, float actualMax,
                            size_t minIdx, size_t maxIdx, size_t totalSamples);
+
+    // Tado screen helpers
+    void drawTadoAuthContent(const TadoAuthInfo& authInfo);
+    void drawTadoDashboardContent();
+    void drawTadoRoomRow(int x, int y, int width, int height,
+                         const TadoRoom& room, bool isSelected);
 
     void log(const char* message);
     void logf(const char* format, ...);

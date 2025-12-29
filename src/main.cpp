@@ -15,6 +15,7 @@
 #include "controller_manager.h"
 #include "sensor_manager.h"
 #include "power_manager.h"
+#include "tado_manager.h"
 
 // Track states for display updates
 HueState lastHueState = HueState::DISCONNECTED;
@@ -30,6 +31,22 @@ bool pendingSelectionUpdate = false;
 int pendingOldIndex = -1;
 int pendingNewIndex = -1;
 const unsigned long DISPLAY_UPDATE_DELAY_MS = 150;  // Wait for rapid inputs to settle
+
+// Periodic refresh for sensor/status updates when idle
+unsigned long lastPeriodicRefresh = 0;
+const unsigned long STATUS_BAR_REFRESH_MS = 30000;   // Refresh status bar every 30s
+const unsigned long SENSOR_SCREEN_REFRESH_MS = 60000; // Refresh sensor screens every 60s
+
+// Main window cycling (LB/RB bumpers)
+// 0 = Hue (Dashboard/RoomControl), 1 = Sensors, 2 = Tado
+enum class MainWindow { HUE = 0, SENSORS = 1, TADO = 2 };
+const int MAIN_WINDOW_COUNT = 3;
+
+// Tado sensor sync timing
+unsigned long lastTadoSync = 0;
+
+// Forward declarations
+void updateDisplay();
 
 // Callback when Hue state changes
 void onHueStateChange(HueState state, const char* message) {
@@ -151,6 +168,19 @@ void handleDashboardInput(ControllerInput input, int16_t value) {
                 // Open sensor dashboard
                 Serial.println("[Main] Opening sensor dashboard");
                 uiManager.showSensorDashboard();
+            }
+            break;
+
+        case ControllerInput::BUTTON_X:
+            {
+                // Open Tado screen
+                Serial.println("[Main] Opening Tado screen");
+                if (tadoManager.isAuthenticated()) {
+                    uiManager.showTadoDashboard();
+                } else {
+                    // Need to authenticate first
+                    tadoManager.startAuth();
+                }
             }
             break;
 
@@ -289,9 +319,180 @@ void handleSettingsInput(ControllerInput input, int16_t value) {
     }
 }
 
+// Handle input on Tado auth screen
+void handleTadoAuthInput(ControllerInput input, int16_t value) {
+    switch (input) {
+        case ControllerInput::BUTTON_B:
+            {
+                // Cancel auth
+                Serial.println("[Main] Cancelling Tado auth");
+                tadoManager.cancelAuth();
+                uiManager.goBackFromTado();
+            }
+            break;
+
+        case ControllerInput::BUTTON_A:
+            {
+                // Retry auth if expired
+                TadoState state = tadoManager.getState();
+                if (state == TadoState::ERROR || state == TadoState::DISCONNECTED) {
+                    Serial.println("[Main] Retrying Tado auth");
+                    tadoManager.startAuth();
+                }
+            }
+            break;
+
+        default:
+            break;
+    }
+}
+
+// Get current main window based on UI screen
+MainWindow getCurrentMainWindow() {
+    UIScreen screen = uiManager.getCurrentScreen();
+    switch (screen) {
+        case UIScreen::DASHBOARD:
+        case UIScreen::ROOM_CONTROL:
+        case UIScreen::SETTINGS:
+            return MainWindow::HUE;
+
+        case UIScreen::SENSOR_DASHBOARD:
+        case UIScreen::SENSOR_DETAIL:
+            return MainWindow::SENSORS;
+
+        case UIScreen::TADO_AUTH:
+        case UIScreen::TADO_DASHBOARD:
+            return MainWindow::TADO;
+
+        default:
+            return MainWindow::HUE;
+    }
+}
+
+// Switch to a main window
+void switchToMainWindow(MainWindow window) {
+    Serial.printf("[Main] Switching to window %d\n", (int)window);
+
+    switch (window) {
+        case MainWindow::HUE:
+            // Show Hue dashboard (with rooms)
+            if (hueManager.getState() == HueState::CONNECTED) {
+                uiManager.showDashboard(hueManager.getRooms(), hueManager.getBridgeIP());
+            } else {
+                // Show current Hue state screen
+                updateDisplay();
+            }
+            break;
+
+        case MainWindow::SENSORS:
+            // Show sensor dashboard
+            uiManager.showSensorDashboard();
+            break;
+
+        case MainWindow::TADO:
+            // Show Tado dashboard or auth screen
+            if (tadoManager.isAuthenticated()) {
+                uiManager.showTadoDashboard();
+            } else {
+                tadoManager.startAuth();
+            }
+            break;
+    }
+}
+
+// Cycle to next/previous main window
+void cycleMainWindow(int direction) {
+    MainWindow current = getCurrentMainWindow();
+    int next = ((int)current + direction + MAIN_WINDOW_COUNT) % MAIN_WINDOW_COUNT;
+    switchToMainWindow((MainWindow)next);
+}
+
+// Handle input on Tado dashboard screen
+void handleTadoDashboardInput(ControllerInput input, int16_t value) {
+    switch (input) {
+        case ControllerInput::NAV_UP:
+            uiManager.navigateTadoRoom(-1);
+            break;
+
+        case ControllerInput::NAV_DOWN:
+            uiManager.navigateTadoRoom(1);
+            break;
+
+        case ControllerInput::BUTTON_B:
+        case ControllerInput::BUTTON_X:
+            {
+                // Go back to room dashboard
+                Serial.println("[Main] Leaving Tado dashboard");
+                uiManager.goBackFromTado();
+            }
+            break;
+
+        case ControllerInput::TRIGGER_LEFT:
+            {
+                // Decrease temperature
+                const auto& rooms = tadoManager.getRooms();
+                int idx = uiManager.getSelectedTadoRoom();
+                if (idx >= 0 && idx < (int)rooms.size()) {
+                    float newTemp = rooms[idx].targetTemp - 0.5f;
+                    if (newTemp >= 5.0f) {
+                        Serial.printf("[Main] Decreasing temp to %.1f\n", newTemp);
+                        tadoManager.setRoomTemperature(rooms[idx].id, newTemp);
+                    }
+                }
+            }
+            break;
+
+        case ControllerInput::TRIGGER_RIGHT:
+            {
+                // Increase temperature
+                const auto& rooms = tadoManager.getRooms();
+                int idx = uiManager.getSelectedTadoRoom();
+                if (idx >= 0 && idx < (int)rooms.size()) {
+                    float newTemp = rooms[idx].targetTemp + 0.5f;
+                    if (newTemp <= 25.0f) {
+                        Serial.printf("[Main] Increasing temp to %.1f\n", newTemp);
+                        tadoManager.setRoomTemperature(rooms[idx].id, newTemp);
+                    }
+                }
+            }
+            break;
+
+        case ControllerInput::BUTTON_A:
+            {
+                // Toggle heating on/off
+                const auto& rooms = tadoManager.getRooms();
+                int idx = uiManager.getSelectedTadoRoom();
+                if (idx >= 0 && idx < (int)rooms.size()) {
+                    if (rooms[idx].manualOverride) {
+                        Serial.println("[Main] Resuming Tado schedule");
+                        tadoManager.resumeSchedule(rooms[idx].id);
+                    } else {
+                        // Set to a default temp to turn on
+                        Serial.println("[Main] Setting Tado manual control");
+                        tadoManager.setRoomTemperature(rooms[idx].id, 21.0f);
+                    }
+                }
+            }
+            break;
+
+        default:
+            break;
+    }
+}
+
 // Callback for controller input events
 void onControllerInput(ControllerInput input, int16_t value) {
     UIScreen currentScreen = uiManager.getCurrentScreen();
+
+    // Handle bumpers globally for screen cycling (works on all main screens)
+    if (input == ControllerInput::BUMPER_LEFT) {
+        cycleMainWindow(-1);  // Previous window
+        return;
+    }
+    if (input == ControllerInput::BUMPER_RIGHT) {
+        cycleMainWindow(1);   // Next window
+        return;
+    }
 
     switch (currentScreen) {
         case UIScreen::DASHBOARD:
@@ -314,6 +515,14 @@ void onControllerInput(ControllerInput input, int16_t value) {
             handleSensorDetailInput(input, value);
             break;
 
+        case UIScreen::TADO_AUTH:
+            handleTadoAuthInput(input, value);
+            break;
+
+        case UIScreen::TADO_DASHBOARD:
+            handleTadoDashboardInput(input, value);
+            break;
+
         default:
             // Other screens don't handle controller input
             break;
@@ -329,6 +538,36 @@ void onControllerState(ControllerState state) {
 // Callback for power state changes
 void onPowerStateChange(PowerState state) {
     Serial.printf("[Main] Power state: %s\n", PowerManager::stateToString(state));
+}
+
+// Callback for Tado state changes
+void onTadoStateChange(TadoState state, const char* message) {
+    Serial.printf("[Main] Tado state: %s - %s\n",
+                  TadoManager::stateToString(state),
+                  message ? message : "");
+
+    UIScreen currentScreen = uiManager.getCurrentScreen();
+
+    // Auto-navigate on auth success
+    if (state == TadoState::CONNECTED && currentScreen == UIScreen::TADO_AUTH) {
+        uiManager.showTadoDashboard();
+    }
+}
+
+// Callback for Tado auth info (show auth screen)
+void onTadoAuth(const TadoAuthInfo& authInfo) {
+    Serial.println("[Main] Tado auth requested, showing auth screen");
+    uiManager.showTadoAuth(authInfo);
+}
+
+// Callback for Tado rooms update
+void onTadoRoomsUpdate(const std::vector<TadoRoom>& rooms) {
+    Serial.printf("[Main] Tado rooms updated: %d rooms\n", rooms.size());
+
+    UIScreen currentScreen = uiManager.getCurrentScreen();
+    if (currentScreen == UIScreen::TADO_DASHBOARD) {
+        uiManager.updateTadoDashboard();
+    }
 }
 
 void connectToWiFi() {
@@ -438,6 +677,13 @@ void setup() {
     powerManager.setStateCallback(onPowerStateChange);
     powerManager.init();
 
+    // Initialize Tado Manager
+    Serial.println("[Main] Initializing Tado Manager...");
+    tadoManager.setStateCallback(onTadoStateChange);
+    tadoManager.setAuthCallback(onTadoAuth);
+    tadoManager.setRoomsCallback(onTadoRoomsUpdate);
+    tadoManager.init();
+
     // Update display based on Hue state
     updateDisplay();
 
@@ -459,6 +705,18 @@ void loop() {
     // Update Power Manager (handles battery monitoring and idle timeout)
     powerManager.update();
 
+    // Update Tado Manager (handles auth polling, token refresh, room polling)
+    tadoManager.update();
+
+    // Sync Tado with sensor periodically
+    unsigned long now = millis();
+    if (tadoManager.isAuthenticated() && sensorManager.isOperational()) {
+        if (now - lastTadoSync >= TADO_SYNC_INTERVAL_MS) {
+            lastTadoSync = now;
+            tadoManager.syncWithSensor(sensorManager.getTemperature());
+        }
+    }
+
     // Update display if state changed
     if (needsDisplayUpdate) {
         needsDisplayUpdate = false;
@@ -476,6 +734,46 @@ void loop() {
                 uiManager.updateTileSelection(pendingOldIndex, pendingNewIndex);
             }
             lastDisplayUpdateTime = now;
+        }
+    }
+
+    // Periodic refresh for sensor values and charts when idle
+    now = millis();
+    UIScreen currentScreen = uiManager.getCurrentScreen();
+
+    if (currentScreen == UIScreen::SENSOR_DASHBOARD) {
+        // Refresh sensor dashboard every 60s to update charts
+        if (now - lastPeriodicRefresh >= SENSOR_SCREEN_REFRESH_MS) {
+            lastPeriodicRefresh = now;
+            Serial.println("[Main] Periodic sensor dashboard refresh");
+            uiManager.updateSensorDashboard();
+        }
+    } else if (currentScreen == UIScreen::SENSOR_DETAIL) {
+        // Refresh sensor detail every 60s to update chart
+        if (now - lastPeriodicRefresh >= SENSOR_SCREEN_REFRESH_MS) {
+            lastPeriodicRefresh = now;
+            Serial.println("[Main] Periodic sensor detail refresh");
+            uiManager.updateSensorDetail();
+        }
+    } else if (currentScreen == UIScreen::TADO_AUTH) {
+        // Refresh Tado auth screen every 5s to update countdown
+        if (now - lastPeriodicRefresh >= 5000) {
+            lastPeriodicRefresh = now;
+            uiManager.updateTadoAuth();
+        }
+    } else if (currentScreen == UIScreen::TADO_DASHBOARD) {
+        // Refresh Tado dashboard every 60s
+        if (now - lastPeriodicRefresh >= SENSOR_SCREEN_REFRESH_MS) {
+            lastPeriodicRefresh = now;
+            Serial.println("[Main] Periodic Tado dashboard refresh");
+            uiManager.updateTadoDashboard();
+        }
+    } else if (currentScreen == UIScreen::DASHBOARD || currentScreen == UIScreen::ROOM_CONTROL) {
+        // Refresh status bar every 30s to update sensor readings and battery
+        if (now - lastPeriodicRefresh >= STATUS_BAR_REFRESH_MS) {
+            lastPeriodicRefresh = now;
+            Serial.println("[Main] Periodic status bar refresh");
+            uiManager.updateStatusBar(WiFi.status() == WL_CONNECTED, hueManager.getBridgeIP());
         }
     }
 
