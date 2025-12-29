@@ -9,8 +9,8 @@ on:
         default: 'latest'
 
 env:
-  API_IMAGE: ghcr.io/lukaspribik/paperhome/api
-  WEB_IMAGE: ghcr.io/lukaspribik/paperhome/web
+  API_IMAGE: ghcr.io/lefteq/paperhome/api
+  WEB_IMAGE: ghcr.io/lefteq/paperhome/web
 
 jobs:
   deploy:
