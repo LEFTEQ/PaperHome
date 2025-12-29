@@ -60,7 +60,7 @@ export function DeviceSummaryCard({
         interactive
         className={cn(
           'group h-full cursor-pointer',
-          isOnline && 'border-[hsl(160,84%,45%,0.2)]',
+          isOnline && 'border-success/20',
           className
         )}
       >
@@ -71,16 +71,16 @@ export function DeviceSummaryCard({
               className={cn(
                 'h-10 w-10 rounded-xl flex items-center justify-center',
                 isOnline
-                  ? 'bg-[hsl(160,84%,39%,0.15)]'
-                  : 'bg-white/[0.05]'
+                  ? 'bg-success-bg'
+                  : 'bg-glass-hover'
               )}
             >
               <Cpu
                 className={cn(
                   'h-5 w-5',
                   isOnline
-                    ? 'text-[hsl(160,84%,45%)]'
-                    : 'text-[hsl(228,10%,40%)]'
+                    ? 'text-online'
+                    : 'text-text-subtle'
                 )}
               />
             </div>
@@ -93,7 +93,7 @@ export function DeviceSummaryCard({
                 />
               </div>
               {lastSeen && (
-                <p className="text-xs text-[hsl(228,10%,50%)]">
+                <p className="text-xs text-text-muted">
                   {isOnline ? 'Active' : `Last seen ${formatLastSeen(lastSeen)}`}
                 </p>
               )}
@@ -102,8 +102,8 @@ export function DeviceSummaryCard({
 
           <ChevronRight
             className={cn(
-              'h-5 w-5 text-[hsl(228,10%,40%)]',
-              'group-hover:text-[hsl(187,100%,50%)]',
+              'h-5 w-5 text-text-subtle',
+              'group-hover:text-accent',
               'group-hover:translate-x-1',
               'transition-all duration-200'
             )}
@@ -116,7 +116,7 @@ export function DeviceSummaryCard({
             {/* CO2 */}
             {metrics.co2 !== undefined && (
               <div className="space-y-1">
-                <div className="flex items-center gap-1.5 text-[hsl(228,10%,50%)]">
+                <div className="flex items-center gap-1.5 text-text-muted">
                   <Wind className="h-3.5 w-3.5" />
                   <span className="text-xs">CO₂</span>
                 </div>
@@ -124,7 +124,7 @@ export function DeviceSummaryCard({
                   <span className="text-xl font-mono font-semibold text-white">
                     {metrics.co2}
                   </span>
-                  <span className="text-xs text-[hsl(228,10%,50%)]">ppm</span>
+                  <span className="text-xs text-text-muted">ppm</span>
                 </div>
                 <CO2Badge value={metrics.co2} size="xs" />
               </div>
@@ -133,7 +133,7 @@ export function DeviceSummaryCard({
             {/* Temperature */}
             {metrics.temperature !== undefined && (
               <div className="space-y-1">
-                <div className="flex items-center gap-1.5 text-[hsl(228,10%,50%)]">
+                <div className="flex items-center gap-1.5 text-text-muted">
                   <Thermometer className="h-3.5 w-3.5" />
                   <span className="text-xs">Temp</span>
                 </div>
@@ -141,7 +141,7 @@ export function DeviceSummaryCard({
                   <span className="text-xl font-mono font-semibold text-white">
                     {metrics.temperature.toFixed(1)}
                   </span>
-                  <span className="text-xs text-[hsl(228,10%,50%)]">°C</span>
+                  <span className="text-xs text-text-muted">°C</span>
                 </div>
               </div>
             )}
@@ -149,7 +149,7 @@ export function DeviceSummaryCard({
             {/* Humidity */}
             {metrics.humidity !== undefined && (
               <div className="space-y-1">
-                <div className="flex items-center gap-1.5 text-[hsl(228,10%,50%)]">
+                <div className="flex items-center gap-1.5 text-text-muted">
                   <Droplets className="h-3.5 w-3.5" />
                   <span className="text-xs">Humidity</span>
                 </div>
@@ -157,7 +157,7 @@ export function DeviceSummaryCard({
                   <span className="text-xl font-mono font-semibold text-white">
                     {Math.round(metrics.humidity)}
                   </span>
-                  <span className="text-xs text-[hsl(228,10%,50%)]">%</span>
+                  <span className="text-xs text-text-muted">%</span>
                 </div>
               </div>
             )}
@@ -165,7 +165,7 @@ export function DeviceSummaryCard({
             {/* Battery */}
             {metrics.battery !== undefined && (
               <div className="space-y-1">
-                <div className="flex items-center gap-1.5 text-[hsl(228,10%,50%)]">
+                <div className="flex items-center gap-1.5 text-text-muted">
                   <Battery className="h-3.5 w-3.5" />
                   <span className="text-xs">Battery</span>
                 </div>
@@ -173,14 +173,14 @@ export function DeviceSummaryCard({
                   <span className="text-xl font-mono font-semibold text-white">
                     {Math.round(metrics.battery)}
                   </span>
-                  <span className="text-xs text-[hsl(228,10%,50%)]">%</span>
+                  <span className="text-xs text-text-muted">%</span>
                 </div>
               </div>
             )}
           </div>
         ) : (
           <div className="flex items-center justify-center py-4">
-            <p className="text-sm text-[hsl(228,10%,40%)]">
+            <p className="text-sm text-text-subtle">
               {isOnline ? 'No data available' : 'Device offline'}
             </p>
           </div>
@@ -188,8 +188,8 @@ export function DeviceSummaryCard({
 
         {/* Footer */}
         {firmwareVersion && (
-          <div className="mt-4 pt-3 border-t border-white/[0.06]">
-            <p className="text-[10px] text-[hsl(228,10%,40%)] font-mono">
+          <div className="mt-4 pt-3 border-t border-glass-border">
+            <p className="text-[10px] text-text-subtle font-mono">
               Firmware: {firmwareVersion}
             </p>
           </div>
@@ -215,9 +215,9 @@ export function DevicesGrid({ devices, className }: DevicesGridProps) {
     return (
       <GlassCard className={cn('flex items-center justify-center p-12', className)}>
         <div className="text-center">
-          <Cpu className="h-12 w-12 mx-auto text-[hsl(228,10%,25%)] mb-4" />
+          <Cpu className="h-12 w-12 mx-auto text-text-subtle mb-4" />
           <h3 className="text-lg font-semibold text-white mb-2">No devices yet</h3>
-          <p className="text-sm text-[hsl(228,10%,50%)] max-w-sm">
+          <p className="text-sm text-text-muted max-w-sm">
             Connect your first ESP32 device to start monitoring your home environment.
           </p>
         </div>

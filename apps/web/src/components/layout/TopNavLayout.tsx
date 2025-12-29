@@ -137,8 +137,8 @@ export function TopNavLayout() {
           'fixed top-0 left-0 right-0 z-40',
           'h-16 px-4 md:px-6',
           'flex items-center justify-between gap-4',
-          'bg-[hsl(228,15%,4%)]/80 backdrop-blur-xl',
-          'border-b border-white/[0.06]'
+          'bg-bg-base/80 backdrop-blur-xl',
+          'border-b border-glass-border'
         )}
       >
         {/* Left: Logo */}
@@ -146,19 +146,19 @@ export function TopNavLayout() {
           onClick={() => navigate('/dashboard')}
           className={cn(
             'flex items-center gap-2.5',
-            'text-white hover:text-[hsl(187,100%,50%)]',
+            'text-white hover:text-accent',
             'transition-colors duration-200'
           )}
         >
           <div
             className={cn(
               'h-8 w-8 rounded-lg',
-              'bg-gradient-to-br from-[hsl(187,100%,50%)] to-[hsl(160,84%,39%)]',
+              'bg-gradient-to-br from-accent to-success',
               'flex items-center justify-center',
-              'shadow-[0_0_15px_hsla(187,100%,50%,0.3)]'
+              'shadow-[0_0_15px_rgb(0_229_255/0.3)]'
             )}
           >
-            <Activity className="h-4 w-4 text-[hsl(228,15%,4%)]" />
+            <Activity className="h-4 w-4 text-bg-base" />
           </div>
           <span className="text-lg font-semibold tracking-tight hidden sm:block">
             PaperHome

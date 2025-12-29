@@ -11,7 +11,7 @@ import { SettingsPage } from './pages/settings/SettingsPage';
 
 function LoadingScreen() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[hsl(230,15%,5%)] relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center bg-bg-base relative overflow-hidden">
       <AnimatedBackground />
       <motion.div
         initial={{ opacity: 0, scale: 0.9 }}
@@ -29,7 +29,7 @@ function LoadingScreen() {
             repeat: Infinity,
             ease: 'easeInOut',
           }}
-          className="h-16 w-16 rounded-2xl bg-gradient-to-br from-[hsl(187,100%,50%)] to-[hsl(160,84%,39%)] flex items-center justify-center"
+          className="h-16 w-16 rounded-2xl bg-gradient-to-br from-accent to-success flex items-center justify-center"
         >
           <svg
             className="h-8 w-8 text-white"
@@ -45,7 +45,7 @@ function LoadingScreen() {
             />
           </svg>
         </motion.div>
-        <p className="text-[hsl(228,10%,50%)] text-sm font-medium">Loading...</p>
+        <p className="text-text-muted text-sm font-medium">Loading...</p>
       </motion.div>
     </div>
   );

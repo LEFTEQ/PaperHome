@@ -7,15 +7,15 @@ import { cardHover, glowHover } from '@/lib/animations';
 const glassCardVariants = cva(
   [
     'relative rounded-2xl border backdrop-blur-xl',
-    'bg-white/[0.025] border-white/[0.06]',
+    'bg-glass border-glass-border',
     'transition-all duration-200',
   ],
   {
     variants: {
       variant: {
         default: '',
-        elevated: 'bg-white/[0.04] border-white/[0.08]',
-        solid: 'bg-[hsl(228,10%,11%)] backdrop-blur-none',
+        elevated: 'bg-glass-hover border-glass-bright',
+        solid: 'bg-bg-surface backdrop-blur-none',
       },
       size: {
         sm: 'p-4',
@@ -27,18 +27,18 @@ const glassCardVariants = cva(
       interactive: {
         true: [
           'cursor-pointer',
-          'hover:bg-white/[0.04] hover:border-white/[0.1]',
+          'hover:bg-glass-hover hover:border-glass-border-hover',
           'hover:shadow-lg hover:-translate-y-0.5',
           'active:scale-[0.99]',
         ],
         false: '',
       },
       glow: {
-        true: 'shadow-[0_0_30px_hsla(187,100%,50%,0.15)]',
-        accent: 'shadow-[0_0_30px_hsla(187,100%,50%,0.15)] hover:shadow-[0_0_50px_hsla(187,100%,50%,0.25)]',
-        success: 'shadow-[0_0_20px_hsla(160,84%,45%,0.2)]',
-        warning: 'shadow-[0_0_20px_hsla(38,92%,50%,0.2)]',
-        error: 'shadow-[0_0_20px_hsla(0,72%,51%,0.2)]',
+        true: 'shadow-[0_0_30px_rgb(0_229_255/0.15)]',
+        accent: 'shadow-[0_0_30px_rgb(0_229_255/0.15)] hover:shadow-[0_0_50px_rgb(0_229_255/0.25)]',
+        success: 'shadow-[0_0_20px_rgb(16_185_129/0.2)]',
+        warning: 'shadow-[0_0_20px_rgb(245_158_11/0.2)]',
+        error: 'shadow-[0_0_20px_rgb(239_68_68/0.2)]',
         false: '',
       },
       border: {
@@ -46,10 +46,10 @@ const glassCardVariants = cva(
         gradient: [
           'border-0',
           'before:absolute before:inset-0 before:rounded-2xl before:p-px',
-          'before:bg-gradient-to-br before:from-white/[0.1] before:to-transparent',
+          'before:bg-gradient-to-br before:from-white/10 before:to-transparent',
           'before:-z-10',
         ],
-        accent: 'border-[hsl(187,100%,50%,0.3)]',
+        accent: 'border-accent/30',
       },
     },
     defaultVariants: {
@@ -152,7 +152,7 @@ const GlassCardDescription = forwardRef<
 >(({ className, ...props }, ref) => (
   <p
     ref={ref}
-    className={cn('text-sm text-[hsl(228,10%,60%)]', className)}
+    className={cn('text-sm text-text-muted', className)}
     {...props}
   />
 ));

@@ -43,30 +43,30 @@ const trendIcons = {
 };
 
 const trendColors = {
-  up: 'text-[hsl(160,84%,45%)]',
-  down: 'text-[hsl(0,72%,51%)]',
-  stable: 'text-[hsl(228,10%,50%)]',
+  up: 'text-success',
+  down: 'text-error',
+  stable: 'text-text-muted',
 };
 
 const statusColors = {
   normal: {
-    icon: 'text-[hsl(187,100%,50%)]',
-    bg: 'bg-[hsl(187,100%,50%,0.1)]',
+    icon: 'text-accent',
+    bg: 'bg-accent-subtle',
     chart: 'hsl(187, 100%, 50%)',
   },
   success: {
-    icon: 'text-[hsl(160,84%,45%)]',
-    bg: 'bg-[hsl(160,84%,39%,0.1)]',
+    icon: 'text-success',
+    bg: 'bg-success-bg',
     chart: 'hsl(160, 84%, 45%)',
   },
   warning: {
-    icon: 'text-[hsl(38,92%,50%)]',
-    bg: 'bg-[hsl(38,92%,50%,0.1)]',
+    icon: 'text-warning',
+    bg: 'bg-warning-bg',
     chart: 'hsl(38, 92%, 50%)',
   },
   critical: {
-    icon: 'text-[hsl(0,72%,51%)]',
-    bg: 'bg-[hsl(0,72%,51%,0.1)]',
+    icon: 'text-error',
+    bg: 'bg-error-bg',
     chart: 'hsl(0, 72%, 51%)',
   },
 };
@@ -122,7 +122,7 @@ export function StatCard({
     >
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
-        <span className="text-sm font-medium text-[hsl(228,10%,60%)]">
+        <span className="text-sm font-medium text-text-muted">
           {title}
         </span>
         {Icon && (
@@ -152,7 +152,7 @@ export function StatCard({
               {typeof value === 'number' ? value.toLocaleString() : value}
             </span>
             {unit && (
-              <span className="text-sm font-mono text-[hsl(228,10%,50%)]">
+              <span className="text-sm font-mono text-text-muted">
                 {unit}
               </span>
             )}
@@ -170,7 +170,7 @@ export function StatCard({
                 {trend === 'up' ? '+' : trend === 'down' ? '-' : ''}
                 {Math.abs(trendValue)}%
               </span>
-              <span className="text-xs text-[hsl(228,10%,40%)]">vs 1h ago</span>
+              <span className="text-xs text-text-subtle">vs 1h ago</span>
             </div>
           )}
         </div>

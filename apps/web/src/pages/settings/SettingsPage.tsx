@@ -41,7 +41,7 @@ export function SettingsPage() {
       {/* Header */}
       <motion.div variants={fadeInUp}>
         <h1 className="text-2xl font-bold text-white">Settings</h1>
-        <p className="text-[hsl(228,10%,50%)] mt-1">
+        <p className="text-text-muted mt-1">
           Manage your account and preferences
         </p>
       </motion.div>
@@ -53,14 +53,14 @@ export function SettingsPage() {
             <div
               className={cn(
                 'h-10 w-10 rounded-xl flex items-center justify-center',
-                'bg-[hsl(187,100%,50%,0.1)]'
+                'bg-accent-subtle'
               )}
             >
-              <User className="h-5 w-5 text-[hsl(187,100%,50%)]" />
+              <User className="h-5 w-5 text-accent" />
             </div>
             <div>
               <h2 className="text-lg font-semibold text-white">Profile</h2>
-              <p className="text-sm text-[hsl(228,10%,50%)]">
+              <p className="text-sm text-text-muted">
                 Your personal information
               </p>
             </div>
@@ -73,9 +73,9 @@ export function SettingsPage() {
                 animate={{ opacity: 1, y: 0 }}
                 className={cn(
                   'flex items-center gap-2 rounded-xl px-4 py-3 text-sm',
-                  'bg-[hsl(160,84%,39%,0.1)]',
-                  'border border-[hsl(160,84%,39%,0.3)]',
-                  'text-[hsl(160,84%,55%)]'
+                  'bg-success-bg',
+                  'border border-success/30',
+                  'text-success'
                 )}
               >
                 <CheckCircle className="h-4 w-4" />
@@ -117,24 +117,24 @@ export function SettingsPage() {
             <div
               className={cn(
                 'h-10 w-10 rounded-xl flex items-center justify-center',
-                'bg-[hsl(160,84%,39%,0.1)]'
+                'bg-success-bg'
               )}
             >
-              <Key className="h-5 w-5 text-[hsl(160,84%,45%)]" />
+              <Key className="h-5 w-5 text-success" />
             </div>
             <div>
               <h2 className="text-lg font-semibold text-white">Security</h2>
-              <p className="text-sm text-[hsl(228,10%,50%)]">
+              <p className="text-sm text-text-muted">
                 Password and authentication settings
               </p>
             </div>
           </div>
 
           <div className="space-y-4">
-            <div className="flex items-center justify-between py-3 border-b border-white/[0.06]">
+            <div className="flex items-center justify-between py-3 border-b border-glass-border">
               <div>
                 <p className="font-medium text-white">Password</p>
-                <p className="text-sm text-[hsl(228,10%,50%)]">
+                <p className="text-sm text-text-muted">
                   Last changed 30 days ago
                 </p>
               </div>
@@ -148,7 +148,7 @@ export function SettingsPage() {
                 <p className="font-medium text-white">
                   Two-Factor Authentication
                 </p>
-                <p className="text-sm text-[hsl(228,10%,50%)]">
+                <p className="text-sm text-text-muted">
                   Add an extra layer of security
                 </p>
               </div>
@@ -165,34 +165,34 @@ export function SettingsPage() {
             <div
               className={cn(
                 'h-10 w-10 rounded-xl flex items-center justify-center',
-                'bg-[hsl(38,92%,50%,0.1)]'
+                'bg-warning-bg'
               )}
             >
-              <Bell className="h-5 w-5 text-[hsl(38,92%,50%)]" />
+              <Bell className="h-5 w-5 text-warning" />
             </div>
             <div>
               <h2 className="text-lg font-semibold text-white">Notifications</h2>
-              <p className="text-sm text-[hsl(228,10%,50%)]">
+              <p className="text-sm text-text-muted">
                 Configure how you receive alerts
               </p>
             </div>
           </div>
 
           <div className="space-y-4">
-            <div className="flex items-center justify-between py-3 border-b border-white/[0.06]">
+            <div className="flex items-center justify-between py-3 border-b border-glass-border">
               <div>
                 <p className="font-medium text-white">Device Offline Alerts</p>
-                <p className="text-sm text-[hsl(228,10%,50%)]">
+                <p className="text-sm text-text-muted">
                   Get notified when a device goes offline
                 </p>
               </div>
               <Toggle disabled />
             </div>
 
-            <div className="flex items-center justify-between py-3 border-b border-white/[0.06]">
+            <div className="flex items-center justify-between py-3 border-b border-glass-border">
               <div>
                 <p className="font-medium text-white">High CO₂ Warnings</p>
-                <p className="text-sm text-[hsl(228,10%,50%)]">
+                <p className="text-sm text-text-muted">
                   Alert when CO₂ levels exceed 1000 ppm
                 </p>
               </div>
@@ -202,7 +202,7 @@ export function SettingsPage() {
             <div className="flex items-center justify-between py-3">
               <div>
                 <p className="font-medium text-white">Daily Summary</p>
-                <p className="text-sm text-[hsl(228,10%,50%)]">
+                <p className="text-sm text-text-muted">
                   Receive a daily digest of your home status
                 </p>
               </div>
@@ -214,21 +214,21 @@ export function SettingsPage() {
 
       {/* Danger Zone */}
       <motion.div variants={fadeInUp}>
-        <GlassCard className="border-[hsl(0,72%,51%,0.3)]">
+        <GlassCard className="border-error/30">
           <div className="flex items-center gap-3 mb-6">
             <div
               className={cn(
                 'h-10 w-10 rounded-xl flex items-center justify-center',
-                'bg-[hsl(0,72%,51%,0.1)]'
+                'bg-error-bg'
               )}
             >
-              <Shield className="h-5 w-5 text-[hsl(0,72%,51%)]" />
+              <Shield className="h-5 w-5 text-error" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-[hsl(0,72%,60%)]">
+              <h2 className="text-lg font-semibold text-error">
                 Danger Zone
               </h2>
-              <p className="text-sm text-[hsl(228,10%,50%)]">
+              <p className="text-sm text-text-muted">
                 Irreversible account actions
               </p>
             </div>
@@ -237,7 +237,7 @@ export function SettingsPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="font-medium text-white">Delete Account</p>
-              <p className="text-sm text-[hsl(228,10%,50%)]">
+              <p className="text-sm text-text-muted">
                 Permanently delete your account and all data
               </p>
             </div>

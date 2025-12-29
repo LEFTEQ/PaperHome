@@ -43,9 +43,9 @@ const typeIcons = {
 };
 
 const typeColors = {
-  device: 'text-[hsl(187,100%,50%)]',
-  action: 'text-[hsl(38,92%,50%)]',
-  navigation: 'text-[hsl(160,84%,39%)]',
+  device: 'text-accent',
+  action: 'text-warning',
+  navigation: 'text-success',
 };
 
 export function CommandBar({
@@ -178,11 +178,11 @@ export function CommandBar({
       <div
         className={cn(
           'relative flex items-center',
-          'rounded-xl border border-white/[0.08]',
-          'bg-white/[0.03] backdrop-blur-sm',
+          'rounded-xl border border-glass-border-hover',
+          'bg-glass backdrop-blur-sm',
           'transition-all duration-200',
           isExpanded ? 'w-80' : 'w-10',
-          isOpen && 'border-[hsl(187,100%,50%,0.3)] shadow-[0_0_15px_hsla(187,100%,50%,0.1)]'
+          isOpen && 'border-accent/30 shadow-[0_0_15px_rgb(0_229_255/0.1)]'
         )}
       >
         {/* Search icon / button */}
@@ -193,7 +193,7 @@ export function CommandBar({
           }}
           className={cn(
             'flex-shrink-0 p-2.5',
-            'text-[hsl(228,10%,50%)]',
+            'text-text-muted',
             isExpanded && 'pointer-events-none'
           )}
         >
@@ -216,7 +216,7 @@ export function CommandBar({
               placeholder={placeholder}
               className={cn(
                 'flex-1 bg-transparent border-none outline-none',
-                'text-sm text-white placeholder:text-[hsl(228,10%,40%)]',
+                'text-sm text-white placeholder:text-text-subtle',
                 'pr-2'
               )}
             />
@@ -229,7 +229,7 @@ export function CommandBar({
             {query ? (
               <button
                 onClick={handleClear}
-                className="p-1 rounded-md text-[hsl(228,10%,40%)] hover:text-white hover:bg-white/[0.05]"
+                className="p-1 rounded-md text-text-subtle hover:text-white hover:bg-glass-hover"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -237,8 +237,8 @@ export function CommandBar({
               <kbd
                 className={cn(
                   'hidden sm:flex items-center gap-0.5 px-1.5 py-0.5 rounded',
-                  'bg-white/[0.05] border border-white/[0.08]',
-                  'text-[10px] text-[hsl(228,10%,40%)] font-mono'
+                  'bg-glass-hover border border-glass-border-hover',
+                  'text-[10px] text-text-subtle font-mono'
                 )}
               >
                 <Command className="h-2.5 w-2.5" />K
@@ -254,8 +254,8 @@ export function CommandBar({
           <motion.div
             className={cn(
               'absolute top-full left-0 right-0 mt-2 z-50',
-              'rounded-xl border border-white/[0.08]',
-              'bg-[hsl(228,12%,8%)]/95 backdrop-blur-xl',
+              'rounded-xl border border-glass-border-hover',
+              'bg-bg-elevated/95 backdrop-blur-xl',
               'shadow-2xl overflow-hidden'
             )}
             {...dropdownAnimation}
@@ -280,15 +280,15 @@ export function CommandBar({
                       'w-full flex items-center gap-3 px-3 py-2',
                       'text-left transition-colors duration-100',
                       index === selectedIndex
-                        ? 'bg-white/[0.05] text-white'
-                        : 'text-[hsl(228,10%,70%)] hover:bg-white/[0.03]'
+                        ? 'bg-glass-hover text-white'
+                        : 'text-text-secondary hover:bg-glass'
                     )}
                   >
                     {/* Icon */}
                     <div
                       className={cn(
                         'flex-shrink-0 h-8 w-8 rounded-lg',
-                        'bg-white/[0.05] border border-white/[0.08]',
+                        'bg-glass-hover border border-glass-border-hover',
                         'flex items-center justify-center',
                         typeColors[item.type]
                       )}
@@ -300,7 +300,7 @@ export function CommandBar({
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{item.label}</p>
                       {item.description && (
-                        <p className="text-xs text-[hsl(228,10%,50%)] truncate">
+                        <p className="text-xs text-text-muted truncate">
                           {item.description}
                         </p>
                       )}
@@ -310,7 +310,7 @@ export function CommandBar({
                     <span
                       className={cn(
                         'flex-shrink-0 px-2 py-0.5 rounded text-[10px] uppercase',
-                        'bg-white/[0.05] text-[hsl(228,10%,50%)]'
+                        'bg-glass-hover text-text-muted'
                       )}
                     >
                       {item.type}
@@ -321,17 +321,17 @@ export function CommandBar({
             </div>
 
             {/* Footer hint */}
-            <div className="px-3 py-2 border-t border-white/[0.06] flex items-center justify-between text-[10px] text-[hsl(228,10%,40%)]">
+            <div className="px-3 py-2 border-t border-glass-border flex items-center justify-between text-[10px] text-text-subtle">
               <span>
-                <kbd className="px-1 py-0.5 rounded bg-white/[0.05] mr-1">↑↓</kbd>
+                <kbd className="px-1 py-0.5 rounded bg-glass-hover mr-1">↑↓</kbd>
                 navigate
               </span>
               <span>
-                <kbd className="px-1 py-0.5 rounded bg-white/[0.05] mr-1">↵</kbd>
+                <kbd className="px-1 py-0.5 rounded bg-glass-hover mr-1">↵</kbd>
                 select
               </span>
               <span>
-                <kbd className="px-1 py-0.5 rounded bg-white/[0.05] mr-1">esc</kbd>
+                <kbd className="px-1 py-0.5 rounded bg-glass-hover mr-1">esc</kbd>
                 close
               </span>
             </div>
@@ -345,14 +345,14 @@ export function CommandBar({
           <motion.div
             className={cn(
               'absolute top-full left-0 right-0 mt-2 z-50',
-              'rounded-xl border border-white/[0.08]',
-              'bg-[hsl(228,12%,8%)]/95 backdrop-blur-xl',
+              'rounded-xl border border-glass-border-hover',
+              'bg-bg-elevated/95 backdrop-blur-xl',
               'shadow-2xl p-6 text-center'
             )}
             {...dropdownAnimation}
           >
-            <Search className="h-8 w-8 mx-auto text-[hsl(228,10%,30%)] mb-2" />
-            <p className="text-sm text-[hsl(228,10%,50%)]">
+            <Search className="h-8 w-8 mx-auto text-text-subtle mb-2" />
+            <p className="text-sm text-text-muted">
               No results for "{query}"
             </p>
           </motion.div>

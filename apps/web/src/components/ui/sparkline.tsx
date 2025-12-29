@@ -79,7 +79,7 @@ export function Sparkline({
         className={cn('flex items-center justify-center', className)}
         style={{ width, height }}
       >
-        <span className="text-xs text-[hsl(228,10%,40%)]">No data</span>
+        <span className="text-xs text-text-subtle">No data</span>
       </div>
     );
   }

@@ -5,6 +5,56 @@
    A sophisticated dark theme with frosted glass effects and cyan accents
    ═══════════════════════════════════════════════════════════════════════════ */
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   Tailwind v4 Theme Configuration
+   ───────────────────────────────────────────────────────────────────────────── */
+
+@theme {
+  /* Background colors */
+  --color-bg-base: #090a0f;
+  --color-bg-elevated: #0f1116;
+  --color-bg-surface: #181a20;
+  --color-bg-surface-elevated: #1f2128;
+
+  /* Glass effect colors */
+  --color-glass: rgb(255 255 255 / 0.03);
+  --color-glass-hover: rgb(255 255 255 / 0.05);
+  --color-glass-bright: rgb(255 255 255 / 0.08);
+  --color-glass-border: rgb(255 255 255 / 0.06);
+  --color-glass-border-hover: rgb(255 255 255 / 0.1);
+  --color-glass-border-bright: rgb(255 255 255 / 0.15);
+
+  /* Text colors */
+  --color-text-primary: #fafafa;
+  --color-text-secondary: #b8bcc8;
+  --color-text-muted: #777d8c;
+  --color-text-subtle: #52576a;
+
+  /* Accent - Electric Cyan */
+  --color-accent: #00e5ff;
+  --color-accent-hover: #33ebff;
+  --color-accent-muted: #1a5c66;
+  --color-accent-subtle: rgb(0 229 255 / 0.1);
+  --color-accent-bg: rgb(0 229 255 / 0.15);
+
+  /* Semantic colors */
+  --color-success: #10b981;
+  --color-success-muted: #134e3a;
+  --color-success-bg: rgb(16 185 129 / 0.15);
+  --color-warning: #f59e0b;
+  --color-warning-muted: #78460a;
+  --color-warning-bg: rgb(245 158 11 / 0.15);
+  --color-error: #ef4444;
+  --color-error-muted: #7f1d1d;
+  --color-error-bg: rgb(239 68 68 / 0.15);
+  --color-info: #0ea5e9;
+
+  /* Status colors */
+  --color-online: #22c55e;
+  --color-offline: #6b7280;
+  --color-heating: #f97316;
+}
+
 :root {
   /* ─────────────────────────────────────────────────────────────────────────
      Color Palette - Deep Dark with Cyan Accent

@@ -8,26 +8,26 @@ const statusIndicatorVariants = cva(
     variants: {
       status: {
         online: [
-          'bg-[hsl(160,84%,45%)]',
-          'shadow-[0_0_8px_hsla(160,84%,45%,0.6)]',
+          'bg-online',
+          'shadow-[0_0_8px_rgb(34_197_94/0.6)]',
         ],
-        offline: 'bg-[hsl(228,10%,40%)]',
+        offline: 'bg-offline',
         warning: [
-          'bg-[hsl(38,92%,50%)]',
-          'shadow-[0_0_8px_hsla(38,92%,50%,0.6)]',
+          'bg-warning',
+          'shadow-[0_0_8px_rgb(245_158_11/0.6)]',
         ],
         error: [
-          'bg-[hsl(0,72%,51%)]',
-          'shadow-[0_0_8px_hsla(0,72%,51%,0.6)]',
+          'bg-error',
+          'shadow-[0_0_8px_rgb(239_68_68/0.6)]',
         ],
         heating: [
-          'bg-[hsl(25,95%,53%)]',
-          'shadow-[0_0_8px_hsla(25,95%,53%,0.6)]',
+          'bg-heating',
+          'shadow-[0_0_8px_rgb(249_115_22/0.6)]',
         ],
-        idle: 'bg-[hsl(228,10%,50%)]',
+        idle: 'bg-text-muted',
         connecting: [
-          'bg-[hsl(187,100%,50%)]',
-          'shadow-[0_0_8px_hsla(187,100%,50%,0.6)]',
+          'bg-accent',
+          'shadow-[0_0_8px_rgb(0_229_255/0.6)]',
         ],
       },
       size: {
@@ -52,13 +52,13 @@ const statusIndicatorVariants = cva(
 
 // Pulse ring color mapping
 const pulseColorMap: Record<string, string> = {
-  online: 'bg-[hsl(160,84%,45%)]',
+  online: 'bg-online',
   offline: '',
-  warning: 'bg-[hsl(38,92%,50%)]',
-  error: 'bg-[hsl(0,72%,51%)]',
-  heating: 'bg-[hsl(25,95%,53%)]',
+  warning: 'bg-warning',
+  error: 'bg-error',
+  heating: 'bg-heating',
   idle: '',
-  connecting: 'bg-[hsl(187,100%,50%)]',
+  connecting: 'bg-accent',
 };
 
 export interface StatusIndicatorProps
@@ -104,7 +104,7 @@ export function StatusIndicator({
   if (!label) return indicator;
 
   const labelClass = cn(
-    'text-xs text-[hsl(228,10%,60%)]',
+    'text-xs text-text-muted',
     labelPosition === 'left' ? 'mr-1.5' : 'ml-1.5'
   );
 

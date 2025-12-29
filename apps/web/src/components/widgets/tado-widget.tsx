@@ -52,7 +52,7 @@ export function TadoWidget({
         bentoSize={bentoSize}
         className={cn(
           'flex flex-col',
-          room.isHeating && 'border-[hsl(25,95%,53%,0.3)]',
+          room.isHeating && 'border-heating/30',
           className
         )}
       >
@@ -63,14 +63,14 @@ export function TadoWidget({
               className={cn(
                 'h-8 w-8 rounded-lg flex items-center justify-center',
                 room.isHeating
-                  ? 'bg-[hsl(25,95%,53%,0.2)]'
-                  : 'bg-white/[0.05]'
+                  ? 'bg-heating/20'
+                  : 'bg-glass-hover'
               )}
             >
               {room.isHeating ? (
-                <Flame className="h-4 w-4 text-[hsl(25,95%,53%)]" />
+                <Flame className="h-4 w-4 text-heating" />
               ) : (
-                <Thermometer className="h-4 w-4 text-[hsl(228,10%,40%)]" />
+                <Thermometer className="h-4 w-4 text-text-subtle" />
               )}
             </div>
             <span className="text-sm font-medium text-white">{room.name}</span>
@@ -89,9 +89,9 @@ export function TadoWidget({
               <span className="text-3xl font-mono font-bold text-white">
                 {room.currentTemp.toFixed(1)}
               </span>
-              <span className="text-sm text-[hsl(228,10%,50%)] ml-1">°C</span>
+              <span className="text-sm text-text-muted ml-1">°C</span>
             </div>
-            <p className="text-xs text-[hsl(228,10%,50%)] mt-1">
+            <p className="text-xs text-text-muted mt-1">
               Target: {room.targetTemp.toFixed(1)}°C
             </p>
           </div>
@@ -118,7 +118,7 @@ export function TadoWidget({
         </div>
 
         {/* Humidity */}
-        <div className="flex items-center gap-1 mt-3 text-xs text-[hsl(228,10%,50%)]">
+        <div className="flex items-center gap-1 mt-3 text-xs text-text-muted">
           <Droplets className="h-3.5 w-3.5" />
           <span>{room.humidity}% humidity</span>
         </div>
@@ -132,7 +132,7 @@ export function TadoWidget({
       bentoSize={bentoSize}
       className={cn(
         'flex flex-col items-center',
-        room.isHeating && 'border-[hsl(25,95%,53%,0.3)]',
+        room.isHeating && 'border-heating/30',
         className
       )}
     >
@@ -143,16 +143,16 @@ export function TadoWidget({
             className={cn(
               'h-8 w-8 rounded-lg flex items-center justify-center',
               room.isHeating
-                ? 'bg-[hsl(25,95%,53%,0.2)]'
-                : 'bg-white/[0.05]'
+                ? 'bg-heating/20'
+                : 'bg-glass-hover'
             )}
           >
             {room.isHeating ? (
-              <Flame className="h-4 w-4 text-[hsl(25,95%,53%)]" />
+              <Flame className="h-4 w-4 text-heating" />
             ) : room.mode === 'cool' ? (
-              <Snowflake className="h-4 w-4 text-[hsl(199,89%,48%)]" />
+              <Snowflake className="h-4 w-4 text-info" />
             ) : (
-              <Thermometer className="h-4 w-4 text-[hsl(228,10%,40%)]" />
+              <Thermometer className="h-4 w-4 text-text-subtle" />
             )}
           </div>
           <span className="text-sm font-medium text-white">{room.name}</span>
@@ -187,7 +187,7 @@ export function TadoWidget({
           <span className="font-mono">0.5°</span>
         </Button>
 
-        <div className="flex items-center gap-1 text-xs text-[hsl(228,10%,50%)]">
+        <div className="flex items-center gap-1 text-xs text-text-muted">
           <Droplets className="h-3.5 w-3.5" />
           <span>{room.humidity}%</span>
         </div>
@@ -225,8 +225,8 @@ export function TadoRoomsGrid({
     return (
       <GlassCard className={cn('flex items-center justify-center p-8', className)}>
         <div className="text-center">
-          <Thermometer className="h-10 w-10 mx-auto text-[hsl(228,10%,30%)] mb-3" />
-          <p className="text-sm text-[hsl(228,10%,50%)]">No Tado rooms found</p>
+          <Thermometer className="h-10 w-10 mx-auto text-text-subtle mb-3" />
+          <p className="text-sm text-text-muted">No Tado rooms found</p>
         </div>
       </GlassCard>
     );

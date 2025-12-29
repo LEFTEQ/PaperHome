@@ -52,17 +52,17 @@ export function LoginPage() {
           <div
             className={cn(
               'h-16 w-16 rounded-2xl mb-4',
-              'bg-gradient-to-br from-[hsl(187,100%,50%)] to-[hsl(160,84%,39%)]',
+              'bg-gradient-to-br from-accent to-success',
               'flex items-center justify-center',
-              'shadow-[0_0_40px_hsla(187,100%,50%,0.4)]'
+              'shadow-[0_0_40px_rgb(0_229_255/0.4)]'
             )}
           >
-            <Activity className="h-8 w-8 text-[hsl(228,15%,4%)]" />
+            <Activity className="h-8 w-8 text-bg-base" />
           </div>
           <h1 className="text-2xl font-bold text-white tracking-tight">
             PaperHome
           </h1>
-          <p className="text-sm text-[hsl(228,10%,50%)] mt-1">
+          <p className="text-sm text-text-muted mt-1">
             Smart Home Dashboard
           </p>
         </motion.div>
@@ -72,7 +72,7 @@ export function LoginPage() {
           <GlassCard variant="elevated" size="lg" className="backdrop-blur-2xl">
             <div className="text-center mb-6">
               <h2 className="text-xl font-semibold text-white">Welcome back</h2>
-              <p className="text-sm text-[hsl(228,10%,50%)] mt-1">
+              <p className="text-sm text-text-muted mt-1">
                 Sign in to your account to continue
               </p>
             </div>
@@ -84,9 +84,9 @@ export function LoginPage() {
                   animate={{ opacity: 1, y: 0 }}
                   className={cn(
                     'rounded-xl px-4 py-3 text-sm',
-                    'bg-[hsl(0,72%,51%,0.1)]',
-                    'border border-[hsl(0,72%,51%,0.3)]',
-                    'text-[hsl(0,72%,60%)]'
+                    'bg-error-bg',
+                    'border border-error/30',
+                    'text-error'
                   )}
                 >
                   {error}
@@ -124,11 +124,11 @@ export function LoginPage() {
               </Button>
             </form>
 
-            <div className="mt-6 text-center text-sm text-[hsl(228,10%,50%)]">
+            <div className="mt-6 text-center text-sm text-text-muted">
               Don't have an account?{' '}
               <Link
                 to="/register"
-                className="font-medium text-[hsl(187,100%,50%)] hover:text-[hsl(187,100%,60%)] transition-colors"
+                className="font-medium text-accent hover:text-accent-hover transition-colors"
               >
                 Create one
               </Link>
@@ -138,7 +138,7 @@ export function LoginPage() {
 
         {/* Footer */}
         <motion.p
-          className="mt-8 text-center text-xs text-[hsl(228,10%,40%)]"
+          className="mt-8 text-center text-xs text-text-subtle"
           variants={fadeInUp}
         >
           Monitor your home environment with ease

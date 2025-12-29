@@ -97,7 +97,7 @@ export function DashboardPage() {
       >
         <div>
           <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-          <p className="text-[hsl(228,10%,50%)] mt-1">
+          <p className="text-text-muted mt-1">
             {onlineDevices} of {totalDevices} devices online
           </p>
         </div>
@@ -119,22 +119,22 @@ export function DashboardPage() {
           <div
             className={cn(
               'h-12 w-12 rounded-xl flex items-center justify-center',
-              'bg-[hsl(187,100%,50%,0.1)]'
+              'bg-accent-subtle'
             )}
           >
-            <Wind className="h-6 w-6 text-[hsl(187,100%,50%)]" />
+            <Wind className="h-6 w-6 text-accent" />
           </div>
           <div>
-            <p className="text-sm text-[hsl(228,10%,50%)]">Avg. CO₂</p>
+            <p className="text-sm text-text-muted">Avg. CO₂</p>
             {avgCO2 !== null ? (
               <p className="text-2xl font-bold font-mono text-white">
                 {avgCO2}
-                <span className="text-sm font-normal text-[hsl(228,10%,50%)] ml-1">
+                <span className="text-sm font-normal text-text-muted ml-1">
                   ppm
                 </span>
               </p>
             ) : (
-              <p className="text-lg text-[hsl(228,10%,40%)]">No data</p>
+              <p className="text-lg text-text-subtle">No data</p>
             )}
           </div>
         </GlassCard>
@@ -144,22 +144,22 @@ export function DashboardPage() {
           <div
             className={cn(
               'h-12 w-12 rounded-xl flex items-center justify-center',
-              'bg-[hsl(38,92%,50%,0.1)]'
+              'bg-warning-bg'
             )}
           >
-            <Thermometer className="h-6 w-6 text-[hsl(38,92%,50%)]" />
+            <Thermometer className="h-6 w-6 text-warning" />
           </div>
           <div>
-            <p className="text-sm text-[hsl(228,10%,50%)]">Avg. Temperature</p>
+            <p className="text-sm text-text-muted">Avg. Temperature</p>
             {avgTemp !== null ? (
               <p className="text-2xl font-bold font-mono text-white">
                 {avgTemp.toFixed(1)}
-                <span className="text-sm font-normal text-[hsl(228,10%,50%)] ml-1">
+                <span className="text-sm font-normal text-text-muted ml-1">
                   °C
                 </span>
               </p>
             ) : (
-              <p className="text-lg text-[hsl(228,10%,40%)]">No data</p>
+              <p className="text-lg text-text-subtle">No data</p>
             )}
           </div>
         </GlassCard>
@@ -169,22 +169,22 @@ export function DashboardPage() {
           <div
             className={cn(
               'h-12 w-12 rounded-xl flex items-center justify-center',
-              'bg-[hsl(199,89%,48%,0.1)]'
+              'bg-info/10'
             )}
           >
-            <Droplets className="h-6 w-6 text-[hsl(199,89%,48%)]" />
+            <Droplets className="h-6 w-6 text-info" />
           </div>
           <div>
-            <p className="text-sm text-[hsl(228,10%,50%)]">Avg. Humidity</p>
+            <p className="text-sm text-text-muted">Avg. Humidity</p>
             {avgHumidity !== null ? (
               <p className="text-2xl font-bold font-mono text-white">
                 {avgHumidity}
-                <span className="text-sm font-normal text-[hsl(228,10%,50%)] ml-1">
+                <span className="text-sm font-normal text-text-muted ml-1">
                   %
                 </span>
               </p>
             ) : (
-              <p className="text-lg text-[hsl(228,10%,40%)]">No data</p>
+              <p className="text-lg text-text-subtle">No data</p>
             )}
           </div>
         </GlassCard>

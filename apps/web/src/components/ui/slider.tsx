@@ -26,7 +26,7 @@ const thumbVariants = cva(
     'shadow-[0_0_10px_rgba(0,0,0,0.3)]',
     'transition-transform duration-100',
     'hover:scale-110',
-    'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[hsl(228,15%,4%)]',
+    'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-bg-base',
     'cursor-grab active:cursor-grabbing active:scale-95',
   ],
   {
@@ -37,9 +37,9 @@ const thumbVariants = cva(
         lg: 'h-5 w-5',
       },
       variant: {
-        default: 'focus:ring-[hsl(187,100%,50%)]',
-        success: 'focus:ring-[hsl(160,84%,39%)]',
-        warning: 'focus:ring-[hsl(38,92%,50%)]',
+        default: 'focus:ring-accent',
+        success: 'focus:ring-success',
+        warning: 'focus:ring-warning',
       },
     },
     defaultVariants: {
@@ -199,12 +199,12 @@ const Slider = forwardRef<HTMLDivElement, SliderProps>(
         {(label || showValue) && (
           <div className="flex justify-between items-center mb-2">
             {label && (
-              <span className="text-sm font-medium text-[hsl(228,10%,70%)]">
+              <span className="text-sm font-medium text-text-secondary">
                 {label}
               </span>
             )}
             {showValue && (
-              <span className="text-sm font-mono text-[hsl(228,10%,60%)]">
+              <span className="text-sm font-mono text-text-muted">
                 {formatValue(value)}
               </span>
             )}

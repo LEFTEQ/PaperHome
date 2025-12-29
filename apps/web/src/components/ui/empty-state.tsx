@@ -87,11 +87,11 @@ export function EmptyState({
         className={cn(
           'flex items-center justify-center rounded-2xl mb-4',
           sizes.iconWrapper,
-          'bg-white/[0.03] border border-white/[0.06]'
+          'bg-glass border border-glass-border'
         )}
       >
         {iconElement || (
-          <Icon className={cn(sizes.icon, 'text-[hsl(228,10%,30%)]')} />
+          <Icon className={cn(sizes.icon, 'text-text-subtle')} />
         )}
       </div>
 
@@ -104,7 +104,7 @@ export function EmptyState({
       {description && (
         <p
           className={cn(
-            'text-[hsl(228,10%,50%)] max-w-sm mb-6',
+            'text-text-muted max-w-sm mb-6',
             sizes.description
           )}
         >

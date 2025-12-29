@@ -62,8 +62,8 @@ const ModalContent = forwardRef<
         >
           <motion.div
             className={cn(
-              'rounded-2xl border border-white/[0.08]',
-              'bg-[hsl(228,12%,8%)]/95 backdrop-blur-xl',
+              'rounded-2xl border border-glass-border-hover',
+              'bg-bg-elevated/95 backdrop-blur-xl',
               'shadow-2xl',
               'p-6',
               'focus:outline-none'
@@ -74,10 +74,10 @@ const ModalContent = forwardRef<
               <DialogPrimitive.Close
                 className={cn(
                   'absolute right-4 top-4 rounded-lg p-1.5',
-                  'text-[hsl(228,10%,50%)] hover:text-white',
-                  'hover:bg-white/[0.05]',
+                  'text-text-muted hover:text-white',
+                  'hover:bg-glass-hover',
                   'transition-colors duration-200',
-                  'focus:outline-none focus:ring-2 focus:ring-[hsl(187,100%,50%)]'
+                  'focus:outline-none focus:ring-2 focus:ring-accent'
                 )}
               >
                 <X className="h-4 w-4" />
@@ -122,7 +122,7 @@ const ModalDescription = forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Description
     ref={ref}
-    className={cn('text-sm text-[hsl(228,10%,60%)]', className)}
+    className={cn('text-sm text-text-muted', className)}
     {...props}
   />
 ));
@@ -141,7 +141,7 @@ const ModalFooter = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
       ref={ref}
       className={cn(
         'flex items-center justify-end gap-3 mt-6 pt-4',
-        'border-t border-white/[0.06]',
+        'border-t border-glass-border',
         className
       )}
       {...props}
@@ -204,8 +204,8 @@ function ConfirmModal({
             disabled={isLoading}
             className={cn(
               'px-4 py-2 rounded-lg text-sm font-medium',
-              'text-[hsl(228,10%,70%)] hover:text-white',
-              'hover:bg-white/[0.05]',
+              'text-text-secondary hover:text-white',
+              'hover:bg-glass-hover',
               'transition-colors duration-200',
               'disabled:opacity-50'
             )}
@@ -221,14 +221,14 @@ function ConfirmModal({
               'disabled:opacity-50',
               variant === 'destructive'
                 ? [
-                    'bg-[hsl(0,72%,51%)] text-white',
-                    'hover:bg-[hsl(0,72%,45%)]',
-                    'shadow-[0_0_15px_hsla(0,72%,51%,0.3)]',
+                    'bg-error text-white',
+                    'hover:bg-error/90',
+                    'shadow-[0_0_15px_rgb(239_68_68/0.3)]',
                   ]
                 : [
-                    'bg-[hsl(187,100%,50%)] text-[hsl(228,15%,4%)]',
-                    'hover:bg-[hsl(187,100%,55%)]',
-                    'shadow-[0_0_15px_hsla(187,100%,50%,0.3)]',
+                    'bg-accent text-bg-base',
+                    'hover:bg-accent-hover',
+                    'shadow-[0_0_15px_rgb(0_229_255/0.3)]',
                   ]
             )}
           >

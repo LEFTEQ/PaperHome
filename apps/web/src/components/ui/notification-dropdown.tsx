@@ -39,34 +39,34 @@ const notificationIcons = {
 
 const notificationColors = {
   info: {
-    icon: 'text-[hsl(199,89%,48%)]',
-    bg: 'bg-[hsl(199,89%,48%,0.1)]',
-    border: 'border-[hsl(199,89%,48%,0.3)]',
+    icon: 'text-info',
+    bg: 'bg-info/10',
+    border: 'border-info/30',
   },
   warning: {
-    icon: 'text-[hsl(38,92%,50%)]',
-    bg: 'bg-[hsl(38,92%,50%,0.1)]',
-    border: 'border-[hsl(38,92%,50%,0.3)]',
+    icon: 'text-warning',
+    bg: 'bg-warning-bg',
+    border: 'border-warning/30',
   },
   error: {
-    icon: 'text-[hsl(0,72%,51%)]',
-    bg: 'bg-[hsl(0,72%,51%,0.1)]',
-    border: 'border-[hsl(0,72%,51%,0.3)]',
+    icon: 'text-error',
+    bg: 'bg-error-bg',
+    border: 'border-error/30',
   },
   success: {
-    icon: 'text-[hsl(160,84%,39%)]',
-    bg: 'bg-[hsl(160,84%,39%,0.1)]',
-    border: 'border-[hsl(160,84%,39%,0.3)]',
+    icon: 'text-success',
+    bg: 'bg-success-bg',
+    border: 'border-success/30',
   },
   device_online: {
-    icon: 'text-[hsl(160,84%,39%)]',
-    bg: 'bg-[hsl(160,84%,39%,0.1)]',
-    border: 'border-[hsl(160,84%,39%,0.3)]',
+    icon: 'text-online',
+    bg: 'bg-success-bg',
+    border: 'border-success/30',
   },
   device_offline: {
-    icon: 'text-[hsl(228,10%,50%)]',
-    bg: 'bg-white/[0.05]',
-    border: 'border-white/[0.1]',
+    icon: 'text-text-muted',
+    bg: 'bg-glass-hover',
+    border: 'border-glass-border-hover',
   },
 };
 
@@ -100,10 +100,10 @@ export function NotificationDropdown({
         <button
           className={cn(
             'relative p-2 rounded-xl',
-            'text-[hsl(228,10%,60%)] hover:text-white',
-            'hover:bg-white/[0.05]',
+            'text-text-muted hover:text-white',
+            'hover:bg-glass-hover',
             'transition-colors duration-200',
-            'focus:outline-none focus:ring-2 focus:ring-[hsl(187,100%,50%,0.5)]'
+            'focus:outline-none focus:ring-2 focus:ring-accent/50'
           )}
         >
           <Bell className="h-5 w-5" />
@@ -113,8 +113,8 @@ export function NotificationDropdown({
                 'absolute -top-0.5 -right-0.5 h-4 min-w-4 px-1',
                 'flex items-center justify-center',
                 'rounded-full text-[10px] font-bold',
-                'bg-[hsl(0,72%,51%)] text-white',
-                'shadow-[0_0_8px_hsla(0,72%,51%,0.5)]'
+                'bg-error text-white',
+                'shadow-[0_0_8px_rgb(239_68_68/0.5)]'
               )}
             >
               {unreadCount > 9 ? '9+' : unreadCount}
@@ -129,21 +129,21 @@ export function NotificationDropdown({
         sideOffset={12}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-glass-border">
           <h3 className="text-sm font-semibold text-white">Notifications</h3>
           {notifications.length > 0 && (
             <div className="flex items-center gap-2">
               {unreadCount > 0 && (
                 <button
                   onClick={onMarkAllAsRead}
-                  className="text-xs text-[hsl(187,100%,50%)] hover:underline"
+                  className="text-xs text-accent hover:underline"
                 >
                   Mark all read
                 </button>
               )}
               <button
                 onClick={onClearAll}
-                className="text-xs text-[hsl(228,10%,50%)] hover:text-white"
+                className="text-xs text-text-muted hover:text-white"
               >
                 Clear all
               </button>
@@ -155,8 +155,8 @@ export function NotificationDropdown({
         <div className="max-h-[400px] overflow-y-auto">
           {notifications.length === 0 ? (
             <div className="py-12 text-center">
-              <Bell className="h-10 w-10 mx-auto text-[hsl(228,10%,30%)] mb-3" />
-              <p className="text-sm text-[hsl(228,10%,50%)]">No notifications</p>
+              <Bell className="h-10 w-10 mx-auto text-text-subtle mb-3" />
+              <p className="text-sm text-text-muted">No notifications</p>
             </div>
           ) : (
             <AnimatePresence mode="popLayout">
@@ -173,10 +173,10 @@ export function NotificationDropdown({
                     animate="animate"
                     exit="exit"
                     className={cn(
-                      'group relative px-4 py-3 border-b border-white/[0.04]',
-                      'hover:bg-white/[0.02]',
+                      'group relative px-4 py-3 border-b border-glass-border',
+                      'hover:bg-glass',
                       'transition-colors duration-200',
-                      !notification.read && 'bg-white/[0.02]'
+                      !notification.read && 'bg-glass'
                     )}
                   >
                     <div className="flex gap-3">
@@ -200,20 +200,20 @@ export function NotificationDropdown({
                             className={cn(
                               'text-sm font-medium truncate',
                               notification.read
-                                ? 'text-[hsl(228,10%,70%)]'
+                                ? 'text-text-secondary'
                                 : 'text-white'
                             )}
                           >
                             {notification.title}
                           </p>
                           {!notification.read && (
-                            <span className="flex-shrink-0 h-2 w-2 rounded-full bg-[hsl(187,100%,50%)]" />
+                            <span className="flex-shrink-0 h-2 w-2 rounded-full bg-accent" />
                           )}
                         </div>
-                        <p className="text-xs text-[hsl(228,10%,50%)] mt-0.5 line-clamp-2">
+                        <p className="text-xs text-text-muted mt-0.5 line-clamp-2">
                           {notification.message}
                         </p>
-                        <p className="text-[10px] text-[hsl(228,10%,40%)] mt-1">
+                        <p className="text-[10px] text-text-subtle mt-1">
                           {formatTimeAgo(notification.timestamp)}
                         </p>
                       </div>
@@ -227,8 +227,8 @@ export function NotificationDropdown({
                           }}
                           className={cn(
                             'p-1 rounded-md',
-                            'text-[hsl(228,10%,40%)] hover:text-white',
-                            'hover:bg-white/[0.05]'
+                            'text-text-subtle hover:text-white',
+                            'hover:bg-glass-hover'
                           )}
                         >
                           <X className="h-3.5 w-3.5" />

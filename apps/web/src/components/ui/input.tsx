@@ -6,12 +6,12 @@ import { cn } from '@/lib/utils';
 const inputVariants = cva(
   [
     'flex w-full rounded-xl border',
-    'bg-white/[0.03] backdrop-blur-sm',
-    'border-white/[0.08]',
-    'text-white placeholder:text-[hsl(228,10%,40%)]',
+    'bg-glass backdrop-blur-sm',
+    'border-glass-border-hover',
+    'text-white placeholder:text-text-subtle',
     'transition-all duration-200',
-    'focus:outline-none focus:border-[hsl(187,100%,50%)]',
-    'focus:ring-2 focus:ring-[hsl(187,100%,50%,0.15)]',
+    'focus:outline-none focus:border-accent',
+    'focus:ring-2 focus:ring-accent/15',
     'disabled:cursor-not-allowed disabled:opacity-50',
     'hover:border-white/[0.12]',
   ],
@@ -24,9 +24,9 @@ const inputVariants = cva(
       },
       hasError: {
         true: [
-          'border-[hsl(0,72%,51%)]',
-          'focus:border-[hsl(0,72%,51%)]',
-          'focus:ring-[hsl(0,72%,51%,0.15)]',
+          'border-error',
+          'focus:border-error',
+          'focus:ring-error/15',
         ],
         false: '',
       },
@@ -99,14 +99,14 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
         {label && (
           <label
             htmlFor={inputId}
-            className="block text-sm font-medium text-[hsl(228,10%,70%)]"
+            className="block text-sm font-medium text-text-secondary"
           >
             {label}
           </label>
         )}
         <div className="relative">
           {leftIcon && (
-            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[hsl(228,10%,40%)]">
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-text-subtle">
               {leftIcon}
             </div>
           )}
@@ -128,12 +128,12 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
             {...props}
           />
           {rightIcon && (
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[hsl(228,10%,40%)]">
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 text-text-subtle">
               {rightIcon}
             </div>
           )}
           {error && !rightIcon && (
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[hsl(0,72%,51%)]">
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 text-error">
               <AlertCircle className="h-4 w-4" />
             </div>
           )}
@@ -143,14 +143,14 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
             <p
               className={cn(
                 'text-xs',
-                error ? 'text-[hsl(0,72%,51%)]' : 'text-[hsl(228,10%,50%)]'
+                error ? 'text-error' : 'text-text-muted'
               )}
             >
               {error || helperText}
             </p>
           )}
           {showCount && maxLength && (
-            <p className="text-xs text-[hsl(228,10%,50%)] ml-auto">
+            <p className="text-xs text-text-muted ml-auto">
               {charCount}/{maxLength}
             </p>
           )}
@@ -180,7 +180,7 @@ const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
           <button
             type="button"
             onClick={() => setShowPassword(!showPassword)}
-            className="text-[hsl(228,10%,40%)] hover:text-white transition-colors"
+            className="text-text-subtle hover:text-white transition-colors"
             tabIndex={-1}
           >
             {showPassword ? (
@@ -272,7 +272,7 @@ const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
         {label && (
           <label
             htmlFor={inputId}
-            className="block text-sm font-medium text-[hsl(228,10%,70%)]"
+            className="block text-sm font-medium text-text-secondary"
           >
             {label}
           </label>
@@ -285,19 +285,19 @@ const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           maxLength={maxLength}
           className={cn(
             'flex w-full rounded-xl border min-h-[100px] p-4',
-            'bg-white/[0.03] backdrop-blur-sm',
-            'border-white/[0.08]',
-            'text-white placeholder:text-[hsl(228,10%,40%)]',
+            'bg-glass backdrop-blur-sm',
+            'border-glass-border-hover',
+            'text-white placeholder:text-text-subtle',
             'transition-all duration-200',
-            'focus:outline-none focus:border-[hsl(187,100%,50%)]',
-            'focus:ring-2 focus:ring-[hsl(187,100%,50%,0.15)]',
+            'focus:outline-none focus:border-accent',
+            'focus:ring-2 focus:ring-accent/15',
             'disabled:cursor-not-allowed disabled:opacity-50',
             'hover:border-white/[0.12]',
             'resize-none',
             error && [
-              'border-[hsl(0,72%,51%)]',
-              'focus:border-[hsl(0,72%,51%)]',
-              'focus:ring-[hsl(0,72%,51%,0.15)]',
+              'border-error',
+              'focus:border-error',
+              'focus:ring-error/15',
             ],
             className
           )}
@@ -308,14 +308,14 @@ const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
             <p
               className={cn(
                 'text-xs',
-                error ? 'text-[hsl(0,72%,51%)]' : 'text-[hsl(228,10%,50%)]'
+                error ? 'text-error' : 'text-text-muted'
               )}
             >
               {error || helperText}
             </p>
           )}
           {showCount && maxLength && (
-            <p className="text-xs text-[hsl(228,10%,50%)] ml-auto">
+            <p className="text-xs text-text-muted ml-auto">
               {charCount}/{maxLength}
             </p>
           )}

@@ -38,18 +38,18 @@ export function ProfileDropdown({
         <button
           className={cn(
             'flex items-center gap-2 p-1.5 rounded-xl',
-            'hover:bg-white/[0.05]',
+            'hover:bg-glass-hover',
             'transition-colors duration-200',
-            'focus:outline-none focus:ring-2 focus:ring-[hsl(187,100%,50%,0.5)]'
+            'focus:outline-none focus:ring-2 focus:ring-accent/50'
           )}
         >
           {/* Avatar */}
           <div
             className={cn(
               'h-8 w-8 rounded-lg',
-              'bg-gradient-to-br from-[hsl(187,100%,50%)] to-[hsl(160,84%,39%)]',
+              'bg-gradient-to-br from-accent to-success',
               'flex items-center justify-center',
-              'text-xs font-bold text-[hsl(228,15%,4%)]'
+              'text-xs font-bold text-bg-base'
             )}
           >
             {initials}
@@ -59,11 +59,11 @@ export function ProfileDropdown({
 
       <DropdownMenuContent align="end" className="w-56" sideOffset={12}>
         {/* User info */}
-        <div className="px-3 py-3 border-b border-white/[0.06]">
+        <div className="px-3 py-3 border-b border-glass-border">
           <p className="text-sm font-medium text-white">
             {user.displayName || user.username}
           </p>
-          <p className="text-xs text-[hsl(228,10%,50%)] mt-0.5">
+          <p className="text-xs text-text-muted mt-0.5">
             @{user.username}
           </p>
         </div>

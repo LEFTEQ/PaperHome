@@ -13,33 +13,33 @@ const badgeVariants = cva(
       variant: {
         /** Default muted badge */
         default: [
-          'bg-white/[0.06]',
-          'text-[hsl(228,10%,70%)]',
-          'border border-white/[0.08]',
+          'bg-glass-bright',
+          'text-text-secondary',
+          'border border-glass-border-hover',
         ],
         /** Primary accent badge */
         primary: [
-          'bg-[hsl(187,100%,50%,0.15)]',
-          'text-[hsl(187,100%,60%)]',
-          'border border-[hsl(187,100%,50%,0.3)]',
+          'bg-accent-bg',
+          'text-accent-hover',
+          'border border-accent/30',
         ],
         /** Success badge */
         success: [
-          'bg-[hsl(160,84%,39%,0.15)]',
-          'text-[hsl(160,84%,55%)]',
-          'border border-[hsl(160,84%,39%,0.3)]',
+          'bg-success-bg',
+          'text-success',
+          'border border-success/30',
         ],
         /** Warning badge */
         warning: [
-          'bg-[hsl(38,92%,50%,0.15)]',
-          'text-[hsl(38,92%,60%)]',
-          'border border-[hsl(38,92%,50%,0.3)]',
+          'bg-warning-bg',
+          'text-warning',
+          'border border-warning/30',
         ],
         /** Error/danger badge */
         error: [
-          'bg-[hsl(0,72%,51%,0.15)]',
-          'text-[hsl(0,72%,60%)]',
-          'border border-[hsl(0,72%,51%,0.3)]',
+          'bg-error-bg',
+          'text-error',
+          'border border-error/30',
         ],
         /** Outline only */
         outline: [
@@ -49,27 +49,27 @@ const badgeVariants = cva(
         ],
         /** Solid accent */
         solid: [
-          'bg-[hsl(187,100%,50%)]',
-          'text-[hsl(228,15%,4%)]',
+          'bg-accent',
+          'text-bg-base',
           'font-semibold',
         ],
         /** Online status */
         online: [
-          'bg-[hsl(160,84%,39%,0.2)]',
-          'text-[hsl(160,84%,55%)]',
-          'border border-[hsl(160,84%,39%,0.4)]',
+          'bg-success/20',
+          'text-online',
+          'border border-success/40',
         ],
         /** Offline status */
         offline: [
-          'bg-white/[0.04]',
-          'text-[hsl(228,10%,50%)]',
-          'border border-white/[0.06]',
+          'bg-glass-hover',
+          'text-text-muted',
+          'border border-glass-border',
         ],
         /** Heating status (for Tado) */
         heating: [
-          'bg-[hsl(25,95%,53%,0.15)]',
-          'text-[hsl(25,95%,60%)]',
-          'border border-[hsl(25,95%,53%,0.3)]',
+          'bg-heating/15',
+          'text-heating',
+          'border border-heating/30',
         ],
       },
       size: {
@@ -94,16 +94,16 @@ const badgeVariants = cva(
 
 // Dot color mapping based on variant
 const dotColorMap: Record<string, string> = {
-  default: 'bg-[hsl(228,10%,50%)]',
-  primary: 'bg-[hsl(187,100%,50%)]',
-  success: 'bg-[hsl(160,84%,45%)]',
-  warning: 'bg-[hsl(38,92%,50%)]',
-  error: 'bg-[hsl(0,72%,51%)]',
+  default: 'bg-text-muted',
+  primary: 'bg-accent',
+  success: 'bg-success',
+  warning: 'bg-warning',
+  error: 'bg-error',
   outline: 'bg-white',
-  solid: 'bg-[hsl(228,15%,4%)]',
-  online: 'bg-[hsl(160,84%,45%)]',
-  offline: 'bg-[hsl(228,10%,40%)]',
-  heating: 'bg-[hsl(25,95%,53%)]',
+  solid: 'bg-bg-base',
+  online: 'bg-online',
+  offline: 'bg-text-subtle',
+  heating: 'bg-heating',
 };
 
 export interface BadgeProps

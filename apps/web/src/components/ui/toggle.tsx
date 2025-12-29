@@ -9,7 +9,7 @@ const toggleVariants = cva(
     'border-2 border-transparent',
     'transition-all duration-200',
     'focus-visible:outline-none focus-visible:ring-2',
-    'focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(228,15%,4%)]',
+    'focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base',
     'disabled:cursor-not-allowed disabled:opacity-50',
   ],
   {
@@ -18,27 +18,27 @@ const toggleVariants = cva(
         /** Default accent toggle */
         default: [
           'data-[state=unchecked]:bg-white/[0.1]',
-          'data-[state=checked]:bg-[hsl(187,100%,50%)]',
-          'data-[state=checked]:shadow-[0_0_12px_hsla(187,100%,50%,0.4)]',
-          'focus-visible:ring-[hsl(187,100%,50%)]',
+          'data-[state=checked]:bg-accent',
+          'data-[state=checked]:shadow-[0_0_12px_rgb(0_229_255/0.4)]',
+          'focus-visible:ring-accent',
         ],
         /** Success toggle */
         success: [
           'data-[state=unchecked]:bg-white/[0.1]',
-          'data-[state=checked]:bg-[hsl(160,84%,39%)]',
-          'data-[state=checked]:shadow-[0_0_12px_hsla(160,84%,39%,0.4)]',
-          'focus-visible:ring-[hsl(160,84%,39%)]',
+          'data-[state=checked]:bg-success',
+          'data-[state=checked]:shadow-[0_0_12px_rgb(16_185_129/0.4)]',
+          'focus-visible:ring-success',
         ],
         /** Warning toggle */
         warning: [
           'data-[state=unchecked]:bg-white/[0.1]',
-          'data-[state=checked]:bg-[hsl(38,92%,50%)]',
-          'data-[state=checked]:shadow-[0_0_12px_hsla(38,92%,50%,0.4)]',
-          'focus-visible:ring-[hsl(38,92%,50%)]',
+          'data-[state=checked]:bg-warning',
+          'data-[state=checked]:shadow-[0_0_12px_rgb(245_158_11/0.4)]',
+          'focus-visible:ring-warning',
         ],
         /** Subtle toggle - less prominent */
         subtle: [
-          'data-[state=unchecked]:bg-white/[0.06]',
+          'data-[state=unchecked]:bg-glass-bright',
           'data-[state=checked]:bg-white/[0.2]',
           'focus-visible:ring-white/50',
         ],
@@ -123,7 +123,7 @@ const Toggle = forwardRef<
         <div className="flex flex-col">
           <span className="text-sm font-medium text-white">{label}</span>
           {description && (
-            <span className="text-xs text-[hsl(228,10%,50%)]">{description}</span>
+            <span className="text-xs text-text-muted">{description}</span>
           )}
         </div>
         {toggle}

@@ -240,8 +240,8 @@ export function CircularGauge({
             initial={{ opacity: 0, y: 5 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            <Flame className="h-4 w-4 text-[hsl(25,95%,53%)]" />
-            <span className="text-xs font-medium text-[hsl(25,95%,53%)]">
+            <Flame className="h-4 w-4 text-heating" />
+            <span className="text-xs font-medium text-heating">
               Heating
             </span>
           </motion.div>
@@ -257,7 +257,7 @@ export function CircularGauge({
           <span className="text-4xl font-mono font-bold text-white">
             {current.toFixed(1)}
           </span>
-          <span className="text-lg text-[hsl(228,10%,50%)] ml-1">°{unit}</span>
+          <span className="text-lg text-text-muted ml-1">°{unit}</span>
         </motion.div>
 
         {/* Target label */}
@@ -267,7 +267,7 @@ export function CircularGauge({
           animate={{ opacity: 1 }}
           transition={{ delay: 0.5 }}
         >
-          <span className="text-xs text-[hsl(228,10%,50%)]">Target:</span>
+          <span className="text-xs text-text-muted">Target:</span>
           <span className="text-sm font-mono font-medium text-white">
             {target.toFixed(1)}°{unit}
           </span>

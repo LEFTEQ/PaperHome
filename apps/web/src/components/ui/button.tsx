@@ -9,7 +9,7 @@ const buttonVariants = cva(
   [
     'relative inline-flex items-center justify-center gap-2',
     'font-medium transition-all duration-200',
-    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(228,15%,4%)]',
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base',
     'disabled:pointer-events-none disabled:opacity-50',
     'active:scale-[0.98]',
   ],
@@ -18,61 +18,61 @@ const buttonVariants = cva(
       variant: {
         /** Primary accent button with glow */
         primary: [
-          'bg-gradient-to-r from-[hsl(187,100%,50%)] to-[hsl(187,100%,40%)]',
-          'text-[hsl(228,15%,4%)] font-semibold',
-          'shadow-[0_0_20px_hsla(187,100%,50%,0.3)]',
-          'hover:shadow-[0_0_30px_hsla(187,100%,50%,0.4)]',
-          'hover:from-[hsl(187,100%,55%)] hover:to-[hsl(187,100%,45%)]',
-          'focus-visible:ring-[hsl(187,100%,50%)]',
+          'bg-gradient-to-r from-accent to-accent/80',
+          'text-bg-base font-semibold',
+          'shadow-[0_0_20px_rgb(0_229_255/0.3)]',
+          'hover:shadow-[0_0_30px_rgb(0_229_255/0.4)]',
+          'hover:from-accent-hover hover:to-accent',
+          'focus-visible:ring-accent',
         ],
         /** Secondary glass button */
         secondary: [
-          'bg-white/[0.06] backdrop-blur-sm',
-          'border border-white/[0.1]',
+          'bg-glass-bright backdrop-blur-sm',
+          'border border-glass-border-hover',
           'text-white',
-          'hover:bg-white/[0.1] hover:border-white/[0.15]',
+          'hover:bg-white/[0.1] hover:border-glass-border-bright',
           'focus-visible:ring-white/50',
         ],
         /** Ghost button - minimal */
         ghost: [
           'bg-transparent',
-          'text-[hsl(228,10%,70%)]',
-          'hover:bg-white/[0.05] hover:text-white',
+          'text-text-secondary',
+          'hover:bg-glass-hover hover:text-white',
           'focus-visible:ring-white/30',
         ],
         /** Outline button - bordered */
         outline: [
           'bg-transparent',
-          'border border-white/[0.1]',
+          'border border-glass-border-hover',
           'text-white',
-          'hover:bg-white/[0.05] hover:border-white/[0.2]',
+          'hover:bg-glass-hover hover:border-white/[0.2]',
           'focus-visible:ring-white/30',
         ],
         /** Destructive - danger actions */
         destructive: [
-          'bg-[hsl(0,72%,51%)]',
+          'bg-error',
           'text-white font-semibold',
-          'shadow-[0_0_20px_hsla(0,72%,51%,0.3)]',
-          'hover:bg-[hsl(0,72%,45%)]',
-          'hover:shadow-[0_0_30px_hsla(0,72%,51%,0.4)]',
-          'focus-visible:ring-[hsl(0,72%,51%)]',
+          'shadow-[0_0_20px_rgb(239_68_68/0.3)]',
+          'hover:bg-error/90',
+          'hover:shadow-[0_0_30px_rgb(239_68_68/0.4)]',
+          'focus-visible:ring-error',
         ],
         /** Success - confirmation actions */
         success: [
-          'bg-[hsl(160,84%,39%)]',
+          'bg-success',
           'text-white font-semibold',
-          'shadow-[0_0_20px_hsla(160,84%,39%,0.3)]',
-          'hover:bg-[hsl(160,84%,35%)]',
-          'hover:shadow-[0_0_30px_hsla(160,84%,39%,0.4)]',
-          'focus-visible:ring-[hsl(160,84%,39%)]',
+          'shadow-[0_0_20px_rgb(16_185_129/0.3)]',
+          'hover:bg-success/90',
+          'hover:shadow-[0_0_30px_rgb(16_185_129/0.4)]',
+          'focus-visible:ring-success',
         ],
         /** Glass with accent border */
         glassAccent: [
-          'bg-white/[0.03] backdrop-blur-sm',
-          'border border-[hsl(187,100%,50%,0.3)]',
-          'text-[hsl(187,100%,50%)]',
-          'hover:bg-[hsl(187,100%,50%,0.1)] hover:border-[hsl(187,100%,50%,0.5)]',
-          'focus-visible:ring-[hsl(187,100%,50%)]',
+          'bg-glass backdrop-blur-sm',
+          'border border-accent/30',
+          'text-accent',
+          'hover:bg-accent-subtle hover:border-accent/50',
+          'focus-visible:ring-accent',
         ],
       },
       size: {

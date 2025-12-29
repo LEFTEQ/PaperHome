@@ -14,7 +14,7 @@ function Skeleton({
   return (
     <div
       className={cn(
-        'rounded-lg bg-white/[0.06]',
+        'rounded-lg bg-glass-bright',
         {
           'animate-pulse': animation === 'pulse',
           'skeleton': animation === 'shimmer',
@@ -55,7 +55,7 @@ export function SkeletonCard({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        'rounded-2xl border border-white/[0.06] bg-white/[0.025] p-5',
+        'rounded-2xl border border-glass-border bg-glass p-5',
         className
       )}
     >
@@ -76,7 +76,7 @@ export function SkeletonDeviceCard({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        'rounded-2xl border border-white/[0.06] bg-white/[0.025] p-5',
+        'rounded-2xl border border-glass-border bg-glass p-5',
         className
       )}
     >
@@ -114,7 +114,7 @@ export function SkeletonStatCard({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        'rounded-2xl border border-white/[0.06] bg-white/[0.025] p-5 flex flex-col',
+        'rounded-2xl border border-glass-border bg-glass p-5 flex flex-col',
         className
       )}
     >
@@ -148,7 +148,7 @@ export function SkeletonDashboard({ className }: { className?: string }) {
         {Array.from({ length: 3 }).map((_, i) => (
           <div
             key={i}
-            className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-4 flex items-center gap-4"
+            className="rounded-2xl border border-glass-border bg-glass p-4 flex items-center gap-4"
           >
             <Skeleton className="h-10 w-10 rounded-lg" />
             <div className="space-y-1">

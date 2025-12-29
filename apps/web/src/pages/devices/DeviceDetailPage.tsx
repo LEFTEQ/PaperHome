@@ -127,7 +127,7 @@ export function DeviceDetailPage() {
             </Button>
             <div>
               <h1 className="text-2xl font-bold text-white">{device.name}</h1>
-              <p className="text-sm font-mono text-[hsl(228,10%,50%)]">
+              <p className="text-sm font-mono text-text-muted">
                 {device.deviceId}
               </p>
             </div>
@@ -163,17 +163,17 @@ export function DeviceDetailPage() {
             <div
               className={cn(
                 'h-12 w-12 rounded-xl flex items-center justify-center',
-                'bg-[hsl(160,84%,39%,0.15)]'
+                'bg-success-bg'
               )}
             >
-              <Cpu className="h-6 w-6 text-[hsl(160,84%,45%)]" />
+              <Cpu className="h-6 w-6 text-online" />
             </div>
             <div>
               <div className="flex items-center gap-3">
                 <h1 className="text-2xl font-bold text-white">{device.name}</h1>
                 <StatusBadge status="online" />
               </div>
-              <p className="text-sm font-mono text-[hsl(228,10%,50%)]">
+              <p className="text-sm font-mono text-text-muted">
                 {device.deviceId}
               </p>
             </div>
@@ -182,7 +182,7 @@ export function DeviceDetailPage() {
 
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 text-sm">
-            <Battery className="h-4 w-4 text-[hsl(160,84%,45%)]" />
+            <Battery className="h-4 w-4 text-online" />
             <span className="font-mono text-white">{device.battery}%</span>
           </div>
           <Badge variant="outline" size="sm">
@@ -224,7 +224,7 @@ export function DeviceDetailPage() {
 
         {/* Hue Widget - spans 2 columns */}
         <BentoCard bentoSize="2x1">
-          <h3 className="text-sm font-medium text-[hsl(228,10%,60%)] mb-4">
+          <h3 className="text-sm font-medium text-text-muted mb-4">
             Hue Lights
           </h3>
           <div className="grid grid-cols-2 gap-3">

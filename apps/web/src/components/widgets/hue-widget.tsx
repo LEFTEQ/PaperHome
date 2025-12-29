@@ -46,7 +46,7 @@ export function HueWidget({
       bentoSize={bentoSize}
       className={cn(
         'flex flex-col',
-        room.isOn && 'border-[hsl(38,92%,50%,0.3)]',
+        room.isOn && 'border-warning/30',
         className
       )}
       style={{
@@ -62,8 +62,8 @@ export function HueWidget({
             className={cn(
               'h-10 w-10 rounded-xl flex items-center justify-center',
               room.isOn
-                ? 'bg-[hsl(38,92%,50%,0.2)]'
-                : 'bg-white/[0.05]'
+                ? 'bg-warning/20'
+                : 'bg-glass-hover'
             )}
             animate={{
               boxShadow: room.isOn
@@ -73,15 +73,15 @@ export function HueWidget({
           >
             {room.isOn ? (
               <Lightbulb
-                className="h-5 w-5 text-[hsl(38,92%,50%)]"
+                className="h-5 w-5 text-warning"
               />
             ) : (
-              <LightbulbOff className="h-5 w-5 text-[hsl(228,10%,40%)]" />
+              <LightbulbOff className="h-5 w-5 text-text-subtle" />
             )}
           </motion.div>
           <div>
             <h3 className="text-sm font-medium text-white">{room.name}</h3>
-            <p className="text-xs text-[hsl(228,10%,50%)]">
+            <p className="text-xs text-text-muted">
               {room.isOn ? `${room.brightness}% brightness` : 'Off'}
             </p>
           </div>
@@ -117,7 +117,7 @@ export function HueWidget({
         <div className="mt-auto">
           <div className="h-1.5 rounded-full bg-white/[0.1] overflow-hidden">
             <motion.div
-              className="h-full rounded-full bg-[hsl(38,92%,50%)]"
+              className="h-full rounded-full bg-warning"
               initial={{ width: 0 }}
               animate={{ width: `${room.brightness}%` }}
               transition={{ duration: 0.5 }}
@@ -155,8 +155,8 @@ export function HueRoomsGrid({
     return (
       <GlassCard className={cn('flex items-center justify-center p-8', className)}>
         <div className="text-center">
-          <LightbulbOff className="h-10 w-10 mx-auto text-[hsl(228,10%,30%)] mb-3" />
-          <p className="text-sm text-[hsl(228,10%,50%)]">No Hue rooms found</p>
+          <LightbulbOff className="h-10 w-10 mx-auto text-text-subtle mb-3" />
+          <p className="text-sm text-text-muted">No Hue rooms found</p>
         </div>
       </GlassCard>
     );

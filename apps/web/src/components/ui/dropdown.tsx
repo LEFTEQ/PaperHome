@@ -22,10 +22,10 @@ const DropdownMenuSubTrigger = forwardRef<
     ref={ref}
     className={cn(
       'flex cursor-default select-none items-center gap-2 rounded-lg px-3 py-2 text-sm',
-      'text-[hsl(228,10%,70%)]',
+      'text-text-secondary',
       'outline-none transition-colors',
-      'focus:bg-white/[0.05] focus:text-white',
-      'data-[state=open]:bg-white/[0.05]',
+      'focus:bg-glass-hover focus:text-white',
+      'data-[state=open]:bg-glass-hover',
       inset && 'pl-8',
       className
     )}
@@ -45,8 +45,8 @@ const DropdownMenuSubContent = forwardRef<
     ref={ref}
     className={cn(
       'z-50 min-w-[8rem] overflow-hidden rounded-xl p-1',
-      'border border-white/[0.08]',
-      'bg-[hsl(228,12%,8%)]/95 backdrop-blur-xl',
+      'border border-glass-border-hover',
+      'bg-bg-elevated/95 backdrop-blur-xl',
       'shadow-xl',
       className
     )}
@@ -69,8 +69,8 @@ const DropdownMenuContent = forwardRef<
       <motion.div
         className={cn(
           'z-50 min-w-[12rem] overflow-hidden rounded-xl p-1',
-          'border border-white/[0.08]',
-          'bg-[hsl(228,12%,8%)]/95 backdrop-blur-xl',
+          'border border-glass-border-hover',
+          'bg-bg-elevated/95 backdrop-blur-xl',
           'shadow-2xl',
           className
         )}
@@ -97,12 +97,12 @@ const DropdownMenuItem = forwardRef<
       'outline-none transition-colors',
       destructive
         ? [
-            'text-[hsl(0,72%,60%)]',
-            'focus:bg-[hsl(0,72%,51%,0.1)] focus:text-[hsl(0,72%,65%)]',
+            'text-error',
+            'focus:bg-error-bg focus:text-error',
           ]
         : [
-            'text-[hsl(228,10%,70%)]',
-            'focus:bg-white/[0.05] focus:text-white',
+            'text-text-secondary',
+            'focus:bg-glass-hover focus:text-white',
           ],
       'data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
       inset && 'pl-8',
@@ -121,9 +121,9 @@ const DropdownMenuCheckboxItem = forwardRef<
     ref={ref}
     className={cn(
       'relative flex cursor-default select-none items-center rounded-lg py-2 pl-8 pr-3 text-sm',
-      'text-[hsl(228,10%,70%)]',
+      'text-text-secondary',
       'outline-none transition-colors',
-      'focus:bg-white/[0.05] focus:text-white',
+      'focus:bg-glass-hover focus:text-white',
       'data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
       className
     )}
@@ -132,7 +132,7 @@ const DropdownMenuCheckboxItem = forwardRef<
   >
     <span className="absolute left-2 flex h-4 w-4 items-center justify-center">
       <DropdownMenuPrimitive.ItemIndicator>
-        <Check className="h-4 w-4 text-[hsl(187,100%,50%)]" />
+        <Check className="h-4 w-4 text-accent" />
       </DropdownMenuPrimitive.ItemIndicator>
     </span>
     {children}
@@ -148,9 +148,9 @@ const DropdownMenuRadioItem = forwardRef<
     ref={ref}
     className={cn(
       'relative flex cursor-default select-none items-center rounded-lg py-2 pl-8 pr-3 text-sm',
-      'text-[hsl(228,10%,70%)]',
+      'text-text-secondary',
       'outline-none transition-colors',
-      'focus:bg-white/[0.05] focus:text-white',
+      'focus:bg-glass-hover focus:text-white',
       'data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
       className
     )}
@@ -158,7 +158,7 @@ const DropdownMenuRadioItem = forwardRef<
   >
     <span className="absolute left-2 flex h-4 w-4 items-center justify-center">
       <DropdownMenuPrimitive.ItemIndicator>
-        <Circle className="h-2 w-2 fill-[hsl(187,100%,50%)]" />
+        <Circle className="h-2 w-2 fill-accent" />
       </DropdownMenuPrimitive.ItemIndicator>
     </span>
     {children}
@@ -175,7 +175,7 @@ const DropdownMenuLabel = forwardRef<
   <DropdownMenuPrimitive.Label
     ref={ref}
     className={cn(
-      'px-3 py-2 text-xs font-semibold text-[hsl(228,10%,50%)] uppercase tracking-wider',
+      'px-3 py-2 text-xs font-semibold text-text-muted uppercase tracking-wider',
       inset && 'pl-8',
       className
     )}
@@ -190,7 +190,7 @@ const DropdownMenuSeparator = forwardRef<
 >(({ className, ...props }, ref) => (
   <DropdownMenuPrimitive.Separator
     ref={ref}
-    className={cn('my-1 h-px bg-white/[0.06]', className)}
+    className={cn('my-1 h-px bg-glass-border', className)}
     {...props}
   />
 ));
@@ -202,7 +202,7 @@ const DropdownMenuShortcut = ({
 }: React.HTMLAttributes<HTMLSpanElement>) => (
   <span
     className={cn(
-      'ml-auto text-xs tracking-widest text-[hsl(228,10%,40%)]',
+      'ml-auto text-xs tracking-widest text-text-subtle',
       className
     )}
     {...props}
