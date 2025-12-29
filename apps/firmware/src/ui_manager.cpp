@@ -1,6 +1,10 @@
 #include "ui_manager.h"
 #include "controller_manager.h"
+#include "mqtt_manager.h"
 #include <stdarg.h>
+
+// External MQTT manager instance
+extern MqttManager mqttManager;
 
 // Global instance
 UIManager uiManager;
@@ -419,6 +423,33 @@ void UIManager::drawSettingsContent() {
     display.setCursor(valueX, y);
     const char* ctrlStates[] = {"Disconnected", "Scanning", "Connected", "Active"};
     display.print(ctrlStates[(int)controllerManager.getState()]);
+    y += lineHeight;
+
+    // MQTT Section
+    display.setFont(&FreeMonoBold12pt7b);
+    display.setCursor(labelX, y);
+    display.print("MQTT");
+    y += lineHeight;
+
+    display.setFont(&FreeMonoBold9pt7b);
+
+    display.setCursor(labelX + 20, y);
+    display.print("Broker:");
+    display.setCursor(valueX, y);
+    display.print(MQTT_BROKER);
+    y += lineHeight - 8;
+
+    display.setCursor(labelX + 20, y);
+    display.print("Port:");
+    display.setCursor(valueX, y);
+    display.printf("%d", MQTT_PORT);
+    y += lineHeight - 8;
+
+    display.setCursor(labelX + 20, y);
+    display.print("Status:");
+    display.setCursor(valueX, y);
+    const char* mqttStates[] = {"Disconnected", "Connecting", "Connected"};
+    display.print(mqttStates[(int)mqttManager.getState()]);
     y += lineHeight;
 
     // Device Section
