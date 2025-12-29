@@ -39,7 +39,8 @@ jobs:
             sleep 10
 
             echo "=== Health check ==="
-            if curl -sf http://localhost/api/v1/health > /dev/null; then
+            # Check API health directly via docker network (nginx redirects HTTP to HTTPS)
+            if docker exec paperhome-web wget -q -O - http://paperhome-api:3000/api/v1/health > /dev/null 2>&1; then
                 echo "Health check passed!"
             else
                 echo "Health check failed!"
