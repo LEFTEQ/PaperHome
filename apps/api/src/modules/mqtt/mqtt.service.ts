@@ -154,12 +154,26 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     const rooms = Array.isArray(data) ? data : [data];
 
     for (const room of rooms) {
+      // Handle both firmware format (id, name, anyOn) and legacy format (roomId, roomName, isOn)
+      const roomId = room.id || room.roomId;
+      const roomName = room.name || room.roomName;
+      const isOn = room.anyOn ?? room.allOn ?? room.isOn ?? false;
+      const brightness = room.brightness ?? 0;
+
+      // Skip if required fields are missing
+      if (!roomId || !roomName) {
+        this.logger.warn(
+          `Skipping Hue room with missing data: roomId=${roomId}, roomName=${roomName}`
+        );
+        continue;
+      }
+
       await this.hueService.saveState({
         deviceId,
-        roomId: room.roomId,
-        roomName: room.roomName,
-        isOn: room.isOn,
-        brightness: room.brightness,
+        roomId: String(roomId),
+        roomName: String(roomName),
+        isOn: Boolean(isOn),
+        brightness: Number(brightness),
       });
     }
 
@@ -171,10 +185,22 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     const rooms = Array.isArray(data) ? data : [data];
 
     for (const room of rooms) {
+      // Handle both firmware format (id, name) and legacy format (roomId, roomName)
+      const roomId = room.id || room.roomId;
+      const roomName = room.name || room.roomName;
+
+      // Skip if required fields are missing
+      if (!roomId || !roomName) {
+        this.logger.warn(
+          `Skipping Tado room with missing data: roomId=${roomId}, roomName=${roomName}`
+        );
+        continue;
+      }
+
       await this.tadoService.saveState({
         deviceId,
-        roomId: room.roomId,
-        roomName: room.roomName,
+        roomId: String(roomId),
+        roomName: String(roomName),
         currentTemp: room.currentTemp,
         targetTemp: room.targetTemp,
         humidity: room.humidity,
