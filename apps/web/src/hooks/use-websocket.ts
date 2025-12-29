@@ -44,7 +44,7 @@ export function useWebSocket(
 ): UseWebSocketReturn {
   const { autoConnect = true, onConnect, onDisconnect, onError } = options;
   const [isConnected, setIsConnected] = useState(false);
-  const [readyState, setReadyState] = useState(WebSocket.CLOSED);
+  const [readyState, setReadyState] = useState<number>(WebSocket.CLOSED);
   const wsRef = useRef(getWebSocket());
 
   // Connection status polling

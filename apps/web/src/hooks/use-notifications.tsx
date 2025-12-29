@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, createContext, useContext, type ReactNode } from 'react';
 import { useWebSocketMessage } from './use-websocket';
 import type { NotificationPayload } from '@/lib/websocket';
 
@@ -137,8 +137,6 @@ export function useNotifications(): UseNotificationsReturn {
 // ─────────────────────────────────────────────────────────────────────────────
 // NotificationContext - Optional context for global access
 // ─────────────────────────────────────────────────────────────────────────────
-
-import { createContext, useContext, type ReactNode } from 'react';
 
 const NotificationContext = createContext<UseNotificationsReturn | null>(null);
 

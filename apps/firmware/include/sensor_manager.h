@@ -148,6 +148,57 @@ public:
      */
     void setDataCallback(SensorDataCallback callback) { _dataCallback = callback; }
 
+    // -------------------------------------------------------------------------
+    // Calibration and Configuration
+    // -------------------------------------------------------------------------
+
+    /**
+     * Perform Forced Recalibration (FRC).
+     * Call this when sensor is exposed to known CO2 concentration (e.g., outdoor fresh air = 420 ppm).
+     * Sensor must have been running for at least 3 minutes with stable readings.
+     * @param targetCO2 Known CO2 concentration in ppm (typically 420 for fresh outdoor air)
+     * @return FRC correction value, or -1 on failure
+     */
+    int16_t performForcedRecalibration(int16_t targetCO2 = 420);
+
+    /**
+     * Set ambient pressure for compensation.
+     * CO2 readings are affected by pressure. Default is 101300 Pa (sea level).
+     * Call this with local atmospheric pressure for accurate readings.
+     * @param pressurePa Pressure in Pascals (e.g., 101300 for sea level, ~95000 for ~500m altitude)
+     * @return true if successful
+     */
+    bool setPressureCompensation(uint16_t pressurePa);
+
+    /**
+     * Perform sensor self-test.
+     * @return true if sensor is healthy, false if malfunction detected
+     */
+    bool performSelfTest();
+
+    /**
+     * Reset FRC and ASC calibration history to factory defaults.
+     * Use with caution - sensor will need recalibration.
+     * @return true if successful
+     */
+    bool performFactoryReset();
+
+    /**
+     * Check if sensor needs calibration (based on reading reasonableness).
+     * Returns true if readings seem unreasonable (e.g., sustained >5000 ppm).
+     */
+    bool needsCalibration() const { return _needsCalibration; }
+
+    /**
+     * Get last FRC correction value (0 if never calibrated).
+     */
+    int16_t getLastFrcCorrection() const { return _lastFrcCorrection; }
+
+    /**
+     * Check if FRC has been performed.
+     */
+    bool isCalibrated() const { return _isCalibrated; }
+
     /**
      * Get state as human-readable string.
      */
@@ -172,6 +223,14 @@ private:
     unsigned long _lastSampleTime;
     unsigned long _initTime;
     uint16_t _errorCount;
+
+    // Calibration tracking
+    bool _isCalibrated;
+    bool _needsCalibration;
+    int16_t _lastFrcCorrection;
+    uint16_t _highCo2Count;          // Count of consecutive high readings
+    static const uint16_t HIGH_CO2_THRESHOLD = 5000;  // ppm
+    static const uint16_t HIGH_CO2_COUNT_LIMIT = 30;  // ~30 minutes of sustained high readings
 
     SensorStateCallback _stateCallback;
     SensorDataCallback _dataCallback;

@@ -9,6 +9,10 @@ SensorManager::SensorManager()
     , _lastSampleTime(0)
     , _initTime(0)
     , _errorCount(0)
+    , _isCalibrated(false)
+    , _needsCalibration(false)
+    , _lastFrcCorrection(0)
+    , _highCo2Count(0)
     , _stateCallback(nullptr)
     , _dataCallback(nullptr) {
     memset(&_currentSample, 0, sizeof(_currentSample));
@@ -46,6 +50,30 @@ bool SensorManager::init() {
 
     logf("STCC4 found! Product ID: 0x%08X, Serial: %llu", productId, serialNumber);
 
+    // Run self-test to verify sensor health
+    uint16_t testResult = 0;
+    error = _sensor.performSelfTest(testResult);
+    if (error) {
+        logf("Self-test command failed, error: %u", error);
+    } else if (testResult != 0) {
+        logf("Self-test FAILED, result: 0x%04X - sensor may be malfunctioning", testResult);
+        setState(SensorConnectionState::ERROR, "Self-test failed");
+        return false;
+    } else {
+        log("Self-test passed");
+    }
+
+    // Perform conditioning (recommended after power-off >3 hours)
+    log("Performing sensor conditioning...");
+    error = _sensor.performConditioning();
+    if (error) {
+        logf("Conditioning failed, error: %u (continuing anyway)", error);
+    } else {
+        // Wait for conditioning + settling time
+        delay(2000);
+        log("Conditioning complete");
+    }
+
     // Start continuous measurement
     error = _sensor.startContinuousMeasurement();
     if (error) {
@@ -57,9 +85,11 @@ bool SensorManager::init() {
     _initTime = millis();
     _lastSampleTime = 0;  // Force immediate first read after warmup
     _errorCount = 0;
+    _highCo2Count = 0;
 
     setState(SensorConnectionState::WARMING_UP, "Sensor warming up");
     log("Sensor initialized, entering warmup period");
+    log("NOTE: For accurate readings, perform FRC calibration in fresh outdoor air (420 ppm)");
 
     return true;
 }
@@ -125,10 +155,30 @@ bool SensorManager::readSensor() {
         return false;
     }
 
+    // Check sensor status (bit 2 = testing mode)
+    if (status != 0) {
+        logf("Sensor status: 0x%04X", status);
+    }
+
     // Validate CO2 reading (should be in reasonable range)
-    if (co2Raw < 400 || co2Raw > 10000) {
-        logf("CO2 reading out of range: %d", co2Raw);
-        // Still accept the reading but log the warning
+    if (co2Raw < 400) {
+        logf("CO2 reading below minimum: %d ppm (sensor may need calibration)", co2Raw);
+    } else if (co2Raw > 10000) {
+        logf("CO2 reading extremely high: %d ppm (likely sensor error or needs calibration)", co2Raw);
+    }
+
+    // Track sustained high readings - may indicate calibration needed
+    if (co2Raw >= HIGH_CO2_THRESHOLD) {
+        _highCo2Count++;
+        if (_highCo2Count >= HIGH_CO2_COUNT_LIMIT && !_needsCalibration) {
+            _needsCalibration = true;
+            log("WARNING: Sustained high CO2 readings detected - sensor may need FRC calibration");
+        }
+    } else {
+        // Reset counter when we see a normal reading
+        if (_highCo2Count > 0) {
+            _highCo2Count = 0;
+        }
     }
 
     // Store in current sample
@@ -246,6 +296,158 @@ const char* SensorManager::metricToUnit(SensorMetric metric) {
         case SensorMetric::HUMIDITY:    return "%";
         default:                        return "";
     }
+}
+
+// =============================================================================
+// Calibration Methods
+// =============================================================================
+
+int16_t SensorManager::performForcedRecalibration(int16_t targetCO2) {
+    if (_state != SensorConnectionState::ACTIVE && _state != SensorConnectionState::WARMING_UP) {
+        log("Cannot calibrate - sensor not operational");
+        return -1;
+    }
+
+    logf("Performing Forced Recalibration with target CO2: %d ppm", targetCO2);
+    log("Ensure sensor is exposed to known CO2 concentration (e.g., outdoor fresh air)");
+
+    // Stop continuous measurement first
+    uint16_t error = _sensor.stopContinuousMeasurement();
+    if (error) {
+        logf("Failed to stop measurement for FRC, error: %u", error);
+        return -1;
+    }
+
+    // Wait for measurement to complete
+    delay(1500);
+
+    // Perform FRC
+    int16_t frcCorrection = 0;
+    error = _sensor.performForcedRecalibration(targetCO2, frcCorrection);
+
+    if (error) {
+        logf("FRC command failed, error: %u", error);
+        // Restart measurement
+        _sensor.startContinuousMeasurement();
+        return -1;
+    }
+
+    if (frcCorrection == (int16_t)0xFFFF) {
+        log("FRC FAILED - conditions may not be suitable");
+        log("Ensure: 1) Sensor ran for 3+ minutes, 2) Readings were stable, 3) Known CO2 concentration");
+        // Restart measurement
+        _sensor.startContinuousMeasurement();
+        return -1;
+    }
+
+    _lastFrcCorrection = frcCorrection;
+    _isCalibrated = true;
+    _needsCalibration = false;
+    _highCo2Count = 0;
+
+    logf("FRC SUCCESS! Correction value: %d", frcCorrection);
+
+    // Restart continuous measurement
+    error = _sensor.startContinuousMeasurement();
+    if (error) {
+        logf("Failed to restart measurement after FRC, error: %u", error);
+    }
+
+    return frcCorrection;
+}
+
+bool SensorManager::setPressureCompensation(uint16_t pressurePa) {
+    logf("Setting pressure compensation: %u Pa", pressurePa);
+
+    uint16_t error = _sensor.setPressureCompensation(pressurePa);
+    if (error) {
+        logf("Failed to set pressure compensation, error: %u", error);
+        return false;
+    }
+
+    log("Pressure compensation set successfully");
+    return true;
+}
+
+bool SensorManager::performSelfTest() {
+    log("Running sensor self-test...");
+
+    // Need to stop measurement first
+    bool wasRunning = (_state == SensorConnectionState::ACTIVE ||
+                       _state == SensorConnectionState::WARMING_UP);
+
+    if (wasRunning) {
+        _sensor.stopContinuousMeasurement();
+        delay(1500);
+    }
+
+    uint16_t testResult = 0;
+    uint16_t error = _sensor.performSelfTest(testResult);
+
+    if (error) {
+        logf("Self-test command failed, error: %u", error);
+        if (wasRunning) {
+            _sensor.startContinuousMeasurement();
+        }
+        return false;
+    }
+
+    if (wasRunning) {
+        _sensor.startContinuousMeasurement();
+    }
+
+    if (testResult != 0) {
+        logf("Self-test FAILED! Result: 0x%04X", testResult);
+        return false;
+    }
+
+    log("Self-test PASSED");
+    return true;
+}
+
+bool SensorManager::performFactoryReset() {
+    log("Performing factory reset - this will clear FRC and ASC history!");
+
+    // Need to stop measurement first
+    bool wasRunning = (_state == SensorConnectionState::ACTIVE ||
+                       _state == SensorConnectionState::WARMING_UP);
+
+    if (wasRunning) {
+        _sensor.stopContinuousMeasurement();
+        delay(1500);
+    }
+
+    uint16_t resetResult = 0;
+    uint16_t error = _sensor.performFactoryReset(resetResult);
+
+    if (error) {
+        logf("Factory reset command failed, error: %u", error);
+        if (wasRunning) {
+            _sensor.startContinuousMeasurement();
+        }
+        return false;
+    }
+
+    if (resetResult != 0) {
+        logf("Factory reset FAILED! Result: 0x%04X", resetResult);
+        if (wasRunning) {
+            _sensor.startContinuousMeasurement();
+        }
+        return false;
+    }
+
+    _isCalibrated = false;
+    _lastFrcCorrection = 0;
+    _needsCalibration = false;
+    _highCo2Count = 0;
+
+    log("Factory reset complete - sensor will need FRC recalibration");
+
+    if (wasRunning) {
+        _sensor.startContinuousMeasurement();
+    }
+
+    return true;
 }
 
 void SensorManager::log(const char* message) {
