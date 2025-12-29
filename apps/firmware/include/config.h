@@ -80,6 +80,27 @@
 #define HUE_NVS_KEY_USERNAME    "username"
 
 // -----------------------------------------------------------------------------
+// MQTT Configuration
+// -----------------------------------------------------------------------------
+#define MQTT_BROKER             "paperhome.lovinka.com"
+#define MQTT_PORT               1884            // External port mapped to mosquitto
+#define MQTT_USERNAME           "paperhome-device"
+#define MQTT_PASSWORD           ""              // Set your device password
+#define MQTT_TELEMETRY_INTERVAL_MS  60000       // Publish telemetry every 60s
+#define MQTT_HUE_STATE_INTERVAL_MS  10000       // Publish Hue state every 10s
+#define MQTT_TADO_STATE_INTERVAL_MS 60000       // Publish Tado state every 60s
+
+// -----------------------------------------------------------------------------
+// HomeKit Configuration
+// -----------------------------------------------------------------------------
+#define HOMEKIT_DEVICE_NAME     "PaperHome Sensor"
+#define HOMEKIT_SETUP_CODE      "111-22-333"    // Pairing code shown in Apple Home
+#define HOMEKIT_MANUFACTURER    "PaperHome"
+#define HOMEKIT_MODEL           "ESP32-S3 Sensor Hub"
+#define HOMEKIT_SERIAL          "PH-001"
+#define HOMEKIT_FIRMWARE_REV    "1.0.0"
+
+// -----------------------------------------------------------------------------
 // Tado X Configuration
 // -----------------------------------------------------------------------------
 #define TADO_CLIENT_ID          "1bb50063-6b0c-4d11-bd99-387f4a91cc46"
@@ -137,6 +158,8 @@
 #define DEBUG_SENSOR        true
 #define DEBUG_POWER         true
 #define DEBUG_TADO          true
+#define DEBUG_MQTT          true
+#define DEBUG_HOMEKIT       true
 #define SERIAL_BAUD         115200
 
 #endif // CONFIG_H

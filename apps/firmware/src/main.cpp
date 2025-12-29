@@ -8,6 +8,7 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
+#include <ArduinoJson.h>
 #include "config.h"
 #include "display_manager.h"
 #include "hue_manager.h"
@@ -16,6 +17,8 @@
 #include "sensor_manager.h"
 #include "power_manager.h"
 #include "tado_manager.h"
+#include "mqtt_manager.h"
+#include "homekit_manager.h"
 
 // Track states for display updates
 HueState lastHueState = HueState::DISCONNECTED;
@@ -44,6 +47,14 @@ const int MAIN_WINDOW_COUNT = 3;
 
 // Tado sensor sync timing
 unsigned long lastTadoSync = 0;
+
+// MQTT Manager instance
+MqttManager mqttManager;
+
+// MQTT publishing timing
+unsigned long lastMqttTelemetry = 0;
+unsigned long lastMqttHueState = 0;
+unsigned long lastMqttTadoState = 0;
 
 // Forward declarations
 void updateDisplay();
@@ -570,6 +581,63 @@ void onTadoRoomsUpdate(const std::vector<TadoRoom>& rooms) {
     }
 }
 
+// Callback for MQTT state changes
+void onMqttStateChange(MqttState state) {
+    const char* stateNames[] = {"DISCONNECTED", "CONNECTING", "CONNECTED"};
+    Serial.printf("[Main] MQTT state: %s\n", stateNames[(int)state]);
+}
+
+// Callback for MQTT commands from server
+void onMqttCommand(const MqttCommand& command) {
+    Serial.printf("[Main] MQTT command received: type=%d, id=%s\n",
+                  (int)command.type, command.commandId.c_str());
+
+    bool success = false;
+    const char* errorMessage = nullptr;
+
+    switch (command.type) {
+        case MqttCommandType::HUE_SET_ROOM:
+            // Parse payload and execute Hue command
+            // TODO: Implement Hue command execution
+            success = true;
+            break;
+
+        case MqttCommandType::TADO_SET_TEMP:
+            // Parse payload and execute Tado command
+            // TODO: Implement Tado command execution
+            success = true;
+            break;
+
+        case MqttCommandType::DEVICE_REBOOT:
+            Serial.println("[Main] Reboot command received");
+            mqttManager.publishCommandAck(command.commandId.c_str(), true);
+            delay(1000);
+            ESP.restart();
+            break;
+
+        case MqttCommandType::DEVICE_OTA_UPDATE:
+            // TODO: Implement OTA update
+            errorMessage = "OTA not implemented";
+            break;
+
+        default:
+            errorMessage = "Unknown command type";
+            break;
+    }
+
+    mqttManager.publishCommandAck(command.commandId.c_str(), success, errorMessage);
+}
+
+// Helper to get device ID (MAC address without colons)
+String getDeviceId() {
+    uint8_t mac[6];
+    WiFi.macAddress(mac);
+    char macStr[13];
+    snprintf(macStr, sizeof(macStr), "%02X%02X%02X%02X%02X%02X",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    return String(macStr);
+}
+
 void connectToWiFi() {
     Serial.printf("[Main] Connecting to WiFi: %s\n", WIFI_SSID);
 
@@ -684,11 +752,24 @@ void setup() {
     tadoManager.setRoomsCallback(onTadoRoomsUpdate);
     tadoManager.init();
 
+    // Initialize MQTT Manager
+    Serial.println("[Main] Initializing MQTT Manager...");
+    String deviceId = getDeviceId();
+    mqttManager.setStateCallback(onMqttStateChange);
+    mqttManager.setCommandCallback(onMqttCommand);
+    mqttManager.begin(deviceId.c_str(), MQTT_BROKER, MQTT_PORT,
+                      MQTT_USERNAME, strlen(MQTT_PASSWORD) > 0 ? MQTT_PASSWORD : nullptr);
+
+    // Initialize HomeKit Manager
+    Serial.println("[Main] Initializing HomeKit Manager...");
+    homekitManager.begin(HOMEKIT_DEVICE_NAME, HOMEKIT_SETUP_CODE);
+
     // Update display based on Hue state
     updateDisplay();
 
     Serial.println("[Main] Setup complete!");
     Serial.println("[Main] Press Xbox button on controller to pair");
+    Serial.printf("[Main] HomeKit pairing code: %s\n", HOMEKIT_SETUP_CODE);
     Serial.println();
 }
 
@@ -708,8 +789,81 @@ void loop() {
     // Update Tado Manager (handles auth polling, token refresh, room polling)
     tadoManager.update();
 
-    // Sync Tado with sensor periodically
+    // Update MQTT Manager (handles connection and message processing)
+    mqttManager.update();
+
+    // Update HomeKit Manager (handles pairing and value updates)
+    homekitManager.update();
+
+    // Update HomeKit with sensor values
+    if (sensorManager.isOperational()) {
+        homekitManager.updateTemperature(sensorManager.getTemperature());
+        homekitManager.updateHumidity(sensorManager.getHumidity());
+        homekitManager.updateCO2(sensorManager.getCO2());
+    }
+
+    // Publish telemetry to MQTT periodically
     unsigned long now = millis();
+    if (mqttManager.isConnected() && sensorManager.isOperational()) {
+        if (now - lastMqttTelemetry >= MQTT_TELEMETRY_INTERVAL_MS) {
+            lastMqttTelemetry = now;
+            mqttManager.publishTelemetry(
+                sensorManager.getCO2(),
+                sensorManager.getTemperature(),
+                sensorManager.getHumidity(),
+                powerManager.getBatteryPercent(),
+                powerManager.isCharging()
+            );
+        }
+    }
+
+    // Publish Hue state to MQTT periodically
+    if (mqttManager.isConnected() && hueManager.getState() == HueState::CONNECTED) {
+        if (now - lastMqttHueState >= MQTT_HUE_STATE_INTERVAL_MS) {
+            lastMqttHueState = now;
+            // Serialize Hue rooms to JSON
+            const auto& rooms = hueManager.getRooms();
+            JsonDocument doc;
+            JsonArray arr = doc.to<JsonArray>();
+            for (const auto& room : rooms) {
+                JsonObject obj = arr.add<JsonObject>();
+                obj["id"] = room.id;
+                obj["name"] = room.name;
+                obj["anyOn"] = room.anyOn;
+                obj["allOn"] = room.allOn;
+                obj["brightness"] = room.brightness;
+            }
+            String json;
+            serializeJson(doc, json);
+            mqttManager.publishHueState(json.c_str());
+        }
+    }
+
+    // Publish Tado state to MQTT periodically
+    if (mqttManager.isConnected() && tadoManager.isAuthenticated()) {
+        if (now - lastMqttTadoState >= MQTT_TADO_STATE_INTERVAL_MS) {
+            lastMqttTadoState = now;
+            // Serialize Tado rooms to JSON
+            const auto& rooms = tadoManager.getRooms();
+            JsonDocument doc;
+            JsonArray arr = doc.to<JsonArray>();
+            for (const auto& room : rooms) {
+                JsonObject obj = arr.add<JsonObject>();
+                obj["id"] = room.id;
+                obj["name"] = room.name;
+                obj["currentTemp"] = room.currentTemp;
+                obj["targetTemp"] = room.targetTemp;
+                obj["humidity"] = room.humidity;
+                obj["heatingPower"] = room.heatingPower;
+                obj["manualOverride"] = room.manualOverride;
+            }
+            String json;
+            serializeJson(doc, json);
+            mqttManager.publishTadoState(json.c_str());
+        }
+    }
+
+    // Sync Tado with sensor periodically
     if (tadoManager.isAuthenticated() && sensorManager.isOperational()) {
         if (now - lastTadoSync >= TADO_SYNC_INTERVAL_MS) {
             lastTadoSync = now;
