@@ -5,8 +5,14 @@ static HS_TemperatureSensor* tempSensor = nullptr;
 static HS_HumiditySensor* humiditySensor = nullptr;
 static HS_CarbonDioxideSensor* co2Sensor = nullptr;
 
+// Static callback for HomeSpan pairing status
+static void homekitPairCallback(boolean isPaired) {
+    homekitManager.onPairStatusChange(isPaired);
+}
+
 HomekitManager::HomekitManager()
     : _state(HomekitState::NOT_PAIRED),
+      _isPaired(false),
       _temperature(20.0),
       _humidity(50.0),
       _co2(400.0),
@@ -30,6 +36,9 @@ void HomekitManager::begin(const char* deviceName, const char* setupCode) {
     homeSpan.setLogLevel(1);  // Set log level (0=none, 1=errors, 2=all)
     homeSpan.setStatusPin(0);  // No status LED (we use e-paper display)
     homeSpan.setControlPin(0);  // No control button (we use Xbox controller)
+
+    // Set up pairing callback
+    homeSpan.setPairCallback(homekitPairCallback);
 
     // Parse setup code for HomeSpan (XXX-XX-XXX format)
     // HomeSpan expects the code without dashes as a number
@@ -91,17 +100,16 @@ void HomekitManager::begin(const char* deviceName, const char* setupCode) {
 void HomekitManager::update() {
     // HomeSpan poll - handles all HomeKit communication
     homeSpan.poll();
+}
 
-    // Update state based on HomeSpan status
-    if (homeSpan.isPaired()) {
-        if (_state != HomekitState::PAIRED && _state != HomekitState::CONNECTED) {
-            _state = HomekitState::PAIRED;
-            Serial.println("[HomeKit] Device is paired");
-        }
+void HomekitManager::onPairStatusChange(boolean paired) {
+    _isPaired = paired;
+    if (paired) {
+        _state = HomekitState::PAIRED;
+        Serial.println("[HomeKit] Device is now paired");
     } else {
-        if (_state != HomekitState::NOT_PAIRED) {
-            _state = HomekitState::NOT_PAIRED;
-        }
+        _state = HomekitState::NOT_PAIRED;
+        Serial.println("[HomeKit] Device unpaired");
     }
 }
 
@@ -124,10 +132,6 @@ void HomekitManager::updateCO2(float ppm) {
     if (co2Sensor) {
         co2Sensor->updateCO2(ppm);
     }
-}
-
-bool HomekitManager::isPaired() const {
-    return homeSpan.isPaired();
 }
 
 // Global instance

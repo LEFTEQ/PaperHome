@@ -34,14 +34,18 @@ public:
     void updateCO2(float ppm);
 
     // Get pairing status
-    bool isPaired() const;
+    bool isPaired() const { return _isPaired; }
     HomekitState getState() const { return _state; }
 
     // Get setup code for pairing (shown on display during setup)
     const char* getSetupCode() const { return _setupCode; }
 
+    // Called by HomeSpan pair callback
+    void onPairStatusChange(boolean paired);
+
 private:
     HomekitState _state;
+    bool _isPaired;
     char _setupCode[12];
 
     // Sensor value storage

@@ -2,6 +2,7 @@
 #define MQTT_MANAGER_H
 
 #include <Arduino.h>
+#include <WiFi.h>
 #include <WiFiClient.h>
 #include <PubSubClient.h>
 #include <functional>
@@ -47,7 +48,7 @@ public:
     // Connection management
     void connect();
     void disconnect();
-    bool isConnected() const;
+    bool isConnected();
     MqttState getState() const { return _state; }
 
     // Publish telemetry data

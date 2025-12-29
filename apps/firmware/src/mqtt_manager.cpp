@@ -126,7 +126,7 @@ void MqttManager::disconnect() {
     setState(MqttState::DISCONNECTED);
 }
 
-bool MqttManager::isConnected() const {
+bool MqttManager::isConnected() {
     return _mqttClient.connected();
 }
 

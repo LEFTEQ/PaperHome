@@ -853,8 +853,7 @@ void loop() {
                 obj["name"] = room.name;
                 obj["currentTemp"] = room.currentTemp;
                 obj["targetTemp"] = room.targetTemp;
-                obj["humidity"] = room.humidity;
-                obj["heatingPower"] = room.heatingPower;
+                obj["heating"] = room.heating;
                 obj["manualOverride"] = room.manualOverride;
             }
             String json;
