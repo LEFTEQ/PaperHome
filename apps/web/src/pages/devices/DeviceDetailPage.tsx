@@ -25,8 +25,12 @@ import { cn } from '@/lib/utils';
 import {
   useDevice,
   useHueRooms,
+  useHueToggle,
+  useHueBrightness,
   useTadoRooms,
+  useTadoSetTemperature,
   useTelemetryAggregates,
+  useLatestTelemetry,
   useRealtimeUpdates,
 } from '@/hooks';
 
@@ -85,6 +89,11 @@ export function DeviceDetailPage() {
   // Enable real-time updates
   useRealtimeUpdates();
 
+  // Mutations
+  const hueToggleMutation = useHueToggle();
+  const hueBrightnessMutation = useHueBrightness();
+  const tadoTempMutation = useTadoSetTemperature();
+
   // Fetch device data
   const {
     data: device,
@@ -92,6 +101,9 @@ export function DeviceDetailPage() {
     error: deviceError,
     refetch: refetchDevice,
   } = useDevice(id);
+
+  // Real-time telemetry from WebSocket
+  const { data: latestTelemetry } = useLatestTelemetry();
 
   // Fetch Hue/Tado rooms
   const { data: hueRoomsData, isLoading: hueLoading } = useHueRooms(
@@ -137,29 +149,47 @@ export function DeviceDetailPage() {
     [aggregates]
   );
 
-  // Get latest values from aggregates (last item)
+  // Get latest values - prefer real-time WebSocket data over aggregates
+  const realtimeData = latestTelemetry?.find(
+    (t) => t.deviceId === device?.deviceId
+  );
   const latestAggregate = aggregates?.[aggregates.length - 1];
-  const co2 = latestAggregate?.avgCo2 ?? null;
-  const temperature = latestAggregate?.avgTemperature ?? null;
-  const humidity = latestAggregate?.avgHumidity ?? null;
-  const battery = latestAggregate?.avgBattery ?? null;
+
+  // Use real-time values when available, fall back to aggregates
+  const co2 = realtimeData?.co2 ?? latestAggregate?.avgCo2 ?? null;
+  const temperature = realtimeData?.temperature ?? latestAggregate?.avgTemperature ?? null;
+  const humidity = realtimeData?.humidity ?? latestAggregate?.avgHumidity ?? null;
+  const battery = realtimeData?.battery ?? latestAggregate?.avgBattery ?? null;
 
   const isLoading = deviceLoading;
 
   // Handlers
   const handleHueToggle = (roomId: string, isOn: boolean) => {
-    console.log(`Toggle room ${roomId} to ${isOn}`);
-    // TODO: Implement command sending in Phase 7
+    if (!device?.deviceId) return;
+    hueToggleMutation.mutate({
+      deviceId: device.deviceId,
+      roomId,
+      isOn,
+    });
   };
 
   const handleBrightnessChange = (roomId: string, brightness: number) => {
-    console.log(`Set room ${roomId} brightness to ${brightness}`);
-    // TODO: Implement command sending in Phase 7
+    if (!device?.deviceId) return;
+    hueBrightnessMutation.mutate({
+      deviceId: device.deviceId,
+      roomId,
+      brightness,
+      isOn: true,
+    });
   };
 
   const handleTadoTargetChange = (roomId: string, target: number) => {
-    console.log(`Set room ${roomId} target to ${target}`);
-    // TODO: Implement command sending in Phase 7
+    if (!device?.deviceId) return;
+    tadoTempMutation.mutate({
+      deviceId: device.deviceId,
+      roomId,
+      temperature: target,
+    });
   };
 
   // Loading state

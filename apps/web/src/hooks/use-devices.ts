@@ -148,6 +148,47 @@ export function useHueRooms(deviceId: string | undefined) {
   });
 }
 
+export function useHueToggle() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      deviceId,
+      roomId,
+      isOn,
+    }: {
+      deviceId: string;
+      roomId: string;
+      isOn: boolean;
+    }) => hueApi.toggleRoom(deviceId, roomId, isOn),
+    onSuccess: (_, { deviceId }) => {
+      // Optimistic update will come via WebSocket, but invalidate to be safe
+      queryClient.invalidateQueries({ queryKey: queryKeys.hueRooms(deviceId) });
+    },
+  });
+}
+
+export function useHueBrightness() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      deviceId,
+      roomId,
+      brightness,
+      isOn,
+    }: {
+      deviceId: string;
+      roomId: string;
+      brightness: number;
+      isOn?: boolean;
+    }) => hueApi.setBrightness(deviceId, roomId, brightness, isOn),
+    onSuccess: (_, { deviceId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.hueRooms(deviceId) });
+    },
+  });
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Tado Hooks
 // ─────────────────────────────────────────────────────────────────────────────
@@ -158,5 +199,25 @@ export function useTadoRooms(deviceId: string | undefined) {
     queryFn: () => tadoApi.getRooms(deviceId!),
     enabled: !!deviceId,
     staleTime: 10_000,
+  });
+}
+
+export function useTadoSetTemperature() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      deviceId,
+      roomId,
+      temperature,
+    }: {
+      deviceId: string;
+      roomId: string;
+      temperature: number;
+    }) => tadoApi.setTemperature(deviceId, roomId, temperature),
+    onSuccess: (_, { deviceId }) => {
+      // Optimistic update will come via WebSocket, but invalidate to be safe
+      queryClient.invalidateQueries({ queryKey: queryKeys.tadoRooms(deviceId) });
+    },
   });
 }

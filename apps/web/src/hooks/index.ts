@@ -37,7 +37,10 @@ export {
   useTelemetryHistory,
   useTelemetryAggregates,
   useHueRooms,
+  useHueToggle,
+  useHueBrightness,
   useTadoRooms,
+  useTadoSetTemperature,
   queryKeys,
 } from './use-devices';
 

@@ -257,6 +257,22 @@ export const hueApi = {
     const response = await api.get<HueRoom[]>(`/hue/${deviceId}/rooms/history?${params}`);
     return response.data;
   },
+
+  toggleRoom: async (deviceId: string, roomId: string, isOn: boolean): Promise<void> => {
+    await api.post(`/hue/${deviceId}/rooms/${roomId}/toggle`, { isOn });
+  },
+
+  setBrightness: async (
+    deviceId: string,
+    roomId: string,
+    brightness: number,
+    isOn?: boolean
+  ): Promise<void> => {
+    await api.post(`/hue/${deviceId}/rooms/${roomId}/brightness`, {
+      brightness,
+      ...(isOn !== undefined && { isOn }),
+    });
+  },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -280,5 +296,13 @@ export const tadoApi = {
 
     const response = await api.get<TadoRoom[]>(`/tado/${deviceId}/rooms/history?${params}`);
     return response.data;
+  },
+
+  setTemperature: async (
+    deviceId: string,
+    roomId: string,
+    temperature: number
+  ): Promise<void> => {
+    await api.post(`/tado/${deviceId}/rooms/${roomId}/temperature`, { temperature });
   },
 };

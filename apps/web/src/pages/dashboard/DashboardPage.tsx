@@ -22,11 +22,14 @@ import { staggerContainer, fadeInUp } from '@/lib/animations';
 import { cn } from '@/lib/utils';
 import {
   useDevices,
-  useDevice,
   useClaimDevice,
   useHueRooms,
+  useHueToggle,
+  useHueBrightness,
   useTadoRooms,
+  useTadoSetTemperature,
   useTelemetryAggregates,
+  useLatestTelemetry,
   useRealtimeUpdates,
 } from '@/hooks';
 
@@ -108,8 +111,14 @@ export function DashboardPage() {
     refetch: refetchDevices,
   } = useDevices();
 
-  // Claim device mutation
+  // Mutations
   const claimMutation = useClaimDevice();
+  const hueToggleMutation = useHueToggle();
+  const hueBrightnessMutation = useHueBrightness();
+  const tadoTempMutation = useTadoSetTemperature();
+
+  // Real-time telemetry from WebSocket
+  const { data: latestTelemetry } = useLatestTelemetry();
 
   // Active device state - auto-select first device
   const [activeDeviceId, setActiveDeviceId] = useState<string | null>(null);
@@ -168,12 +177,17 @@ export function DashboardPage() {
   const tempData = useMemo(() => extractChartData(aggregates, 'temperature'), [aggregates]);
   const humidityData = useMemo(() => extractChartData(aggregates, 'humidity'), [aggregates]);
 
-  // Get latest values
+  // Get latest values - prefer real-time WebSocket data over aggregates
+  const realtimeData = latestTelemetry?.find(
+    (t) => t.deviceId === activeDevice?.deviceId
+  );
   const latestAggregate = aggregates?.[aggregates.length - 1];
-  const co2 = latestAggregate?.avgCo2 ?? null;
-  const temperature = latestAggregate?.avgTemperature ?? null;
-  const humidity = latestAggregate?.avgHumidity ?? null;
-  const battery = latestAggregate?.avgBattery ?? null;
+
+  // Use real-time values when available, fall back to aggregates
+  const co2 = realtimeData?.co2 ?? latestAggregate?.avgCo2 ?? null;
+  const temperature = realtimeData?.temperature ?? latestAggregate?.avgTemperature ?? null;
+  const humidity = realtimeData?.humidity ?? latestAggregate?.avgHumidity ?? null;
+  const battery = realtimeData?.battery ?? latestAggregate?.avgBattery ?? null;
 
   // Calculate stats for modal
   const co2Stats = useMemo(() => {
@@ -201,17 +215,33 @@ export function DashboardPage() {
     setModalOpen(true);
   };
 
-  // Handle Hue/Tado interactions (TODO: implement)
+  // Handle Hue/Tado interactions
   const handleHueToggle = (roomId: string, isOn: boolean) => {
-    console.log(`Toggle room ${roomId} to ${isOn}`);
+    if (!activeDevice?.deviceId) return;
+    hueToggleMutation.mutate({
+      deviceId: activeDevice.deviceId,
+      roomId,
+      isOn,
+    });
   };
 
   const handleBrightnessChange = (roomId: string, brightness: number) => {
-    console.log(`Set room ${roomId} brightness to ${brightness}`);
+    if (!activeDevice?.deviceId) return;
+    hueBrightnessMutation.mutate({
+      deviceId: activeDevice.deviceId,
+      roomId,
+      brightness,
+      isOn: true, // Turn on when adjusting brightness
+    });
   };
 
   const handleTadoTargetChange = (roomId: string, target: number) => {
-    console.log(`Set room ${roomId} target to ${target}`);
+    if (!activeDevice?.deviceId) return;
+    tadoTempMutation.mutate({
+      deviceId: activeDevice.deviceId,
+      roomId,
+      temperature: target,
+    });
   };
 
   // Loading state
