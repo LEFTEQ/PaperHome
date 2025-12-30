@@ -738,17 +738,113 @@ void onMqttCommand(const MqttCommand& command) {
     const char* errorMessage = nullptr;
 
     switch (command.type) {
-        case MqttCommandType::HUE_SET_ROOM:
-            // Parse payload and execute Hue command
-            // TODO: Implement Hue command execution
-            success = true;
-            break;
+        case MqttCommandType::HUE_SET_ROOM: {
+            // Parse payload: { "roomId": "...", "isOn": true/false, "brightness": 0-100 }
+            JsonDocument doc;
+            DeserializationError error = deserializeJson(doc, command.payload);
 
-        case MqttCommandType::TADO_SET_TEMP:
-            // Parse payload and execute Tado command
-            // TODO: Implement Tado command execution
-            success = true;
+            if (error) {
+                errorMessage = "Invalid JSON payload";
+                Serial.printf("[Main] Hue command parse error: %s\n", error.c_str());
+                break;
+            }
+
+            String roomId = doc["roomId"] | "";
+            if (roomId.isEmpty()) {
+                errorMessage = "Missing roomId";
+                break;
+            }
+
+            // Check if Hue is connected
+            if (!hueManager.isConnected()) {
+                errorMessage = "Hue bridge not connected";
+                break;
+            }
+
+            // Handle brightness if provided (0-100 from API, convert to 0-254 for Hue)
+            if (!doc["brightness"].isNull()) {
+                int brightness = doc["brightness"] | 0;
+                // Clamp and convert: 0-100 -> 0-254
+                brightness = constrain(brightness, 0, 100);
+                uint8_t hueBrightness = (uint8_t)map(brightness, 0, 100, 0, 254);
+
+                Serial.printf("[Main] Setting Hue room %s brightness to %d (hue: %d)\n",
+                              roomId.c_str(), brightness, hueBrightness);
+
+                // If brightness > 0, also turn on the light
+                if (hueBrightness > 0) {
+                    success = hueManager.setRoomBrightness(roomId, hueBrightness);
+                    if (success && !doc["isOn"].isNull() && doc["isOn"].as<bool>()) {
+                        // Brightness set already turns on, but ensure state is correct
+                        hueManager.setRoomState(roomId, true);
+                    }
+                } else {
+                    // Brightness 0 means turn off
+                    success = hueManager.setRoomState(roomId, false);
+                }
+            }
+            // Handle toggle if only isOn is provided
+            else if (!doc["isOn"].isNull()) {
+                bool isOn = doc["isOn"] | false;
+                Serial.printf("[Main] Setting Hue room %s state to %s\n",
+                              roomId.c_str(), isOn ? "ON" : "OFF");
+                success = hueManager.setRoomState(roomId, isOn);
+            } else {
+                errorMessage = "Missing isOn or brightness";
+            }
+
+            if (!success && !errorMessage) {
+                errorMessage = "Hue command failed";
+            }
             break;
+        }
+
+        case MqttCommandType::TADO_SET_TEMP: {
+            // Parse payload: { "roomId": "...", "temperature": 5-30 }
+            JsonDocument doc;
+            DeserializationError error = deserializeJson(doc, command.payload);
+
+            if (error) {
+                errorMessage = "Invalid JSON payload";
+                Serial.printf("[Main] Tado command parse error: %s\n", error.c_str());
+                break;
+            }
+
+            // Tado uses int roomId
+            int roomId = doc["roomId"] | -1;
+            if (roomId < 0) {
+                // Try parsing as string and converting
+                String roomIdStr = doc["roomId"] | "";
+                if (!roomIdStr.isEmpty()) {
+                    roomId = roomIdStr.toInt();
+                }
+                if (roomId <= 0) {
+                    errorMessage = "Missing or invalid roomId";
+                    break;
+                }
+            }
+
+            float temperature = doc["temperature"] | -1.0f;
+            if (temperature < 5 || temperature > 30) {
+                errorMessage = "Invalid temperature (must be 5-30)";
+                break;
+            }
+
+            // Check if Tado is connected
+            if (!tadoManager.isAuthenticated()) {
+                errorMessage = "Tado not authenticated";
+                break;
+            }
+
+            Serial.printf("[Main] Setting Tado room %d temperature to %.1f°C\n",
+                          roomId, temperature);
+            success = tadoManager.setRoomTemperature(roomId, temperature);
+
+            if (!success) {
+                errorMessage = "Tado command failed";
+            }
+            break;
+        }
 
         case MqttCommandType::DEVICE_REBOOT:
             Serial.println("[Main] Reboot command received");
