@@ -22,8 +22,8 @@ export class Device {
   @Column({ length: 100 })
   name: string;
 
-  @Column({ name: 'owner_id' })
-  ownerId: string;
+  @Column({ name: 'owner_id', nullable: true })
+  ownerId: string | null;
 
   @Column({ name: 'is_online', default: false })
   isOnline: boolean;

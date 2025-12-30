@@ -1,51 +1,40 @@
+import { useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Wind, Thermometer, Droplets, Plus } from 'lucide-react';
+import { Wind, Thermometer, Droplets, Plus, RefreshCw } from 'lucide-react';
 import { GlassCard } from '@/components/ui/glass-card';
 import { Button } from '@/components/ui/button';
 import { DevicesGrid, Device } from '@/components/widgets/device-summary-card';
-import { NoDevicesState } from '@/components/ui/empty-state';
 import { staggerContainer, fadeInUp } from '@/lib/animations';
 import { cn } from '@/lib/utils';
+import { useDevices, useLatestTelemetry, useRealtimeUpdates } from '@/hooks';
 
-// Mock data - will be replaced with API calls
-const mockDevices: Device[] = [
-  {
-    id: '1',
-    name: 'Living Room',
-    isOnline: true,
-    lastSeen: new Date(),
-    metrics: {
-      co2: 650,
-      temperature: 22.5,
-      humidity: 45,
-      battery: 85,
-    },
-    firmwareVersion: 'v1.2.0',
-  },
-  {
-    id: '2',
-    name: 'Bedroom',
-    isOnline: true,
-    lastSeen: new Date(),
-    metrics: {
-      co2: 520,
-      temperature: 20.8,
-      humidity: 52,
-      battery: 72,
-    },
-    firmwareVersion: 'v1.2.0',
-  },
-  {
-    id: '3',
-    name: 'Office',
-    isOnline: false,
-    lastSeen: new Date(Date.now() - 3600000),
-    metrics: {
-      battery: 15,
-    },
-    firmwareVersion: 'v1.1.0',
-  },
-];
+// Transform API data to Device interface for DevicesGrid
+function transformDevices(
+  devices: ReturnType<typeof useDevices>['data'],
+  telemetry: ReturnType<typeof useLatestTelemetry>['data']
+): Device[] {
+  if (!devices) return [];
+
+  return devices.map((device) => {
+    const deviceTelemetry = telemetry?.find((t) => t.deviceId === device.deviceId);
+
+    return {
+      id: device.id,
+      name: device.name,
+      isOnline: device.isOnline,
+      lastSeen: device.lastSeenAt ? new Date(device.lastSeenAt) : undefined,
+      metrics: deviceTelemetry
+        ? {
+            co2: deviceTelemetry.co2 ?? undefined,
+            temperature: deviceTelemetry.temperature ?? undefined,
+            humidity: deviceTelemetry.humidity ?? undefined,
+            battery: deviceTelemetry.battery ?? undefined,
+          }
+        : undefined,
+      firmwareVersion: device.firmwareVersion ?? undefined,
+    };
+  });
+}
 
 // Calculate averages from online devices
 function calculateAverages(devices: Device[]) {
@@ -79,9 +68,62 @@ function calculateAverages(devices: Device[]) {
 }
 
 export function DashboardPage() {
-  const onlineDevices = mockDevices.filter((d) => d.isOnline).length;
-  const totalDevices = mockDevices.length;
-  const { avgCO2, avgTemp, avgHumidity } = calculateAverages(mockDevices);
+  // Enable real-time updates
+  const { isConnected } = useRealtimeUpdates();
+
+  // Fetch data
+  const {
+    data: devicesData,
+    isLoading: devicesLoading,
+    error: devicesError,
+    refetch: refetchDevices,
+  } = useDevices();
+  const {
+    data: telemetryData,
+    isLoading: telemetryLoading,
+    refetch: refetchTelemetry,
+  } = useLatestTelemetry();
+
+  // Transform data for display
+  const devices = useMemo(
+    () => transformDevices(devicesData, telemetryData),
+    [devicesData, telemetryData]
+  );
+
+  const onlineDevices = devices.filter((d) => d.isOnline).length;
+  const totalDevices = devices.length;
+  const { avgCO2, avgTemp, avgHumidity } = useMemo(
+    () => calculateAverages(devices),
+    [devices]
+  );
+
+  const isLoading = devicesLoading || telemetryLoading;
+
+  const handleRefresh = () => {
+    refetchDevices();
+    refetchTelemetry();
+  };
+
+  // Error state
+  if (devicesError) {
+    return (
+      <motion.div
+        variants={staggerContainer}
+        initial="initial"
+        animate="animate"
+        className="space-y-6"
+      >
+        <motion.div variants={fadeInUp}>
+          <GlassCard className="p-8 text-center">
+            <p className="text-error mb-4">Failed to load devices</p>
+            <Button variant="secondary" onClick={handleRefresh}>
+              Try Again
+            </Button>
+          </GlassCard>
+        </motion.div>
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div
@@ -98,15 +140,34 @@ export function DashboardPage() {
         <div>
           <h1 className="text-2xl font-bold text-white">Dashboard</h1>
           <p className="text-text-muted mt-1">
-            {onlineDevices} of {totalDevices} devices online
+            {isLoading ? (
+              'Loading...'
+            ) : (
+              <>
+                {onlineDevices} of {totalDevices} devices online
+                {isConnected && (
+                  <span className="ml-2 text-success text-xs">● Live</span>
+                )}
+              </>
+            )}
           </p>
         </div>
-        <Button
-          variant="primary"
-          leftIcon={<Plus className="h-4 w-4" />}
-        >
-          Add Device
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={handleRefresh}
+            disabled={isLoading}
+            aria-label="Refresh"
+          >
+            <RefreshCw
+              className={cn('h-4 w-4', isLoading && 'animate-spin')}
+            />
+          </Button>
+          <Button variant="primary" leftIcon={<Plus className="h-4 w-4" />}>
+            Add Device
+          </Button>
+        </div>
       </motion.div>
 
       {/* Summary cards */}
@@ -126,7 +187,9 @@ export function DashboardPage() {
           </div>
           <div>
             <p className="text-sm text-text-muted">Avg. CO₂</p>
-            {avgCO2 !== null ? (
+            {isLoading ? (
+              <div className="h-8 w-20 bg-glass-elevated rounded animate-pulse" />
+            ) : avgCO2 !== null ? (
               <p className="text-2xl font-bold font-mono text-white">
                 {avgCO2}
                 <span className="text-sm font-normal text-text-muted ml-1">
@@ -151,7 +214,9 @@ export function DashboardPage() {
           </div>
           <div>
             <p className="text-sm text-text-muted">Avg. Temperature</p>
-            {avgTemp !== null ? (
+            {isLoading ? (
+              <div className="h-8 w-20 bg-glass-elevated rounded animate-pulse" />
+            ) : avgTemp !== null ? (
               <p className="text-2xl font-bold font-mono text-white">
                 {avgTemp.toFixed(1)}
                 <span className="text-sm font-normal text-text-muted ml-1">
@@ -176,7 +241,9 @@ export function DashboardPage() {
           </div>
           <div>
             <p className="text-sm text-text-muted">Avg. Humidity</p>
-            {avgHumidity !== null ? (
+            {isLoading ? (
+              <div className="h-8 w-20 bg-glass-elevated rounded animate-pulse" />
+            ) : avgHumidity !== null ? (
               <p className="text-2xl font-bold font-mono text-white">
                 {avgHumidity}
                 <span className="text-sm font-normal text-text-muted ml-1">
@@ -193,7 +260,15 @@ export function DashboardPage() {
       {/* Devices section */}
       <motion.div variants={fadeInUp}>
         <h2 className="text-lg font-semibold text-white mb-4">Your Devices</h2>
-        <DevicesGrid devices={mockDevices} />
+        {isLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {[1, 2, 3].map((i) => (
+              <GlassCard key={i} className="h-40 animate-pulse" />
+            ))}
+          </div>
+        ) : (
+          <DevicesGrid devices={devices} />
+        )}
       </motion.div>
     </motion.div>
   );

@@ -19,11 +19,35 @@ enum class UIScreen {
     ROOM_CONTROL,       // Single room control view (after pressing A on a room)
     SETTINGS,           // Settings/info screen (general stats)
     SETTINGS_HOMEKIT,   // HomeKit pairing screen with QR code
+    SETTINGS_ACTIONS,   // Actions page (calibration, reset, etc.)
     SENSOR_DASHBOARD,   // Sensor overview with 3 panels
     SENSOR_DETAIL,      // Full chart for single metric
     TADO_AUTH,          // Tado OAuth login screen
     TADO_DASHBOARD,     // Tado rooms/thermostats view
     ERROR
+};
+
+// Settings action types
+enum class SettingsAction {
+    // Sensor actions
+    CALIBRATE_CO2,          // Perform FRC with 420 ppm
+    SET_ALTITUDE,           // Configure pressure compensation
+    SENSOR_SELF_TEST,       // Run sensor self-test
+    CLEAR_SENSOR_HISTORY,   // Clear ring buffer
+
+    // Display actions
+    FULL_REFRESH,           // Force complete e-ink refresh
+
+    // Connection actions
+    RESET_HUE,              // Clear Hue credentials
+    RESET_TADO,             // Clear Tado tokens
+    RESET_HOMEKIT,          // Unpair from Apple Home
+
+    // Device actions
+    REBOOT,                 // Restart device
+    FACTORY_RESET,          // Clear all settings
+
+    ACTION_COUNT            // Number of actions (for iteration)
 };
 
 // Tracks what changed for partial refresh decisions
@@ -113,10 +137,37 @@ public:
     void showSettingsHomeKit();
 
     /**
-     * Navigate between settings pages
+     * Show settings actions screen
+     */
+    void showSettingsActions();
+
+    /**
+     * Navigate between settings pages (3 pages: Info, HomeKit, Actions)
      * @param direction -1 for previous page, +1 for next page
      */
     void navigateSettingsPage(int direction);
+
+    /**
+     * Navigate action selection on actions page
+     * @param direction -1 for previous, +1 for next
+     */
+    void navigateAction(int direction);
+
+    /**
+     * Execute currently selected action
+     * @return true if action was executed, false if cancelled/failed
+     */
+    bool executeSelectedAction();
+
+    /**
+     * Get currently selected action
+     */
+    SettingsAction getSelectedAction() const { return _selectedAction; }
+
+    /**
+     * Check if an action is currently executing
+     */
+    bool isActionExecuting() const { return _actionExecuting; }
 
     /**
      * Go back from settings to dashboard
@@ -318,6 +369,12 @@ private:
     TadoAuthInfo _tadoAuthInfo;
     unsigned long _lastTadoUpdateTime;
 
+    // Settings actions screen state
+    SettingsAction _selectedAction;
+    bool _actionExecuting;
+    String _actionResultMessage;
+    bool _actionSuccess;
+
     void calculateTileDimensions();
 
     void drawStatusBar(bool wifiConnected, const String& bridgeIP);
@@ -338,6 +395,11 @@ private:
     // Settings screen helpers
     void drawSettingsContent();
     void drawSettingsHomeKitContent();
+    void drawSettingsActionsContent();
+    void drawActionItem(int y, SettingsAction action, bool isSelected);
+    const char* getActionName(SettingsAction action);
+    const char* getActionDescription(SettingsAction action);
+    const char* getActionCategory(SettingsAction action);
 
     // Sensor screen helpers
     void drawSensorDashboardContent();

@@ -24,10 +24,25 @@ export class DevicesController {
   constructor(private readonly devicesService: DevicesService) {}
 
   @Get()
-  @ApiOperation({ summary: 'List all devices for current user' })
+  @ApiOperation({ summary: 'List all devices for current user (owned + unclaimed)' })
   @ApiResponse({ status: 200, description: 'List of devices' })
   async findAll(@CurrentUser() user: any) {
-    return this.devicesService.findAllByOwner(user.id);
+    return this.devicesService.findAllForUser(user.id);
+  }
+
+  @Get('unclaimed')
+  @ApiOperation({ summary: 'List all unclaimed devices' })
+  @ApiResponse({ status: 200, description: 'List of unclaimed devices' })
+  async findUnclaimed() {
+    return this.devicesService.findAllUnclaimed();
+  }
+
+  @Post(':id/claim')
+  @ApiOperation({ summary: 'Claim an unclaimed device' })
+  @ApiResponse({ status: 200, description: 'Device claimed' })
+  @ApiResponse({ status: 404, description: 'Unclaimed device not found' })
+  async claim(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.devicesService.claimDevice(user.id, id);
   }
 
   @Post()

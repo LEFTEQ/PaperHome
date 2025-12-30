@@ -13,6 +13,7 @@ import { TelemetryService } from '../telemetry/telemetry.service';
 import { HueService } from '../hue/hue.service';
 import { TadoService } from '../tado/tado.service';
 import { CommandsService } from '../commands/commands.service';
+import { RealtimeGateway } from '../websocket/websocket.gateway';
 import { Command } from '../../entities/command.entity';
 import {
   SUBSCRIPTION_PATTERNS,
@@ -34,7 +35,8 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     private hueService: HueService,
     private tadoService: TadoService,
     @Inject(forwardRef(() => CommandsService))
-    private commandsService: CommandsService
+    private commandsService: CommandsService,
+    private realtimeGateway: RealtimeGateway
   ) {}
 
   async onModuleInit() {
@@ -129,6 +131,9 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async handleTelemetry(deviceId: string, data: any) {
+    // Auto-register device if it doesn't exist
+    await this.devicesService.findOrCreateUnclaimed(deviceId);
+
     await this.telemetryService.create({
       deviceId,
       co2: data.co2,
@@ -140,12 +145,35 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     // Update device online status
     await this.devicesService.updateStatus(deviceId, true);
 
+    // Broadcast to device owners via WebSocket
+    const ownerIds = await this.devicesService.getOwnersByDeviceId(deviceId);
+    this.realtimeGateway.broadcastTelemetry(deviceId, ownerIds, {
+      co2: data.co2,
+      temperature: data.temperature,
+      humidity: data.humidity,
+      battery: data.battery,
+    });
+
     this.logger.debug(`Telemetry received from ${deviceId}`);
   }
 
   private async handleStatus(deviceId: string, data: any) {
-    const isOnline = data.status === 'online';
+    // Auto-register device if it doesn't exist
+    await this.devicesService.findOrCreateUnclaimed(deviceId);
+
+    // Firmware sends { online: true/false }, not { status: 'online' }
+    const isOnline = data.online === true;
     await this.devicesService.updateStatus(deviceId, isOnline);
+
+    // Update firmware version if provided
+    if (data.firmwareVersion) {
+      await this.devicesService.updateFirmwareVersion(deviceId, data.firmwareVersion);
+    }
+
+    // Broadcast to device owners via WebSocket
+    const ownerIds = await this.devicesService.getOwnersByDeviceId(deviceId);
+    this.realtimeGateway.broadcastDeviceStatus(deviceId, ownerIds, isOnline);
+
     this.logger.log(`Device ${deviceId} is ${isOnline ? 'online' : 'offline'}`);
   }
 
@@ -176,6 +204,16 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
         brightness: Number(brightness),
       });
     }
+
+    // Broadcast to device owners via WebSocket
+    const ownerIds = await this.devicesService.getOwnersByDeviceId(deviceId);
+    const huePayload = rooms.map((room) => ({
+      roomId: String(room.id || room.roomId),
+      roomName: String(room.name || room.roomName),
+      isOn: Boolean(room.anyOn ?? room.allOn ?? room.isOn ?? false),
+      brightness: Number(room.brightness ?? 0),
+    }));
+    this.realtimeGateway.broadcastHueState(deviceId, ownerIds, huePayload);
 
     this.logger.debug(`Hue state received from ${deviceId}: ${rooms.length} rooms`);
   }
@@ -208,6 +246,18 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
         heatingPower: room.heatingPower,
       });
     }
+
+    // Broadcast to device owners via WebSocket
+    const ownerIds = await this.devicesService.getOwnersByDeviceId(deviceId);
+    const tadoPayload = rooms.map((room) => ({
+      roomId: String(room.id || room.roomId),
+      roomName: String(room.name || room.roomName),
+      currentTemp: room.currentTemp,
+      targetTemp: room.targetTemp,
+      humidity: room.humidity,
+      isHeating: room.isHeating,
+    }));
+    this.realtimeGateway.broadcastTadoState(deviceId, ownerIds, tadoPayload);
 
     this.logger.debug(`Tado state received from ${deviceId}: ${rooms.length} rooms`);
   }

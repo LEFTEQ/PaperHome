@@ -7,7 +7,10 @@ import type { NotificationPayload } from '@/lib/websocket';
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface Notification extends NotificationPayload {
-  // Extended with client-side properties
+  /** Whether the notification has been read */
+  read: boolean;
+  /** When the notification was created */
+  createdAt: string;
 }
 
 export interface UseNotificationsReturn {
@@ -24,7 +27,7 @@ export interface UseNotificationsReturn {
   /** Clear all notifications */
   clearAll: () => void;
   /** Add a local notification (for testing/UI) */
-  addNotification: (notification: Omit<Notification, 'id' | 'createdAt'>) => void;
+  addNotification: (notification: Omit<Notification, 'id' | 'createdAt' | 'read'>) => void;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -70,7 +73,12 @@ export function useNotifications(): UseNotificationsReturn {
 
   // Listen for WebSocket notifications
   useWebSocketMessage<NotificationPayload>('notification', (message) => {
-    const notification = message.payload;
+    const payload = message.payload;
+    const notification: Notification = {
+      ...payload,
+      read: false,
+      createdAt: message.timestamp,
+    };
 
     setNotifications((prev) => {
       // Avoid duplicates
@@ -111,11 +119,12 @@ export function useNotifications(): UseNotificationsReturn {
   }, []);
 
   const addNotification = useCallback(
-    (notification: Omit<Notification, 'id' | 'createdAt'>) => {
+    (notification: Omit<Notification, 'id' | 'createdAt' | 'read'>) => {
       const newNotification: Notification = {
         ...notification,
         id: crypto.randomUUID(),
         createdAt: new Date().toISOString(),
+        read: false,
       };
 
       setNotifications((prev) => [newNotification, ...prev]);

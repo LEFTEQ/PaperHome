@@ -1,9 +1,9 @@
 /**
  * WebSocket Client for PaperHome real-time updates
- *
- * Handles connection management, reconnection, and message routing
+ * Uses Socket.io to connect to NestJS WebSocket gateway
  */
 
+import { io, Socket } from 'socket.io-client';
 import { getAccessToken } from './api/client';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -38,30 +38,27 @@ export interface StatusPayload {
 }
 
 export interface HueRoomPayload {
-  id: string;
-  name: string;
+  roomId: string;
+  roomName: string;
   isOn: boolean;
   brightness: number;
 }
 
 export interface TadoRoomPayload {
-  id: string;
-  name: string;
+  roomId: string;
+  roomName: string;
   currentTemp: number;
   targetTemp: number;
-  humidity: number;
+  humidity?: number;
   isHeating: boolean;
-  mode: 'heat' | 'cool' | 'auto' | 'off';
 }
 
 export interface NotificationPayload {
   id: string;
   type: 'info' | 'warning' | 'error' | 'success';
   title: string;
-  message: string;
+  message?: string;
   deviceId?: string;
-  read: boolean;
-  createdAt: string;
 }
 
 export type MessageHandler<T = unknown> = (message: WebSocketMessage<T>) => void;
@@ -71,20 +68,16 @@ export type MessageHandler<T = unknown> = (message: WebSocketMessage<T>) => void
 // ─────────────────────────────────────────────────────────────────────────────
 
 export class PaperHomeWebSocket {
-  private ws: WebSocket | null = null;
+  private socket: Socket | null = null;
   private url: string;
-  private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
-  private reconnectDelay = 1000;
   private handlers: Map<WebSocketMessageType | '*', Set<MessageHandler>> =
     new Map();
   private connectionPromise: Promise<void> | null = null;
-  private isConnecting = false;
 
   constructor(url?: string) {
-    // Default to current host with ws/wss protocol
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    this.url = url || `${protocol}//${window.location.host}/ws`;
+    // Default to current host
+    const baseUrl = url || import.meta.env.VITE_API_URL || window.location.origin;
+    this.url = baseUrl;
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -92,47 +85,58 @@ export class PaperHomeWebSocket {
   // ─────────────────────────────────────────────────────────────────────────
 
   async connect(): Promise<void> {
-    if (this.ws?.readyState === WebSocket.OPEN) {
+    if (this.socket?.connected) {
       return;
     }
 
-    if (this.isConnecting && this.connectionPromise) {
+    if (this.connectionPromise) {
       return this.connectionPromise;
     }
 
-    this.isConnecting = true;
     this.connectionPromise = new Promise((resolve, reject) => {
-      try {
-        const token = getAccessToken();
-        const urlWithAuth = token ? `${this.url}?token=${token}` : this.url;
+      const token = getAccessToken();
 
-        this.ws = new WebSocket(urlWithAuth);
+      this.socket = io(this.url, {
+        path: '/ws',
+        transports: ['websocket', 'polling'],
+        query: { token: token || '' },
+        autoConnect: true,
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+      });
 
-        this.ws.onopen = () => {
-          console.log('[WebSocket] Connected');
-          this.reconnectAttempts = 0;
-          this.isConnecting = false;
-          resolve();
-        };
+      this.socket.on('connect', () => {
+        console.log('[WebSocket] Connected');
+        this.connectionPromise = null;
+        resolve();
+      });
 
-        this.ws.onclose = (event) => {
-          console.log('[WebSocket] Disconnected:', event.code, event.reason);
-          this.isConnecting = false;
-          this.handleReconnect();
-        };
+      this.socket.on('disconnect', (reason) => {
+        console.log('[WebSocket] Disconnected:', reason);
+      });
 
-        this.ws.onerror = (error) => {
-          console.error('[WebSocket] Error:', error);
-          this.isConnecting = false;
-          reject(error);
-        };
-
-        this.ws.onmessage = (event) => {
-          this.handleMessage(event.data);
-        };
-      } catch (error) {
-        this.isConnecting = false;
+      this.socket.on('connect_error', (error) => {
+        console.error('[WebSocket] Connection error:', error);
+        this.connectionPromise = null;
         reject(error);
+      });
+
+      // Set up message handlers for each event type
+      const eventTypes: WebSocketMessageType[] = [
+        'telemetry',
+        'status',
+        'hue_state',
+        'tado_state',
+        'notification',
+        'command_ack',
+      ];
+
+      for (const eventType of eventTypes) {
+        this.socket.on(eventType, (data: WebSocketMessage) => {
+          this.handleMessage(eventType, data);
+        });
       }
     });
 
@@ -140,54 +144,28 @@ export class PaperHomeWebSocket {
   }
 
   disconnect(): void {
-    if (this.ws) {
-      this.ws.close(1000, 'Client disconnect');
-      this.ws = null;
+    if (this.socket) {
+      this.socket.disconnect();
+      this.socket = null;
     }
-    this.reconnectAttempts = this.maxReconnectAttempts; // Prevent reconnection
-  }
-
-  private handleReconnect(): void {
-    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.log('[WebSocket] Max reconnect attempts reached');
-      return;
-    }
-
-    this.reconnectAttempts++;
-    const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
-
-    console.log(
-      `[WebSocket] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`
-    );
-
-    setTimeout(() => {
-      this.connect().catch((error) => {
-        console.error('[WebSocket] Reconnection failed:', error);
-      });
-    }, delay);
+    this.connectionPromise = null;
   }
 
   // ─────────────────────────────────────────────────────────────────────────
   // Message Handling
   // ─────────────────────────────────────────────────────────────────────────
 
-  private handleMessage(data: string): void {
-    try {
-      const message: WebSocketMessage = JSON.parse(data);
+  private handleMessage(eventType: WebSocketMessageType, message: WebSocketMessage): void {
+    // Call type-specific handlers
+    const typeHandlers = this.handlers.get(eventType);
+    if (typeHandlers) {
+      typeHandlers.forEach((handler) => handler(message));
+    }
 
-      // Call type-specific handlers
-      const typeHandlers = this.handlers.get(message.type);
-      if (typeHandlers) {
-        typeHandlers.forEach((handler) => handler(message));
-      }
-
-      // Call wildcard handlers
-      const wildcardHandlers = this.handlers.get('*');
-      if (wildcardHandlers) {
-        wildcardHandlers.forEach((handler) => handler(message));
-      }
-    } catch (error) {
-      console.error('[WebSocket] Failed to parse message:', error);
+    // Call wildcard handlers
+    const wildcardHandlers = this.handlers.get('*');
+    if (wildcardHandlers) {
+      wildcardHandlers.forEach((handler) => handler(message));
     }
   }
 
@@ -220,18 +198,15 @@ export class PaperHomeWebSocket {
   // ─────────────────────────────────────────────────────────────────────────
 
   send(type: string, payload: unknown): void {
-    if (this.ws?.readyState !== WebSocket.OPEN) {
+    if (!this.socket?.connected) {
       console.warn('[WebSocket] Cannot send - not connected');
       return;
     }
 
-    const message = {
-      type,
+    this.socket.emit(type, {
       payload,
       timestamp: new Date().toISOString(),
-    };
-
-    this.ws.send(JSON.stringify(message));
+    });
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -239,11 +214,12 @@ export class PaperHomeWebSocket {
   // ─────────────────────────────────────────────────────────────────────────
 
   get isConnected(): boolean {
-    return this.ws?.readyState === WebSocket.OPEN;
+    return this.socket?.connected ?? false;
   }
 
   get readyState(): number {
-    return this.ws?.readyState ?? WebSocket.CLOSED;
+    if (!this.socket) return WebSocket.CLOSED;
+    return this.socket.connected ? WebSocket.OPEN : WebSocket.CLOSED;
   }
 }
 
@@ -255,8 +231,7 @@ let wsInstance: PaperHomeWebSocket | null = null;
 
 export function getWebSocket(): PaperHomeWebSocket {
   if (!wsInstance) {
-    // Use environment variable or default
-    const wsUrl = import.meta.env.VITE_WS_URL;
+    const wsUrl = import.meta.env.VITE_API_URL;
     wsInstance = new PaperHomeWebSocket(wsUrl);
   }
   return wsInstance;

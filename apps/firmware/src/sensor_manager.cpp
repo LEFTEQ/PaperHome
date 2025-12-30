@@ -356,10 +356,13 @@ int16_t SensorManager::performForcedRecalibration(int16_t targetCO2) {
     return frcCorrection;
 }
 
-bool SensorManager::setPressureCompensation(uint16_t pressurePa) {
-    logf("Setting pressure compensation: %u Pa", pressurePa);
+bool SensorManager::setPressureCompensation(uint16_t pressureRaw) {
+    // pressureRaw is the pressure in Pa divided by 2
+    // e.g., for 101300 Pa (sea level), pass 50650
+    // e.g., for 98500 Pa (~250m altitude), pass 49250
+    logf("Setting pressure compensation: %u (raw, ~%u Pa)", pressureRaw, pressureRaw * 2);
 
-    uint16_t error = _sensor.setPressureCompensation(pressurePa);
+    uint16_t error = _sensor.setPressureCompensationRaw(pressureRaw);
     if (error) {
         logf("Failed to set pressure compensation, error: %u", error);
         return false;

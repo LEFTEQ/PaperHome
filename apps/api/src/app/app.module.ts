@@ -12,6 +12,7 @@ import { CommandsModule } from '../modules/commands/commands.module';
 import { HueModule } from '../modules/hue/hue.module';
 import { TadoModule } from '../modules/tado/tado.module';
 import { MqttModule } from '../modules/mqtt/mqtt.module';
+import { WebSocketModule } from '../modules/websocket/websocket.module';
 import { JwtAuthGuard } from '../modules/auth/guards/jwt-auth.guard';
 
 @Module({
@@ -37,6 +38,7 @@ import { JwtAuthGuard } from '../modules/auth/guards/jwt-auth.guard';
     HueModule,
     TadoModule,
     MqttModule,
+    WebSocketModule,
   ],
   controllers: [AppController],
   providers: [

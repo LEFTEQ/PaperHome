@@ -2,14 +2,17 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, IsNull } from 'typeorm';
 import { Device } from '../../entities/device.entity';
 import { CreateDeviceDto, UpdateDeviceDto } from './dto';
 
 @Injectable()
 export class DevicesService {
+  private readonly logger = new Logger(DevicesService.name);
+
   constructor(
     @InjectRepository(Device)
     private deviceRepository: Repository<Device>
@@ -78,5 +81,79 @@ export class DevicesService {
         lastSeenAt: isOnline ? new Date() : undefined,
       }
     );
+  }
+
+  async updateFirmwareVersion(deviceId: string, firmwareVersion: string): Promise<void> {
+    await this.deviceRepository.update(
+      { deviceId },
+      { firmwareVersion }
+    );
+  }
+
+  /**
+   * Find or auto-create an unclaimed device when it first connects via MQTT
+   */
+  async findOrCreateUnclaimed(deviceId: string): Promise<Device> {
+    let device = await this.findByDeviceId(deviceId);
+
+    if (!device) {
+      // Auto-create unclaimed device with name based on last 4 chars of MAC
+      device = this.deviceRepository.create({
+        deviceId,
+        name: `Device ${deviceId.slice(-4)}`,
+        ownerId: null, // Unclaimed
+        isOnline: false,
+      });
+      device = await this.deviceRepository.save(device);
+      this.logger.log(`Auto-registered unclaimed device: ${deviceId}`);
+    }
+
+    return device;
+  }
+
+  /**
+   * Get all unclaimed devices (visible to all users)
+   */
+  async findAllUnclaimed(): Promise<Device[]> {
+    return this.deviceRepository.find({
+      where: { ownerId: IsNull() },
+      order: { lastSeenAt: 'DESC' },
+    });
+  }
+
+  /**
+   * Claim an unclaimed device for a user
+   */
+  async claimDevice(userId: string, id: string): Promise<Device> {
+    const device = await this.deviceRepository.findOne({
+      where: { id, ownerId: IsNull() },
+    });
+
+    if (!device) {
+      throw new NotFoundException('Unclaimed device not found');
+    }
+
+    device.ownerId = userId;
+    return this.deviceRepository.save(device);
+  }
+
+  /**
+   * Get owner IDs for a device (for WebSocket broadcasting)
+   */
+  async getOwnersByDeviceId(deviceId: string): Promise<string[]> {
+    const device = await this.findByDeviceId(deviceId);
+    return device?.ownerId ? [device.ownerId] : [];
+  }
+
+  /**
+   * Find all devices (both owned and unclaimed) for dashboard
+   * Returns user's owned devices + unclaimed devices
+   */
+  async findAllForUser(userId: string): Promise<Device[]> {
+    const [owned, unclaimed] = await Promise.all([
+      this.findAllByOwner(userId),
+      this.findAllUnclaimed(),
+    ]);
+    return [...owned, ...unclaimed];
   }
 }

@@ -307,7 +307,7 @@ void handleRoomControlInput(ControllerInput input, int16_t value) {
     }
 }
 
-// Handle input on Settings screen
+// Handle input on Settings screen (Info and HomeKit pages)
 void handleSettingsInput(ControllerInput input, int16_t value) {
     switch (input) {
         case ControllerInput::BUTTON_B:
@@ -330,6 +330,59 @@ void handleSettingsInput(ControllerInput input, int16_t value) {
             {
                 Serial.println("[Main] Settings: next page");
                 uiManager.navigateSettingsPage(1);
+            }
+            break;
+
+        default:
+            break;
+    }
+}
+
+// Handle input on Settings Actions screen
+void handleSettingsActionsInput(ControllerInput input, int16_t value) {
+    switch (input) {
+        case ControllerInput::BUTTON_B:
+        case ControllerInput::BUTTON_MENU:
+            {
+                // Go back to previous screen
+                Serial.println("[Main] Leaving settings actions");
+                uiManager.goBackFromSettings();
+            }
+            break;
+
+        case ControllerInput::NAV_UP:
+            {
+                Serial.println("[Main] Actions: previous action");
+                uiManager.navigateAction(-1);
+            }
+            break;
+
+        case ControllerInput::NAV_DOWN:
+            {
+                Serial.println("[Main] Actions: next action");
+                uiManager.navigateAction(1);
+            }
+            break;
+
+        case ControllerInput::NAV_LEFT:
+            {
+                Serial.println("[Main] Actions: previous page");
+                uiManager.navigateSettingsPage(-1);
+            }
+            break;
+
+        case ControllerInput::NAV_RIGHT:
+            {
+                // Actions is the last page, no next
+            }
+            break;
+
+        case ControllerInput::BUTTON_A:
+            {
+                // Execute selected action
+                Serial.println("[Main] Executing action");
+                controllerManager.vibrateLong();  // Feedback for action
+                uiManager.executeSelectedAction();
             }
             break;
 
@@ -374,6 +427,7 @@ MainWindow getCurrentMainWindow() {
         case UIScreen::ROOM_CONTROL:
         case UIScreen::SETTINGS:
         case UIScreen::SETTINGS_HOMEKIT:
+        case UIScreen::SETTINGS_ACTIONS:
             return MainWindow::HUE;
 
         case UIScreen::SENSOR_DASHBOARD:
@@ -550,6 +604,7 @@ void onControllerInput(ControllerInput input, int16_t value) {
             // Settings: navigate settings pages
             case UIScreen::SETTINGS:
             case UIScreen::SETTINGS_HOMEKIT:
+            case UIScreen::SETTINGS_ACTIONS:
                 uiManager.navigateSettingsPage(direction);
                 break;
 
@@ -572,6 +627,10 @@ void onControllerInput(ControllerInput input, int16_t value) {
         case UIScreen::SETTINGS:
         case UIScreen::SETTINGS_HOMEKIT:
             handleSettingsInput(input, value);
+            break;
+
+        case UIScreen::SETTINGS_ACTIONS:
+            handleSettingsActionsInput(input, value);
             break;
 
         case UIScreen::SENSOR_DASHBOARD:

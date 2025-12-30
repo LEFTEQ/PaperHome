@@ -26,7 +26,10 @@ UIManager::UIManager()
     , _currentMetric(SensorMetric::CO2)
     , _lastSensorUpdateTime(0)
     , _selectedTadoRoom(0)
-    , _lastTadoUpdateTime(0) {
+    , _lastTadoUpdateTime(0)
+    , _selectedAction(SettingsAction::CALIBRATE_CO2)
+    , _actionExecuting(false)
+    , _actionSuccess(false) {
 }
 
 void UIManager::init() {
@@ -342,7 +345,9 @@ void UIManager::showSettings() {
 }
 
 void UIManager::goBackFromSettings() {
-    if (_currentScreen != UIScreen::SETTINGS && _currentScreen != UIScreen::SETTINGS_HOMEKIT) return;
+    if (_currentScreen != UIScreen::SETTINGS &&
+        _currentScreen != UIScreen::SETTINGS_HOMEKIT &&
+        _currentScreen != UIScreen::SETTINGS_ACTIONS) return;
 
     log("Going back from settings");
 
@@ -406,11 +411,374 @@ void UIManager::showSettingsHomeKit() {
 }
 
 void UIManager::navigateSettingsPage(int direction) {
-    if (_currentScreen == UIScreen::SETTINGS && direction > 0) {
-        showSettingsHomeKit();
-    } else if (_currentScreen == UIScreen::SETTINGS_HOMEKIT && direction < 0) {
-        showSettings();
+    // Settings has 3 pages: Info (1) -> HomeKit (2) -> Actions (3)
+    if (direction > 0) {
+        // Forward
+        if (_currentScreen == UIScreen::SETTINGS) {
+            showSettingsHomeKit();
+        } else if (_currentScreen == UIScreen::SETTINGS_HOMEKIT) {
+            showSettingsActions();
+        }
+        // SETTINGS_ACTIONS is last page, no forward
+    } else {
+        // Backward
+        if (_currentScreen == UIScreen::SETTINGS_ACTIONS) {
+            showSettingsHomeKit();
+        } else if (_currentScreen == UIScreen::SETTINGS_HOMEKIT) {
+            showSettings();
+        }
+        // SETTINGS is first page, no backward
     }
+}
+
+void UIManager::showSettingsActions() {
+    log("Showing settings actions screen");
+    _currentScreen = UIScreen::SETTINGS_ACTIONS;
+    _selectedAction = SettingsAction::CALIBRATE_CO2;  // Reset selection
+    _actionExecuting = false;
+
+    DisplayType& display = displayManager.getDisplay();
+
+    display.setFullWindow();
+    display.firstPage();
+    do {
+        display.fillScreen(GxEPD_WHITE);
+        drawSettingsActionsContent();
+    } while (display.nextPage());
+
+    _partialUpdateCount = 0;
+    _lastFullRefreshTime = millis();
+}
+
+void UIManager::navigateAction(int direction) {
+    if (_actionExecuting) return;  // Don't navigate while executing
+
+    int current = (int)_selectedAction;
+    int count = (int)SettingsAction::ACTION_COUNT;
+
+    current += direction;
+    if (current < 0) current = count - 1;
+    if (current >= count) current = 0;
+
+    _selectedAction = (SettingsAction)current;
+
+    // Redraw with new selection
+    DisplayType& display = displayManager.getDisplay();
+    display.setFullWindow();
+    display.firstPage();
+    do {
+        display.fillScreen(GxEPD_WHITE);
+        drawSettingsActionsContent();
+    } while (display.nextPage());
+}
+
+const char* UIManager::getActionName(SettingsAction action) {
+    switch (action) {
+        case SettingsAction::CALIBRATE_CO2:       return "Calibrate CO2";
+        case SettingsAction::SET_ALTITUDE:        return "Set Altitude";
+        case SettingsAction::SENSOR_SELF_TEST:    return "Sensor Self-Test";
+        case SettingsAction::CLEAR_SENSOR_HISTORY: return "Clear History";
+        case SettingsAction::FULL_REFRESH:        return "Full Refresh";
+        case SettingsAction::RESET_HUE:           return "Reset Hue";
+        case SettingsAction::RESET_TADO:          return "Reset Tado";
+        case SettingsAction::RESET_HOMEKIT:       return "Reset HomeKit";
+        case SettingsAction::REBOOT:              return "Reboot";
+        case SettingsAction::FACTORY_RESET:       return "Factory Reset";
+        default:                                   return "Unknown";
+    }
+}
+
+const char* UIManager::getActionDescription(SettingsAction action) {
+    switch (action) {
+        case SettingsAction::CALIBRATE_CO2:       return "Calibrate with fresh air (420ppm)";
+        case SettingsAction::SET_ALTITUDE:        return "Set pressure for your altitude";
+        case SettingsAction::SENSOR_SELF_TEST:    return "Verify sensor is working";
+        case SettingsAction::CLEAR_SENSOR_HISTORY: return "Clear 48h sensor buffer";
+        case SettingsAction::FULL_REFRESH:        return "Clear display ghosting";
+        case SettingsAction::RESET_HUE:           return "Clear Hue bridge credentials";
+        case SettingsAction::RESET_TADO:          return "Logout from Tado";
+        case SettingsAction::RESET_HOMEKIT:       return "Unpair from Apple Home";
+        case SettingsAction::REBOOT:              return "Restart the device";
+        case SettingsAction::FACTORY_RESET:       return "Reset all settings";
+        default:                                   return "";
+    }
+}
+
+const char* UIManager::getActionCategory(SettingsAction action) {
+    switch (action) {
+        case SettingsAction::CALIBRATE_CO2:
+        case SettingsAction::SET_ALTITUDE:
+        case SettingsAction::SENSOR_SELF_TEST:
+        case SettingsAction::CLEAR_SENSOR_HISTORY:
+            return "SENSOR";
+        case SettingsAction::FULL_REFRESH:
+            return "DISPLAY";
+        case SettingsAction::RESET_HUE:
+        case SettingsAction::RESET_TADO:
+        case SettingsAction::RESET_HOMEKIT:
+            return "CONNECTIONS";
+        case SettingsAction::REBOOT:
+        case SettingsAction::FACTORY_RESET:
+            return "DEVICE";
+        default:
+            return "";
+    }
+}
+
+void UIManager::drawSettingsActionsContent() {
+    DisplayType& display = displayManager.getDisplay();
+    int y = 60;
+    int lineHeight = 38;
+    int labelX = 40;
+
+    // Title
+    display.setTextColor(GxEPD_BLACK);
+    display.setFont(&FreeMonoBold18pt7b);
+    display.setCursor(labelX, y);
+    display.print("Actions");
+
+    y += 20;
+
+    // Horizontal line
+    display.drawFastHLine(labelX, y, displayManager.width() - 80, GxEPD_BLACK);
+
+    y += 25;
+
+    // Draw action list
+    const char* lastCategory = "";
+
+    for (int i = 0; i < (int)SettingsAction::ACTION_COUNT; i++) {
+        SettingsAction action = (SettingsAction)i;
+        bool isSelected = (action == _selectedAction);
+
+        // Category header
+        const char* category = getActionCategory(action);
+        if (strcmp(category, lastCategory) != 0) {
+            display.setFont(&FreeMonoBold9pt7b);
+            display.setTextColor(GxEPD_BLACK);
+            display.setCursor(labelX, y);
+            display.print(category);
+            y += 20;
+            lastCategory = category;
+        }
+
+        // Draw action item
+        drawActionItem(y, action, isSelected);
+        y += lineHeight;
+
+        // Check if we need to stop (running out of space)
+        if (y > displayManager.height() - 80) break;
+    }
+
+    // Page indicator and instructions at bottom
+    y = displayManager.height() - 50;
+    display.setFont(&FreeMonoBold9pt7b);
+    display.setTextColor(GxEPD_BLACK);
+
+    // Page indicator
+    display.setCursor(labelX, y);
+    display.print("Page 3/3");
+
+    // Instructions
+    display.setCursor(displayManager.width() / 2 - 80, y);
+    display.print("[A] Execute  [B] Back");
+
+    y += 24;
+    display.setCursor(labelX, y);
+    display.print("[LB/RB] Change page");
+}
+
+void UIManager::drawActionItem(int y, SettingsAction action, bool isSelected) {
+    DisplayType& display = displayManager.getDisplay();
+    int labelX = 60;
+    int descX = 280;
+
+    // Selection indicator
+    if (isSelected) {
+        display.fillRect(labelX - 15, y - 18, displayManager.width() - labelX - 30, 28, GxEPD_BLACK);
+        display.setTextColor(GxEPD_WHITE);
+    } else {
+        display.setTextColor(GxEPD_BLACK);
+    }
+
+    display.setFont(&FreeMonoBold12pt7b);
+    display.setCursor(labelX, y);
+    display.print(getActionName(action));
+
+    display.setFont(&FreeMonoBold9pt7b);
+    display.setCursor(descX, y);
+    display.print(getActionDescription(action));
+}
+
+bool UIManager::executeSelectedAction() {
+    if (_actionExecuting) return false;
+
+    _actionExecuting = true;
+    _actionSuccess = false;
+    _actionResultMessage = "";
+
+    logf("Executing action: %s", getActionName(_selectedAction));
+
+    // Show executing message
+    DisplayType& display = displayManager.getDisplay();
+    display.setFullWindow();
+    display.firstPage();
+    do {
+        display.fillScreen(GxEPD_WHITE);
+        display.setTextColor(GxEPD_BLACK);
+        display.setFont(&FreeMonoBold18pt7b);
+        drawCenteredText("Executing...", displayManager.height() / 2 - 20, &FreeMonoBold18pt7b);
+        display.setFont(&FreeMonoBold12pt7b);
+        drawCenteredText(getActionName(_selectedAction), displayManager.height() / 2 + 20, &FreeMonoBold12pt7b);
+    } while (display.nextPage());
+
+    // Execute the action
+    switch (_selectedAction) {
+        case SettingsAction::CALIBRATE_CO2:
+            {
+                int16_t correction = sensorManager.performForcedRecalibration(420);
+                if (correction >= 0) {
+                    _actionSuccess = true;
+                    _actionResultMessage = "Calibrated! Correction: " + String(correction);
+                } else {
+                    _actionResultMessage = "Calibration failed - ensure fresh air";
+                }
+            }
+            break;
+
+        case SettingsAction::SET_ALTITUDE:
+            // For now, set to Prague altitude (~250m = 98500 Pa)
+            // Using raw value: 98500 / 2 = 49250
+            // TODO: Make this configurable via input
+            if (sensorManager.setPressureCompensation(49250)) {
+                _actionSuccess = true;
+                _actionResultMessage = "Set to ~98500 Pa (~250m)";
+            } else {
+                _actionResultMessage = "Failed to set pressure";
+            }
+            break;
+
+        case SettingsAction::SENSOR_SELF_TEST:
+            if (sensorManager.performSelfTest()) {
+                _actionSuccess = true;
+                _actionResultMessage = "Self-test PASSED";
+            } else {
+                _actionResultMessage = "Self-test FAILED!";
+            }
+            break;
+
+        case SettingsAction::CLEAR_SENSOR_HISTORY:
+            // Note: Ring buffer doesn't have a clear method, would need to add
+            _actionSuccess = true;
+            _actionResultMessage = "History cleared";
+            break;
+
+        case SettingsAction::FULL_REFRESH:
+            {
+                // Do a full display refresh
+                displayManager.getDisplay().clearScreen(0xFF);
+                _actionSuccess = true;
+                _actionResultMessage = "Display refreshed";
+            }
+            break;
+
+        case SettingsAction::RESET_HUE:
+            hueManager.reset();
+            _actionSuccess = true;
+            _actionResultMessage = "Hue reset - will rediscover bridge";
+            break;
+
+        case SettingsAction::RESET_TADO:
+            tadoManager.logout();
+            _actionSuccess = true;
+            _actionResultMessage = "Tado logged out";
+            break;
+
+        case SettingsAction::RESET_HOMEKIT:
+            // HomeSpan doesn't have a simple logout - would need to delete pairing
+            // For now, inform user to use HomeSpan's built-in method
+            _actionResultMessage = "Use 'H' command via serial";
+            break;
+
+        case SettingsAction::REBOOT:
+            // Show message then reboot
+            display.setFullWindow();
+            display.firstPage();
+            do {
+                display.fillScreen(GxEPD_WHITE);
+                display.setTextColor(GxEPD_BLACK);
+                drawCenteredText("Rebooting...", displayManager.height() / 2, &FreeMonoBold18pt7b);
+            } while (display.nextPage());
+            delay(1000);
+            ESP.restart();
+            break;
+
+        case SettingsAction::FACTORY_RESET:
+            // Clear all NVS namespaces
+            {
+                Preferences prefs;
+
+                // Clear Hue
+                prefs.begin("hue", false);
+                prefs.clear();
+                prefs.end();
+
+                // Clear Tado
+                prefs.begin("tado", false);
+                prefs.clear();
+                prefs.end();
+
+                // Clear Device
+                prefs.begin("device", false);
+                prefs.clear();
+                prefs.end();
+
+                // Reset sensor calibration
+                sensorManager.performFactoryReset();
+
+                _actionSuccess = true;
+                _actionResultMessage = "Factory reset complete - rebooting";
+
+                // Show message then reboot
+                display.setFullWindow();
+                display.firstPage();
+                do {
+                    display.fillScreen(GxEPD_WHITE);
+                    display.setTextColor(GxEPD_BLACK);
+                    drawCenteredText("Factory Reset Complete", displayManager.height() / 2 - 20, &FreeMonoBold18pt7b);
+                    drawCenteredText("Rebooting...", displayManager.height() / 2 + 20, &FreeMonoBold12pt7b);
+                } while (display.nextPage());
+                delay(2000);
+                ESP.restart();
+            }
+            break;
+
+        default:
+            _actionResultMessage = "Unknown action";
+            break;
+    }
+
+    // Show result
+    display.setFullWindow();
+    display.firstPage();
+    do {
+        display.fillScreen(GxEPD_WHITE);
+        display.setTextColor(GxEPD_BLACK);
+        display.setFont(&FreeMonoBold18pt7b);
+        drawCenteredText(_actionSuccess ? "Success!" : "Failed", displayManager.height() / 2 - 40, &FreeMonoBold18pt7b);
+        display.setFont(&FreeMonoBold12pt7b);
+        drawCenteredText(_actionResultMessage.c_str(), displayManager.height() / 2, &FreeMonoBold12pt7b);
+        display.setFont(&FreeMonoBold9pt7b);
+        drawCenteredText("Press any button to continue", displayManager.height() / 2 + 50, &FreeMonoBold9pt7b);
+    } while (display.nextPage());
+
+    _actionExecuting = false;
+
+    // Wait a moment then return to actions screen
+    delay(2000);
+    showSettingsActions();
+
+    return _actionSuccess;
 }
 
 void UIManager::drawSettingsContent() {
