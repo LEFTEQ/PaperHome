@@ -419,9 +419,12 @@ void handleTadoAuthInput(ControllerInput input, int16_t value) {
 
         case ControllerInput::BUTTON_A:
             {
-                // Retry auth if expired
+                // Retry auth if expired, error, or disconnected
                 TadoState state = tadoManager.getState();
-                if (state == TadoState::ERROR || state == TadoState::DISCONNECTED) {
+                // Check if code expired while awaiting auth
+                bool codeExpired = (state == TadoState::AWAITING_AUTH &&
+                                    millis() > tadoManager.getAuthInfo().expiresAt);
+                if (state == TadoState::ERROR || state == TadoState::DISCONNECTED || codeExpired) {
                     Serial.println("[Main] Retrying Tado auth");
                     tadoManager.startAuth();
                 }

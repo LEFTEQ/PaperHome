@@ -92,6 +92,11 @@ void DisplayTaskManager::taskEntry(void* param) {
     syncStateFromShared();
     _renderedState = _currentState;
 
+    // CRITICAL: Render initial screen on startup
+    log("Rendering initial screen");
+    renderFullScreen();
+    _lastFullRefreshTime = millis();
+
     while (!_shouldStop) {
         taskLoop();
     }
@@ -135,6 +140,9 @@ void DisplayTaskManager::taskLoop() {
         _lastFullRefreshTime = millis();
         _partialRefreshCount = 0;
     }
+
+    // Yield to other tasks (prevents CPU hogging)
+    vTaskDelay(pdMS_TO_TICKS(1));
 }
 
 // =============================================================================
@@ -223,13 +231,15 @@ void DisplayTaskManager::processEvent(const InputEvent& event) {
         // =====================================================================
 
         case InputEventType::NAV_DASHBOARD_MOVE: {
-            // Grid navigation with wrap-around
+            // Grid navigation with wrap-around - keep lock for entire operation
             TaskManager::acquireStateLock();
             int oldIndex = TaskManager::sharedState.selectedIndex;
             int total = TaskManager::sharedState.hueRooms.size();
-            TaskManager::releaseStateLock();
 
-            if (total == 0) break;
+            if (total == 0) {
+                TaskManager::releaseStateLock();
+                break;
+            }
 
             int dx = event.dashboardMove.deltaX;
             int dy = event.dashboardMove.deltaY;
@@ -249,12 +259,13 @@ void DisplayTaskManager::processEvent(const InputEvent& event) {
             }
 
             if (newIndex != oldIndex) {
-                TaskManager::acquireStateLock();
                 TaskManager::sharedState.selectedIndex = newIndex;
                 TaskManager::releaseStateLock();
 
                 uiManager.updateTileSelection(oldIndex, newIndex);
                 _partialRefreshCount += 2;
+            } else {
+                TaskManager::releaseStateLock();
             }
             break;
         }
@@ -391,14 +402,51 @@ void DisplayTaskManager::processEvent(const InputEvent& event) {
         }
 
         // =====================================================================
-        // External State Updates
+        // External State Updates - Render based on current screen
         // =====================================================================
 
-        case InputEventType::HUE_STATE_UPDATED:
-        case InputEventType::TADO_STATE_UPDATED:
-        case InputEventType::SENSOR_DATA_UPDATED:
+        case InputEventType::HUE_STATE_UPDATED: {
+            // Hue data changed - re-render if on relevant screen
+            UIScreen screen = _currentState.currentScreen;
+            if (screen == UIScreen::DASHBOARD) {
+                // renderDiff() will handle partial tile updates
+            } else if (screen == UIScreen::ROOM_CONTROL) {
+                // Re-render room control with updated data
+                syncStateFromShared();
+                if (_currentState.selectedIndex < (int)_currentState.hueRooms.size()) {
+                    _currentState.activeRoom = _currentState.hueRooms[_currentState.selectedIndex];
+                    uiManager.showRoomControl(_currentState.activeRoom, _currentState.bridgeIP);
+                }
+            }
+            break;
+        }
+
+        case InputEventType::TADO_STATE_UPDATED: {
+            // Tado data changed - re-render if on Tado screen
+            UIScreen screen = _currentState.currentScreen;
+            if (screen == UIScreen::TADO_DASHBOARD) {
+                syncStateFromShared();
+                uiManager.showTadoDashboard();
+            }
+            break;
+        }
+
+        case InputEventType::SENSOR_DATA_UPDATED: {
+            // Sensor data changed - re-render if on sensor screen
+            UIScreen screen = _currentState.currentScreen;
+            if (screen == UIScreen::SENSOR_DASHBOARD) {
+                syncStateFromShared();
+                uiManager.showSensorDashboard();
+            } else if (screen == UIScreen::SENSOR_DETAIL) {
+                syncStateFromShared();
+                uiManager.showSensorDetail(_currentState.currentMetric);
+            }
+            // Status bar also shows sensor data, handled by renderDiff()
+            break;
+        }
+
         case InputEventType::STATUS_BAR_REFRESH:
-            // These are handled by renderDiff() after processing all events
+            // Handled by renderDiff() which checks statusBarChanged()
             break;
 
         // =====================================================================
@@ -413,7 +461,10 @@ void DisplayTaskManager::processEvent(const InputEvent& event) {
 
         case InputEventType::CONTROLLER_CONNECTED:
         case InputEventType::CONTROLLER_DISCONNECTED:
-            // Status bar will be updated by renderDiff()
+            // Force status bar refresh immediately
+            syncStateFromShared();
+            renderStatusBarOnly();
+            _partialRefreshCount++;
             break;
 
         default:
@@ -518,10 +569,15 @@ void DisplayTaskManager::syncStateFromShared() {
 // =============================================================================
 
 void DisplayTaskManager::renderDiff() {
-    // Check status bar
+    // Check status bar (applicable to all screens)
     if (statusBarChanged()) {
         renderStatusBarOnly();
         _partialRefreshCount++;
+    }
+
+    // Tile updates only relevant on Dashboard screen
+    if (_currentState.currentScreen != UIScreen::DASHBOARD) {
+        return;
     }
 
     // Check room tiles

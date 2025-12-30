@@ -2194,12 +2194,12 @@ void UIManager::drawTadoAuthContent(const TadoAuthInfo& authInfo) {
 
     // Generate QR code from the full verification URL
     QRCode qrcode;
-    uint8_t qrcodeData[qrcode_getBufferSize(6)];  // Version 6 for longer URLs
-    qrcode_initText(&qrcode, qrcodeData, 6, ECC_MEDIUM, authInfo.verifyUrl.c_str());
+    uint8_t qrcodeData[qrcode_getBufferSize(8)];  // Version 8 for longer URLs (~200 chars)
+    qrcode_initText(&qrcode, qrcodeData, 8, ECC_MEDIUM, authInfo.verifyUrl.c_str());
 
     // Draw QR code - centered
-    int qrSize = qrcode.size;
-    int scale = 4;  // 4px per module for reasonable size
+    int qrSize = qrcode.size;  // Version 8 = 49 modules
+    int scale = 4;  // 49 × 4 = 196px (scannable size)
     int qrPixelSize = qrSize * scale;
     int qrX = centerX - qrPixelSize / 2;
     int qrY = contentY + 50;
@@ -2217,8 +2217,26 @@ void UIManager::drawTadoAuthContent(const TadoAuthInfo& authInfo) {
         }
     }
 
-    // Instruction below QR
-    int textY = qrY + qrPixelSize + 30;
+    // Show URL in two rows below QR
+    int urlY = qrY + qrPixelSize + 20;
+    display.setFont(&FreeSans9pt7b);
+    display.setTextColor(GxEPD_BLACK);
+
+    // Split URL at the query string
+    // Typical: https://login.tado.com/device?user_code=ABCD-1234
+    int splitPos = authInfo.verifyUrl.indexOf('?');
+    if (splitPos > 0) {
+        String line1 = authInfo.verifyUrl.substring(0, splitPos);
+        String line2 = authInfo.verifyUrl.substring(splitPos);
+        drawCenteredText(line1.c_str(), urlY, &FreeSans9pt7b);
+        drawCenteredText(line2.c_str(), urlY + 16, &FreeSans9pt7b);
+    } else {
+        // Fallback: just show full URL
+        drawCenteredText(authInfo.verifyUrl.c_str(), urlY, &FreeSans9pt7b);
+    }
+
+    // Instruction below URL
+    int textY = urlY + 42;
     display.setFont(&FreeSansBold9pt7b);
     drawCenteredText("Scan with your phone camera", textY, &FreeSansBold9pt7b);
 
@@ -2274,7 +2292,7 @@ void UIManager::updateTadoAuth() {
 
     // Update the countdown timer with partial refresh
     // Calculate position based on new layout:
-    // QR code is ~164px (version 6, scale 4), then instructions, code, countdown
+    // QR code is ~196px (version 8, scale 4), URL text, instructions, code, countdown
     DisplayType& display = displayManager.getDisplay();
 
     // Status is near bottom, above nav bar
