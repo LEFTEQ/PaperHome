@@ -396,6 +396,7 @@ private:
     void drawSettingsContent();
     void drawSettingsHomeKitContent();
     void drawSettingsActionsContent();
+    void drawSettingsTabBar(int activePage);
     void drawActionItem(int y, SettingsAction action, bool isSelected);
     const char* getActionName(SettingsAction action);
     const char* getActionDescription(SettingsAction action);
@@ -403,6 +404,8 @@ private:
 
     // Sensor screen helpers
     void drawSensorDashboardContent();
+    void drawPriorityPanel(int x, int y, int width, int height,
+                           SensorMetric metric, bool isSelected, bool isLarge);
     void drawSensorRow(int x, int y, int width, int height,
                        SensorMetric metric, bool isSelected);
     void drawSensorPanel(int x, int y, int width, int height,
@@ -423,8 +426,8 @@ private:
     // Tado screen helpers
     void drawTadoAuthContent(const TadoAuthInfo& authInfo);
     void drawTadoDashboardContent();
-    void drawTadoRoomRow(int x, int y, int width, int height,
-                         const TadoRoom& room, bool isSelected);
+    void drawTadoRoomTile(int x, int y, int width, int height,
+                          const TadoRoom& room, bool isSelected);
 
     void log(const char* message);
     void logf(const char* format, ...);

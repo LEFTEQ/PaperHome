@@ -46,7 +46,8 @@ void UIManager::calculateTileDimensions() {
     _contentStartY = UI_STATUS_BAR_HEIGHT + UI_TILE_PADDING;
 
     int availableWidth = displayWidth - (UI_TILE_PADDING * (UI_TILE_COLS + 1));
-    int availableHeight = displayHeight - _contentStartY - (UI_TILE_PADDING * (UI_TILE_ROWS + 1));
+    // Account for status bar at top and navigation bar at bottom
+    int availableHeight = displayHeight - _contentStartY - UI_NAV_BAR_HEIGHT - (UI_TILE_PADDING * (UI_TILE_ROWS + 1));
 
     _tileWidth = availableWidth / UI_TILE_COLS;
     _tileHeight = availableHeight / UI_TILE_ROWS;
@@ -158,11 +159,18 @@ void UIManager::showDashboard(const std::vector<HueRoom>& rooms, const String& b
 
         // If no rooms, show message
         if (rooms.empty()) {
-            display.setFont(&FreeMonoBold12pt7b);
-            drawCenteredText("No rooms found", displayManager.height() / 2, &FreeMonoBold12pt7b);
-            display.setFont(&FreeMonoBold9pt7b);
-            drawCenteredText("Create rooms in the Hue app", displayManager.height() / 2 + 30, &FreeMonoBold9pt7b);
+            display.setFont(&FreeSansBold12pt7b);
+            drawCenteredText("No rooms found", displayManager.height() / 2, &FreeSansBold12pt7b);
+            display.setFont(&FreeSans9pt7b);
+            drawCenteredText("Create rooms in the Hue app", displayManager.height() / 2 + 30, &FreeSans9pt7b);
         }
+
+        // Navigation hints bar at bottom
+        int navY = displayManager.height() - UI_NAV_BAR_HEIGHT + 16;
+        display.drawFastHLine(0, displayManager.height() - UI_NAV_BAR_HEIGHT, displayManager.width(), GxEPD_BLACK);
+        display.setFont(&FreeSans9pt7b);
+        display.setTextColor(GxEPD_BLACK);
+        drawCenteredText("[A] Select  [Y] Sensors  [X] Tado  [Menu] Settings  [LB/RB] Switch", navY, &FreeSans9pt7b);
 
     } while (display.nextPage());
 
@@ -527,22 +535,15 @@ const char* UIManager::getActionCategory(SettingsAction action) {
 
 void UIManager::drawSettingsActionsContent() {
     DisplayType& display = displayManager.getDisplay();
-    int y = 60;
-    int lineHeight = 38;
-    int labelX = 40;
 
-    // Title
+    // Draw tab bar at top
+    drawSettingsTabBar(2);
+
+    int y = UI_STATUS_BAR_HEIGHT + 50;
+    int lineHeight = 32;
+    int labelX = 20;
+
     display.setTextColor(GxEPD_BLACK);
-    display.setFont(&FreeMonoBold18pt7b);
-    display.setCursor(labelX, y);
-    display.print("Actions");
-
-    y += 20;
-
-    // Horizontal line
-    display.drawFastHLine(labelX, y, displayManager.width() - 80, GxEPD_BLACK);
-
-    y += 25;
 
     // Draw action list
     const char* lastCategory = "";
@@ -554,11 +555,11 @@ void UIManager::drawSettingsActionsContent() {
         // Category header
         const char* category = getActionCategory(action);
         if (strcmp(category, lastCategory) != 0) {
-            display.setFont(&FreeMonoBold9pt7b);
+            display.setFont(&FreeSansBold9pt7b);
             display.setTextColor(GxEPD_BLACK);
             display.setCursor(labelX, y);
             display.print(category);
-            y += 20;
+            y += 18;
             lastCategory = category;
         }
 
@@ -567,45 +568,36 @@ void UIManager::drawSettingsActionsContent() {
         y += lineHeight;
 
         // Check if we need to stop (running out of space)
-        if (y > displayManager.height() - 80) break;
+        if (y > displayManager.height() - UI_NAV_BAR_HEIGHT - 20) break;
     }
 
-    // Page indicator and instructions at bottom
-    y = displayManager.height() - 50;
-    display.setFont(&FreeMonoBold9pt7b);
-    display.setTextColor(GxEPD_BLACK);
-
-    // Page indicator
-    display.setCursor(labelX, y);
-    display.print("Page 3/3");
-
-    // Instructions
-    display.setCursor(displayManager.width() / 2 - 80, y);
-    display.print("[A] Execute  [B] Back");
-
-    y += 24;
-    display.setCursor(labelX, y);
-    display.print("[LB/RB] Change page");
+    // Navigation bar at bottom
+    display.fillRect(0, displayManager.height() - UI_NAV_BAR_HEIGHT, displayManager.width(), UI_NAV_BAR_HEIGHT, GxEPD_WHITE);
+    display.drawFastHLine(0, displayManager.height() - UI_NAV_BAR_HEIGHT, displayManager.width(), GxEPD_BLACK);
+    display.setFont(&FreeSans9pt7b);
+    drawCenteredText("[D-pad] Select   [A] Execute   [B] Back", displayManager.height() - 7, &FreeSans9pt7b);
 }
 
 void UIManager::drawActionItem(int y, SettingsAction action, bool isSelected) {
     DisplayType& display = displayManager.getDisplay();
-    int labelX = 60;
-    int descX = 280;
+    int labelX = 35;
+    int descX = 240;
+    int itemWidth = displayManager.width() - 50;
+    int itemHeight = 26;
 
-    // Selection indicator
+    display.setTextColor(GxEPD_BLACK);
+
+    // Border-only selection (2px thick)
     if (isSelected) {
-        display.fillRect(labelX - 15, y - 18, displayManager.width() - labelX - 30, 28, GxEPD_BLACK);
-        display.setTextColor(GxEPD_WHITE);
-    } else {
-        display.setTextColor(GxEPD_BLACK);
+        display.drawRect(labelX - 10, y - 18, itemWidth, itemHeight, GxEPD_BLACK);
+        display.drawRect(labelX - 9, y - 17, itemWidth - 2, itemHeight - 2, GxEPD_BLACK);
     }
 
-    display.setFont(&FreeMonoBold12pt7b);
+    display.setFont(&FreeSansBold9pt7b);
     display.setCursor(labelX, y);
     display.print(getActionName(action));
 
-    display.setFont(&FreeMonoBold9pt7b);
+    display.setFont(&FreeMono9pt7b);
     display.setCursor(descX, y);
     display.print(getActionDescription(action));
 }
@@ -781,35 +773,63 @@ bool UIManager::executeSelectedAction() {
     return _actionSuccess;
 }
 
+void UIManager::drawSettingsTabBar(int activePage) {
+    DisplayType& display = displayManager.getDisplay();
+
+    int tabY = UI_STATUS_BAR_HEIGHT + 8;
+    int tabHeight = 26;
+    int tabWidth = 100;
+    int tabSpacing = 8;
+    int startX = 20;
+
+    const char* tabLabels[] = {"General", "HomeKit", "Actions"};
+
+    for (int i = 0; i < 3; i++) {
+        int tabX = startX + i * (tabWidth + tabSpacing);
+        bool isActive = (i == activePage);
+
+        if (isActive) {
+            // Active tab: filled background
+            display.fillRect(tabX, tabY, tabWidth, tabHeight, GxEPD_BLACK);
+            display.setTextColor(GxEPD_WHITE);
+        } else {
+            // Inactive tab: border only
+            display.drawRect(tabX, tabY, tabWidth, tabHeight, GxEPD_BLACK);
+            display.setTextColor(GxEPD_BLACK);
+        }
+
+        // Tab label centered
+        display.setFont(&FreeSansBold9pt7b);
+        int16_t x1, y1;
+        uint16_t w, h;
+        display.getTextBounds(tabLabels[i], 0, 0, &x1, &y1, &w, &h);
+        display.setCursor(tabX + (tabWidth - w) / 2, tabY + tabHeight - 8);
+        display.print(tabLabels[i]);
+    }
+
+    // Reset text color
+    display.setTextColor(GxEPD_BLACK);
+}
+
 void UIManager::drawSettingsContent() {
     DisplayType& display = displayManager.getDisplay();
-    int y = 60;
-    int lineHeight = 32;
-    int labelX = 40;
-    int valueX = 280;
 
-    // Title
-    display.setTextColor(GxEPD_BLACK);
-    display.setFont(&FreeMonoBold18pt7b);
-    display.setCursor(labelX, y);
-    display.print("Settings");
+    // Draw tab bar at top
+    drawSettingsTabBar(0);
 
-    y += 20;
-
-    // Horizontal line
-    display.drawFastHLine(labelX, y, displayManager.width() - 80, GxEPD_BLACK);
-
-    y += lineHeight + 10;
-
-    // Settings content
-    display.setFont(&FreeMonoBold12pt7b);
+    int y = UI_STATUS_BAR_HEIGHT + 50;
+    int lineHeight = 28;
+    int labelX = 20;
+    int valueX = 200;
 
     // WiFi Section
+    display.setTextColor(GxEPD_BLACK);
+    display.setFont(&FreeSansBold9pt7b);
     display.setCursor(labelX, y);
     display.print("WiFi");
-    y += lineHeight;
+    y += lineHeight - 4;
 
-    display.setFont(&FreeMonoBold9pt7b);
+    display.setFont(&FreeMono9pt7b);
 
     display.setCursor(labelX + 20, y);
     display.print("SSID:");
@@ -830,40 +850,40 @@ void UIManager::drawSettingsContent() {
     y += lineHeight;
 
     // Hue Section
-    display.setFont(&FreeMonoBold12pt7b);
+    display.setFont(&FreeSansBold9pt7b);
     display.setCursor(labelX, y);
     display.print("Philips Hue");
-    y += lineHeight;
+    y += lineHeight - 4;
 
-    display.setFont(&FreeMonoBold9pt7b);
+    display.setFont(&FreeMono9pt7b);
 
-    display.setCursor(labelX + 20, y);
+    display.setCursor(labelX + 15, y);
     display.print("Bridge:");
     display.setCursor(valueX, y);
     display.print(hueManager.getBridgeIP());
     y += lineHeight - 8;
 
-    display.setCursor(labelX + 20, y);
+    display.setCursor(labelX + 15, y);
     display.print("Status:");
     display.setCursor(valueX, y);
     display.print(hueManager.isConnected() ? "Connected" : "Disconnected");
     y += lineHeight - 8;
 
-    display.setCursor(labelX + 20, y);
+    display.setCursor(labelX + 15, y);
     display.print("Rooms:");
     display.setCursor(valueX, y);
     display.printf("%d", hueManager.getRooms().size());
     y += lineHeight;
 
     // Controller Section
-    display.setFont(&FreeMonoBold12pt7b);
+    display.setFont(&FreeSansBold9pt7b);
     display.setCursor(labelX, y);
     display.print("Controller");
-    y += lineHeight;
+    y += lineHeight - 4;
 
-    display.setFont(&FreeMonoBold9pt7b);
+    display.setFont(&FreeMono9pt7b);
 
-    display.setCursor(labelX + 20, y);
+    display.setCursor(labelX + 15, y);
     display.print("Status:");
     display.setCursor(valueX, y);
     const char* ctrlStates[] = {"Disconnected", "Scanning", "Connected", "Active"};
@@ -871,26 +891,20 @@ void UIManager::drawSettingsContent() {
     y += lineHeight;
 
     // MQTT Section
-    display.setFont(&FreeMonoBold12pt7b);
+    display.setFont(&FreeSansBold9pt7b);
     display.setCursor(labelX, y);
     display.print("MQTT");
-    y += lineHeight;
+    y += lineHeight - 4;
 
-    display.setFont(&FreeMonoBold9pt7b);
+    display.setFont(&FreeMono9pt7b);
 
-    display.setCursor(labelX + 20, y);
+    display.setCursor(labelX + 15, y);
     display.print("Broker:");
     display.setCursor(valueX, y);
     display.print(MQTT_BROKER);
     y += lineHeight - 8;
 
-    display.setCursor(labelX + 20, y);
-    display.print("Port:");
-    display.setCursor(valueX, y);
-    display.printf("%d", MQTT_PORT);
-    y += lineHeight - 8;
-
-    display.setCursor(labelX + 20, y);
+    display.setCursor(labelX + 15, y);
     display.print("Status:");
     display.setCursor(valueX, y);
     const char* mqttStates[] = {"Disconnected", "Connecting", "Connected"};
@@ -898,54 +912,29 @@ void UIManager::drawSettingsContent() {
     y += lineHeight;
 
     // Device Section
-    display.setFont(&FreeMonoBold12pt7b);
+    display.setFont(&FreeSansBold9pt7b);
     display.setCursor(labelX, y);
     display.print("Device");
-    y += lineHeight;
+    y += lineHeight - 4;
 
-    display.setFont(&FreeMonoBold9pt7b);
+    display.setFont(&FreeMono9pt7b);
 
     // MAC Address
-    display.setCursor(labelX + 20, y);
+    display.setCursor(labelX + 15, y);
     display.print("MAC:");
     display.setCursor(valueX, y);
     display.print(WiFi.macAddress());
     y += lineHeight - 8;
 
-    // Chip ID (eFuse MAC as hex)
-    display.setCursor(labelX + 20, y);
-    display.print("Chip ID:");
-    display.setCursor(valueX, y);
-    uint64_t chipId = ESP.getEfuseMac();
-    display.printf("%04X%08X", (uint16_t)(chipId >> 32), (uint32_t)chipId);
-    y += lineHeight - 8;
-
-    // Device Name (from NVS or default)
-    display.setCursor(labelX + 20, y);
-    display.print("Name:");
-    display.setCursor(valueX, y);
-    {
-        Preferences prefs;
-        prefs.begin(DEVICE_NVS_NAMESPACE, true);
-        String deviceName = prefs.getString(DEVICE_NVS_NAME, DEVICE_DEFAULT_NAME);
-        prefs.end();
-        display.print(deviceName);
-    }
-    y += lineHeight - 8;
-
-    display.setCursor(labelX + 20, y);
+    // Version
+    display.setCursor(labelX + 15, y);
     display.print("Version:");
     display.setCursor(valueX, y);
     display.print(PRODUCT_VERSION);
     y += lineHeight - 8;
 
-    display.setCursor(labelX + 20, y);
-    display.print("Free Heap:");
-    display.setCursor(valueX, y);
-    display.printf("%d KB", ESP.getFreeHeap() / 1024);
-    y += lineHeight - 8;
-
-    display.setCursor(labelX + 20, y);
+    // Uptime
+    display.setCursor(labelX + 15, y);
     display.print("Uptime:");
     display.setCursor(valueX, y);
     unsigned long uptime = millis() / 1000;
@@ -956,64 +945,48 @@ void UIManager::drawSettingsContent() {
     } else {
         display.printf("%lu hr %lu min", uptime / 3600, (uptime % 3600) / 60);
     }
+    y += lineHeight - 8;
 
-    // Page indicator and instructions at bottom
-    y = displayManager.height() - 60;
-    display.setFont(&FreeMonoBold9pt7b);
-    display.setTextColor(GxEPD_BLACK);
+    // Free Heap
+    display.setCursor(labelX + 15, y);
+    display.print("Heap:");
+    display.setCursor(valueX, y);
+    display.printf("%d KB", ESP.getFreeHeap() / 1024);
 
-    // Page indicator
-    display.setCursor(displayManager.width() / 2 - 40, y);
-    display.print("Page 1/3");
-
-    y += 25;
-    display.setCursor(labelX, y);
-    display.print("B: Back    D-pad Right: HomeKit");
+    // Navigation bar at bottom
+    display.fillRect(0, displayManager.height() - UI_NAV_BAR_HEIGHT, displayManager.width(), UI_NAV_BAR_HEIGHT, GxEPD_WHITE);
+    display.drawFastHLine(0, displayManager.height() - UI_NAV_BAR_HEIGHT, displayManager.width(), GxEPD_BLACK);
+    display.setFont(&FreeSans9pt7b);
+    drawCenteredText("[D-pad] Page   [B] Back   [Menu] Close", displayManager.height() - 7, &FreeSans9pt7b);
 }
 
 void UIManager::drawSettingsHomeKitContent() {
     DisplayType& display = displayManager.getDisplay();
+
+    // Draw tab bar at top
+    drawSettingsTabBar(1);
+
     int centerX = displayManager.width() / 2;
-
-    // Title
     display.setTextColor(GxEPD_BLACK);
-    display.setFont(&FreeMonoBold18pt7b);
-    display.setCursor(40, 60);
-    display.print("HomeKit Setup");
-
-    // Horizontal line
-    display.drawFastHLine(40, 80, displayManager.width() - 80, GxEPD_BLACK);
 
     // Get HomeKit setup code
     const char* setupCode = homekitManager.getSetupCode();
     bool isPaired = homekitManager.isPaired();
 
+    int contentY = UI_STATUS_BAR_HEIGHT + 55;
+
     if (isPaired) {
         // Already paired - show status
-        display.setFont(&FreeMonoBold12pt7b);
-        display.setCursor(centerX - 100, 160);
-        display.print("Device is paired!");
+        display.setFont(&FreeSansBold12pt7b);
+        drawCenteredText("Device is paired!", centerX + 60, &FreeSansBold12pt7b);
 
-        display.setFont(&FreeMonoBold9pt7b);
-        display.setCursor(centerX - 150, 200);
-        display.print("Your device is connected to Apple Home.");
-
-        display.setCursor(centerX - 180, 240);
-        display.print("To unpair, remove it from the Home app.");
+        display.setFont(&FreeSans9pt7b);
+        drawCenteredText("Your device is connected to Apple Home.", contentY + 60, &FreeSans9pt7b);
+        drawCenteredText("To unpair, remove it from the Home app.", contentY + 90, &FreeSans9pt7b);
     } else {
         // Not paired - show QR code and instructions
-
-        // Generate HomeKit pairing URL: X-HM://00XXXXXXX (encoded setup info)
-        // For simplicity, we'll display the setup code prominently
-        // The QR code encodes the HomeKit pairing URL
-
-        // Create QR code for HomeKit pairing
-        // HomeKit URL format: X-HM://XXXXXXXXXXX
-        // We'll use a simplified approach with just the setup code
         char qrData[32];
-        // HomeSpan uses the pattern: X-HM://00XXXXXXPHOM (encoded)
-        // For demo, we encode the setup URL
-        snprintf(qrData, sizeof(qrData), "X-HM://0026ACPHOM");  // Simplified
+        snprintf(qrData, sizeof(qrData), "X-HM://0026ACPHOM");
 
         QRCode qrcode;
         uint8_t qrcodeData[qrcode_getBufferSize(3)];
@@ -1021,77 +994,72 @@ void UIManager::drawSettingsHomeKitContent() {
 
         // Draw QR code
         int qrSize = qrcode.size;
-        int scale = 6;  // Each module is 6x6 pixels
+        int scale = 5;  // Slightly smaller for better fit
         int qrPixelSize = qrSize * scale;
         int qrX = centerX - qrPixelSize / 2;
-        int qrY = 120;
+        int qrY = contentY;
 
         // White background for QR code
-        display.fillRect(qrX - 10, qrY - 10, qrPixelSize + 20, qrPixelSize + 20, GxEPD_WHITE);
-        display.drawRect(qrX - 10, qrY - 10, qrPixelSize + 20, qrPixelSize + 20, GxEPD_BLACK);
+        display.fillRect(qrX - 8, qrY - 8, qrPixelSize + 16, qrPixelSize + 16, GxEPD_WHITE);
+        display.drawRect(qrX - 8, qrY - 8, qrPixelSize + 16, qrPixelSize + 16, GxEPD_BLACK);
 
         // Draw QR code modules
-        for (int y = 0; y < qrSize; y++) {
-            for (int x = 0; x < qrSize; x++) {
-                if (qrcode_getModule(&qrcode, x, y)) {
-                    display.fillRect(qrX + x * scale, qrY + y * scale, scale, scale, GxEPD_BLACK);
+        for (int qy = 0; qy < qrSize; qy++) {
+            for (int qx = 0; qx < qrSize; qx++) {
+                if (qrcode_getModule(&qrcode, qx, qy)) {
+                    display.fillRect(qrX + qx * scale, qrY + qy * scale, scale, scale, GxEPD_BLACK);
                 }
             }
         }
 
         // Instructions below QR code
-        int textY = qrY + qrPixelSize + 40;
+        int textY = qrY + qrPixelSize + 30;
 
-        display.setFont(&FreeMonoBold12pt7b);
-        display.setCursor(centerX - 180, textY);
-        display.print("Scan with iPhone camera");
+        display.setFont(&FreeSansBold9pt7b);
+        drawCenteredText("Scan with iPhone camera", textY, &FreeSansBold9pt7b);
 
-        textY += 40;
-        display.setFont(&FreeMonoBold9pt7b);
-        display.setCursor(centerX - 120, textY);
-        display.print("Or enter code manually:");
+        textY += 30;
+        display.setFont(&FreeSans9pt7b);
+        drawCenteredText("Or enter code manually:", textY, &FreeSans9pt7b);
 
         // Display setup code prominently
         textY += 35;
         display.setFont(&FreeMonoBold18pt7b);
-        display.setCursor(centerX - 80, textY);
+        int16_t x1, y1;
+        uint16_t w, h;
+        display.getTextBounds(setupCode, 0, 0, &x1, &y1, &w, &h);
+        display.setCursor(centerX - w / 2, textY);
         display.print(setupCode);
 
         // Additional info
-        textY += 40;
-        display.setFont(&FreeMonoBold9pt7b);
-        display.setCursor(centerX - 200, textY);
-        display.print("Open Home app > Add Accessory > Enter Code");
+        textY += 35;
+        display.setFont(&FreeSans9pt7b);
+        drawCenteredText("Home app > Add Accessory > Enter Code", textY, &FreeSans9pt7b);
     }
 
-    // Page indicator and instructions at bottom
-    int y = displayManager.height() - 60;
-    display.setFont(&FreeMonoBold9pt7b);
-    display.setTextColor(GxEPD_BLACK);
-
-    // Page indicator
-    display.setCursor(displayManager.width() / 2 - 40, y);
-    display.print("Page 2/3");
-
-    y += 25;
-    display.setCursor(40, y);
-    display.print("D-pad: General/Actions    B: Back");
+    // Navigation bar at bottom
+    display.fillRect(0, displayManager.height() - UI_NAV_BAR_HEIGHT, displayManager.width(), UI_NAV_BAR_HEIGHT, GxEPD_WHITE);
+    display.drawFastHLine(0, displayManager.height() - UI_NAV_BAR_HEIGHT, displayManager.width(), GxEPD_BLACK);
+    display.setFont(&FreeSans9pt7b);
+    drawCenteredText("[D-pad] Page   [B] Back   [Menu] Close", displayManager.height() - 7, &FreeSans9pt7b);
 }
 
 void UIManager::drawStatusBar(bool wifiConnected, const String& bridgeIP) {
     DisplayType& display = displayManager.getDisplay();
 
-    // Background
-    display.fillRect(0, 0, displayManager.width(), UI_STATUS_BAR_HEIGHT, GxEPD_BLACK);
+    // Clean minimal status bar - white background with thin bottom border
+    display.fillRect(0, 0, displayManager.width(), UI_STATUS_BAR_HEIGHT, GxEPD_WHITE);
+    display.drawFastHLine(0, UI_STATUS_BAR_HEIGHT - 1, displayManager.width(), GxEPD_BLACK);
 
-    display.setTextColor(GxEPD_WHITE);
+    display.setTextColor(GxEPD_BLACK);
+    int textY = 22;  // Vertical center for text baseline
 
     // === LEFT: WiFi signal strength bars ===
-    int barX = 10;
-    int barY = 8;
-    int barWidth = 4;
-    int barSpacing = 3;
-    int barMaxHeight = 24;
+    int barX = 8;
+    int barY = 6;
+    int barWidth = 3;
+    int barSpacing = 2;
+    int barMaxHeight = 18;
 
     // Get signal strength (RSSI: -30 = excellent, -90 = poor)
     int rssi = wifiConnected ? WiFi.RSSI() : -100;
@@ -1103,117 +1071,102 @@ void UIManager::drawStatusBar(bool wifiConnected, const String& bridgeIP) {
 
     // Draw 4 bars (outline for empty, filled for signal)
     for (int i = 0; i < 4; i++) {
-        int height = 6 + (i * 6);  // 6, 12, 18, 24
+        int height = 4 + (i * 4);  // 4, 8, 12, 16
         int y = barY + (barMaxHeight - height);
 
         if (i < bars) {
-            // Filled bar
-            display.fillRect(barX + i * (barWidth + barSpacing), y, barWidth, height, GxEPD_WHITE);
+            display.fillRect(barX + i * (barWidth + barSpacing), y, barWidth, height, GxEPD_BLACK);
         } else {
-            // Empty bar (just outline)
-            display.drawRect(barX + i * (barWidth + barSpacing), y, barWidth, height, GxEPD_WHITE);
+            display.drawRect(barX + i * (barWidth + barSpacing), y, barWidth, height, GxEPD_BLACK);
         }
     }
 
-    display.setFont(&FreeMonoBold9pt7b);
-
     // === Battery widget ===
-    int batX = 50;
-    int batY = 8;
+    int batX = 40;
+    int batY = 10;
 
-    // Battery icon (16x10 outline with terminal nub)
-    display.drawRect(batX, batY + 7, 16, 10, GxEPD_WHITE);           // Main body
-    display.fillRect(batX + 16, batY + 10, 2, 4, GxEPD_WHITE);       // Terminal
+    // Compact battery icon (14x8)
+    display.drawRect(batX, batY, 14, 8, GxEPD_BLACK);
+    display.fillRect(batX + 14, batY + 2, 2, 4, GxEPD_BLACK);  // Terminal
 
     // Fill based on percentage
     float batPercent = powerManager.getBatteryPercent();
-    int fillWidth = (int)(14.0f * batPercent / 100.0f);
+    int fillWidth = (int)(12.0f * batPercent / 100.0f);
     if (fillWidth > 0) {
-        display.fillRect(batX + 1, batY + 8, fillWidth, 8, GxEPD_WHITE);
+        display.fillRect(batX + 1, batY + 1, fillWidth, 6, GxEPD_BLACK);
     }
 
-    // Battery text
+    // Battery text (compact)
+    display.setFont(&FreeSans9pt7b);
     char batStr[8];
     if (powerManager.isCharging()) {
         snprintf(batStr, sizeof(batStr), "USB");
     } else {
-        snprintf(batStr, sizeof(batStr), "%d%%", (int)batPercent);
+        snprintf(batStr, sizeof(batStr), "%d", (int)batPercent);
     }
-    display.setCursor(batX + 22, 26);
+    display.setCursor(batX + 20, textY);
     display.print(batStr);
 
-    // === CPU frequency widget ===
-    char cpuStr[8];
-    snprintf(cpuStr, sizeof(cpuStr), "%dM", powerManager.getCpuFrequency());
-    display.setCursor(115, 26);
-    display.print(cpuStr);
+    // === CENTER: Sensor readings (prominent) ===
+    int centerX = displayManager.width() / 2;
 
-    // === Sensor widgets ===
     if (sensorManager.isOperational()) {
-        // CO2 widget
+        display.setFont(&FreeSansBold12pt7b);
+
+        // CO2 - largest, most prominent
         char co2Str[16];
-        snprintf(co2Str, sizeof(co2Str), "%.0f ppm", sensorManager.getCO2());
-        display.setCursor(200, 26);
+        snprintf(co2Str, sizeof(co2Str), "%.0f", sensorManager.getCO2());
+        int16_t x1, y1;
+        uint16_t w, h;
+        display.getTextBounds(co2Str, 0, 0, &x1, &y1, &w, &h);
+        display.setCursor(centerX - 180, textY + 2);
         display.print(co2Str);
+        display.setFont(&FreeSans9pt7b);
+        display.print(" ppm");
 
         // Separator
-        display.setCursor(310, 26);
+        display.setFont(&FreeSans9pt7b);
+        display.setCursor(centerX - 60, textY);
         display.print("|");
 
-        // Temperature widget
+        // Temperature
+        display.setFont(&FreeSansBold12pt7b);
         char tempStr[16];
-        snprintf(tempStr, sizeof(tempStr), "%.1fC", sensorManager.getTemperature());
-        display.setCursor(340, 26);
+        snprintf(tempStr, sizeof(tempStr), "%.1f", sensorManager.getTemperature());
+        display.setCursor(centerX - 40, textY + 2);
         display.print(tempStr);
+        display.setFont(&FreeSans9pt7b);
+        display.print("\xB0" "C");  // degree symbol
 
         // Separator
-        display.setCursor(440, 26);
+        display.setCursor(centerX + 60, textY);
         display.print("|");
 
-        // Humidity widget
+        // Humidity
+        display.setFont(&FreeSansBold12pt7b);
         char humStr[16];
-        snprintf(humStr, sizeof(humStr), "%.0f%%", sensorManager.getHumidity());
-        display.setCursor(470, 26);
+        snprintf(humStr, sizeof(humStr), "%.0f", sensorManager.getHumidity());
+        display.setCursor(centerX + 80, textY + 2);
         display.print(humStr);
+        display.setFont(&FreeSans9pt7b);
+        display.print("%");
     } else {
         // Sensor not ready
-        display.setCursor(280, 26);
+        display.setFont(&FreeSans9pt7b);
+        display.setCursor(centerX - 80, textY);
         if (sensorManager.getState() == SensorConnectionState::WARMING_UP) {
-            display.print("Sensor warming up...");
+            int progress = (int)(sensorManager.getWarmupProgress() * 100);
+            char warmupStr[32];
+            snprintf(warmupStr, sizeof(warmupStr), "Warming up... %d%%", progress);
+            display.print(warmupStr);
         } else {
             display.print("Sensor: --");
         }
     }
 
-    // === RIGHT: Tado indicator ===
-    int tadoX = displayManager.width() - 60;
-    display.setFont(&FreeMonoBold9pt7b);
-    display.setCursor(tadoX, 26);
-    display.print("T");
+    // === RIGHT: Minimal indicators (only if space needed) ===
+    // Removed Tado/Hue dots to keep status bar clean and sensor-focused
 
-    // Tado status dot
-    int tadoDotX = tadoX + 15;
-    int tadoDotY = UI_STATUS_BAR_HEIGHT / 2;
-    if (tadoManager.isAuthenticated()) {
-        display.fillCircle(tadoDotX, tadoDotY, 4, GxEPD_WHITE);
-    } else {
-        display.drawCircle(tadoDotX, tadoDotY, 4, GxEPD_WHITE);
-    }
-
-    // === RIGHT: Hue connection dot ===
-    int dotX = displayManager.width() - 25;
-    int dotY = UI_STATUS_BAR_HEIGHT / 2;
-    int dotRadius = 8;
-
-    if (!bridgeIP.isEmpty() && hueManager.isConnected()) {
-        // Filled circle = connected
-        display.fillCircle(dotX, dotY, dotRadius, GxEPD_WHITE);
-    } else {
-        // Empty circle = disconnected
-        display.drawCircle(dotX, dotY, dotRadius, GxEPD_WHITE);
-    }
-
-    // Reset text color
     display.setTextColor(GxEPD_BLACK);
 }
 
@@ -1224,21 +1177,21 @@ void UIManager::drawRoomTile(int col, int row, const HueRoom& room, bool isSelec
     int x = UI_TILE_PADDING + col * (_tileWidth + UI_TILE_PADDING);
     int y = _contentStartY + row * (_tileHeight + UI_TILE_PADDING);
 
-    // Draw selection highlight (thick border) or normal border
+    // Draw selection highlight (border only) or normal border
     if (isSelected) {
-        // Draw thick 4px selection border
-        display.drawRect(x, y, _tileWidth, _tileHeight, GxEPD_BLACK);
-        display.drawRect(x + 1, y + 1, _tileWidth - 2, _tileHeight - 2, GxEPD_BLACK);
-        display.drawRect(x + 2, y + 2, _tileWidth - 4, _tileHeight - 4, GxEPD_BLACK);
-        display.drawRect(x + 3, y + 3, _tileWidth - 6, _tileHeight - 6, GxEPD_BLACK);
+        // Draw 2px selection border
+        for (int i = 0; i < UI_SELECTION_BORDER; i++) {
+            display.drawRect(x + i, y + i, _tileWidth - 2*i, _tileHeight - 2*i, GxEPD_BLACK);
+        }
     } else {
         // Normal single-pixel border
         display.drawRect(x, y, _tileWidth, _tileHeight, GxEPD_BLACK);
     }
 
-    // Room name
-    display.setFont(&FreeMonoBold12pt7b);
     display.setTextColor(GxEPD_BLACK);
+
+    // Room name - use Sans for cleaner look
+    display.setFont(&FreeSansBold9pt7b);
 
     // Truncate name if too long
     String displayName = room.name;
@@ -1246,7 +1199,7 @@ void UIManager::drawRoomTile(int col, int row, const HueRoom& room, bool isSelec
     uint16_t w, h;
     display.getTextBounds(displayName.c_str(), 0, 0, &x1, &y1, &w, &h);
 
-    while (w > _tileWidth - 20 && displayName.length() > 3) {
+    while (w > _tileWidth - 16 && displayName.length() > 3) {
         displayName = displayName.substring(0, displayName.length() - 1);
         display.getTextBounds((displayName + "..").c_str(), 0, 0, &x1, &y1, &w, &h);
     }
@@ -1254,13 +1207,13 @@ void UIManager::drawRoomTile(int col, int row, const HueRoom& room, bool isSelec
         displayName += "..";
     }
 
-    // Center name horizontally
+    // Center name horizontally, position at top of tile
     display.getTextBounds(displayName.c_str(), 0, 0, &x1, &y1, &w, &h);
     int textX = x + (_tileWidth - w) / 2;
-    display.setCursor(textX, y + 35);
+    display.setCursor(textX, y + 24);
     display.print(displayName);
 
-    // Status text
+    // Status text - use Mono for numbers
     display.setFont(&FreeMonoBold9pt7b);
     String statusText;
     if (!room.anyOn) {
@@ -1273,14 +1226,14 @@ void UIManager::drawRoomTile(int col, int row, const HueRoom& room, bool isSelec
 
     display.getTextBounds(statusText.c_str(), 0, 0, &x1, &y1, &w, &h);
     textX = x + (_tileWidth - w) / 2;
-    display.setCursor(textX, y + _tileHeight - 45);
+    display.setCursor(textX, y + _tileHeight - 32);
     display.print(statusText);
 
-    // Brightness bar
-    int barWidth = _tileWidth - 40;
-    int barHeight = 12;
-    int barX = x + 20;
-    int barY = y + _tileHeight - 25;
+    // Brightness bar - compact
+    int barWidth = _tileWidth - 24;
+    int barHeight = 8;
+    int barX = x + 12;
+    int barY = y + _tileHeight - 16;
 
     drawBrightnessBar(barX, barY, barWidth, barHeight, room.brightness, room.anyOn);
 }
@@ -1627,27 +1580,109 @@ void UIManager::goBackFromSensor() {
 void UIManager::drawSensorDashboardContent() {
     DisplayType& display = displayManager.getDisplay();
 
-    int rowPadding = 8;
-    int instructionHeight = 30;
-    int availableHeight = displayManager.height() - UI_STATUS_BAR_HEIGHT - instructionHeight - (rowPadding * 4);
-    int rowHeight = availableHeight / 3;
-    int rowWidth = displayManager.width() - (rowPadding * 2);
+    int padding = 8;
+    int contentY = UI_STATUS_BAR_HEIGHT + padding;
+    int contentWidth = displayManager.width() - (padding * 2);
+    int availableHeight = displayManager.height() - UI_STATUS_BAR_HEIGHT - UI_NAV_BAR_HEIGHT - (padding * 3);
 
-    // Draw 3 rows (horizontal layout)
-    SensorMetric metrics[] = {SensorMetric::CO2, SensorMetric::TEMPERATURE, SensorMetric::HUMIDITY};
+    // Priority layout: CO2 takes ~60% height, Temp/Humidity share remaining 40%
+    int co2Height = (availableHeight * 60) / 100;
+    int secondaryHeight = availableHeight - co2Height - padding;
 
-    for (int i = 0; i < 3; i++) {
-        int rowX = rowPadding;
-        int rowY = UI_STATUS_BAR_HEIGHT + rowPadding + i * (rowHeight + rowPadding);
-        bool isSelected = (metrics[i] == _currentMetric);
-        drawSensorRow(rowX, rowY, rowWidth, rowHeight, metrics[i], isSelected);
+    // === CO2 Panel (large, top) ===
+    int co2Y = contentY;
+    bool co2Selected = (_currentMetric == SensorMetric::CO2);
+    drawPriorityPanel(padding, co2Y, contentWidth, co2Height, SensorMetric::CO2, co2Selected, true);
+
+    // === Temperature and Humidity panels (side by side, bottom) ===
+    int secondaryY = co2Y + co2Height + padding;
+    int panelWidth = (contentWidth - padding) / 2;
+
+    bool tempSelected = (_currentMetric == SensorMetric::TEMPERATURE);
+    bool humSelected = (_currentMetric == SensorMetric::HUMIDITY);
+
+    drawPriorityPanel(padding, secondaryY, panelWidth, secondaryHeight, SensorMetric::TEMPERATURE, tempSelected, false);
+    drawPriorityPanel(padding + panelWidth + padding, secondaryY, panelWidth, secondaryHeight, SensorMetric::HUMIDITY, humSelected, false);
+
+    // Navigation hints bar
+    int navY = displayManager.height() - UI_NAV_BAR_HEIGHT + 16;
+    display.drawFastHLine(0, displayManager.height() - UI_NAV_BAR_HEIGHT, displayManager.width(), GxEPD_BLACK);
+    display.setFont(&FreeSans9pt7b);
+    display.setTextColor(GxEPD_BLACK);
+    drawCenteredText("[A] Detail  [D-pad] Select  [LB/RB] Switch  [B] Back", navY, &FreeSans9pt7b);
+}
+
+void UIManager::drawPriorityPanel(int x, int y, int width, int height, SensorMetric metric, bool isSelected, bool isLarge) {
+    DisplayType& display = displayManager.getDisplay();
+
+    // Panel border
+    if (isSelected) {
+        for (int i = 0; i < UI_SELECTION_BORDER; i++) {
+            display.drawRect(x + i, y + i, width - 2*i, height - 2*i, GxEPD_BLACK);
+        }
+    } else {
+        display.drawRect(x, y, width, height, GxEPD_BLACK);
     }
 
-    // Instructions at bottom
-    display.setFont(&FreeMonoBold9pt7b);
     display.setTextColor(GxEPD_BLACK);
-    int instructionY = displayManager.height() - 10;
-    drawCenteredText("D-pad: Select    A: Detail    LB/RB: Switch Screens", instructionY, &FreeMonoBold9pt7b);
+
+    int innerPadding = 6;
+    int headerHeight = isLarge ? 28 : 22;
+
+    // Metric label
+    display.setFont(isLarge ? &FreeSansBold12pt7b : &FreeSansBold9pt7b);
+    display.setCursor(x + innerPadding, y + (isLarge ? 20 : 16));
+    display.print(SensorManager::metricToString(metric));
+
+    if (!sensorManager.isOperational()) {
+        display.setFont(&FreeSans9pt7b);
+        display.setCursor(x + innerPadding, y + height / 2 + 4);
+        if (sensorManager.getState() == SensorConnectionState::WARMING_UP) {
+            int progress = (int)(sensorManager.getWarmupProgress() * 100);
+            display.printf("Warming up... %d%%", progress);
+        } else {
+            display.print("No data");
+        }
+        return;
+    }
+
+    SensorStats stats = sensorManager.getStats(metric);
+
+    // Current value (right side of header)
+    char valueStr[24];
+    switch (metric) {
+        case SensorMetric::CO2:
+            snprintf(valueStr, sizeof(valueStr), "%.0f ppm", stats.current);
+            break;
+        case SensorMetric::TEMPERATURE:
+            snprintf(valueStr, sizeof(valueStr), "%.1f\xB0" "C", stats.current);
+            break;
+        case SensorMetric::HUMIDITY:
+            snprintf(valueStr, sizeof(valueStr), "%.0f%%", stats.current);
+            break;
+    }
+
+    display.setFont(isLarge ? &FreeMonoBold18pt7b : &FreeMonoBold12pt7b);
+    int16_t x1, y1;
+    uint16_t w, h;
+    display.getTextBounds(valueStr, 0, 0, &x1, &y1, &w, &h);
+    display.setCursor(x + width - w - innerPadding, y + (isLarge ? 24 : 18));
+    display.print(valueStr);
+
+    // Chart area
+    int chartX = x + innerPadding;
+    int chartY = y + headerHeight;
+    int chartWidth = width - (innerPadding * 2);
+    int chartHeight = height - headerHeight - (isLarge ? 35 : 28);
+
+    drawMiniChart(chartX, chartY, chartWidth, chartHeight, metric);
+
+    // Stats below chart
+    char statsStr[48];
+    snprintf(statsStr, sizeof(statsStr), "H:%.0f  L:%.0f  Avg:%.0f", stats.max, stats.min, stats.avg);
+    display.setFont(&FreeMono9pt7b);
+    display.setCursor(chartX, y + height - (isLarge ? 8 : 6));
+    display.print(statsStr);
 }
 
 void UIManager::drawSensorRow(int x, int y, int width, int height, SensorMetric metric, bool isSelected) {
@@ -1754,8 +1789,8 @@ void UIManager::drawMiniChart(int x, int y, int width, int height, SensorMetric 
 
     if (sensorManager.getSampleCount() < 2) {
         // Not enough data for chart
-        display.setFont(&FreeMonoBold9pt7b);
-        display.setCursor(x + 10, y + height / 2);
+        display.setFont(&FreeSans9pt7b);
+        display.setCursor(x + 10, y + height / 2 + 4);
         display.print("Collecting...");
         return;
     }
@@ -1768,86 +1803,155 @@ void UIManager::drawMiniChart(int x, int y, int width, int height, SensorMetric 
 
     if (count < 2) return;
 
-    // Get min/max for scaling
-    SensorStats stats = sensorManager.getStats(metric);
+    // Use FIXED ranges for consistent chart scaling (clip values at boundaries)
+    float scaleMin, scaleMax;
+    switch (metric) {
+        case SensorMetric::CO2:
+            scaleMin = CHART_CO2_MIN;
+            scaleMax = CHART_CO2_MAX;
+            break;
+        case SensorMetric::TEMPERATURE:
+            scaleMin = CHART_TEMP_MIN;
+            scaleMax = CHART_TEMP_MAX;
+            break;
+        case SensorMetric::HUMIDITY:
+            scaleMin = CHART_HUMIDITY_MIN;
+            scaleMax = CHART_HUMIDITY_MAX;
+            break;
+        default:
+            scaleMin = 0;
+            scaleMax = 100;
+            break;
+    }
 
-    // Add padding to min/max for visual clarity
-    float range = stats.max - stats.min;
-    float padding = max(range * 0.1f, 1.0f);
-    float scaleMin = stats.min - padding;
-    float scaleMax = stats.max + padding;
-
-    // Draw chart line
+    // Draw chart line (values will be clipped at boundaries)
     drawChartLine(x + 2, y + 2, width - 4, height - 4, samples, count, scaleMin, scaleMax);
 }
 
 void UIManager::drawSensorDetailContent(SensorMetric metric) {
     DisplayType& display = displayManager.getDisplay();
 
-    int contentY = UI_STATUS_BAR_HEIGHT + 10;
+    int contentY = UI_STATUS_BAR_HEIGHT + 8;
     int labelX = 20;
+    const char* unit = SensorManager::metricToUnit(metric);
 
-    // Title and current value
-    display.setFont(&FreeMonoBold18pt7b);
+    // Title and current value - smaller font for cleaner look
+    display.setFont(&FreeSansBold12pt7b);
     display.setTextColor(GxEPD_BLACK);
-    display.setCursor(labelX, contentY + 30);
+    display.setCursor(labelX, contentY + 20);
     display.print(SensorManager::metricToString(metric));
 
     if (sensorManager.isOperational()) {
-        SensorStats stats = sensorManager.getStats(metric);
+        // Get stats for different periods
+        // 1h = 60 samples, 24h = 1440 samples, 48h = 2880 (all)
+        SensorStats stats1h = sensorManager.getStats(metric, 60);
+        SensorStats stats24h = sensorManager.getStats(metric, 1440);
+        SensorStats stats48h = sensorManager.getStats(metric);  // all samples
 
-        // Current value on right side
+        // Current value on right side - larger for emphasis
+        display.setFont(&FreeMonoBold18pt7b);
         char currentStr[32];
-        snprintf(currentStr, sizeof(currentStr), "%.1f %s",
-                 stats.current, SensorManager::metricToUnit(metric));
+        if (metric == SensorMetric::CO2) {
+            snprintf(currentStr, sizeof(currentStr), "%.0f %s", stats48h.current, unit);
+        } else {
+            snprintf(currentStr, sizeof(currentStr), "%.1f%s", stats48h.current, unit);
+        }
         int16_t x1, y1;
         uint16_t w, h;
         display.getTextBounds(currentStr, 0, 0, &x1, &y1, &w, &h);
-        display.setCursor(displayManager.width() - w - 20, contentY + 30);
+        display.setCursor(displayManager.width() - w - 20, contentY + 24);
         display.print(currentStr);
 
-        // Chart area
-        int chartX = 60;
-        int chartY = contentY + 60;
-        int chartWidth = displayManager.width() - 80;
-        int chartHeight = displayManager.height() - chartY - 100;
+        // Chart area - more space for chart
+        int chartX = 55;
+        int chartY = contentY + 40;
+        int chartWidth = displayManager.width() - 75;
+        int chartHeight = displayManager.height() - chartY - 90;
 
         // Draw full chart
         drawFullChart(chartX, chartY, chartWidth, chartHeight, metric);
 
-        // Statistics at bottom
-        display.setFont(&FreeMonoBold12pt7b);
-        int statsY = displayManager.height() - 70;
+        // Period statistics at bottom - 3 columns
+        int statsY = displayManager.height() - 75;
+        int colWidth = (displayManager.width() - 40) / 3;
+        display.setFont(&FreeSansBold9pt7b);
 
-        char statsStr[128];
-        snprintf(statsStr, sizeof(statsStr), "Min: %.1f %s    Max: %.1f %s    Avg: %.1f %s",
-                 stats.min, SensorManager::metricToUnit(metric),
-                 stats.max, SensorManager::metricToUnit(metric),
-                 stats.avg, SensorManager::metricToUnit(metric));
+        // Period labels
         display.setCursor(labelX, statsY);
-        display.print(statsStr);
+        display.print("1h");
+        display.setCursor(labelX + colWidth, statsY);
+        display.print("24h");
+        display.setCursor(labelX + colWidth * 2, statsY);
+        display.print("48h");
 
-        // Navigation hints
-        display.setFont(&FreeMonoBold9pt7b);
-        int navY = displayManager.height() - 25;
+        // Min-Max ranges (smaller font)
+        display.setFont(&FreeMono9pt7b);
+        statsY += 16;
+        char rangeStr[32];
 
-        // Previous metric
-        int prevIdx = ((int)metric - 1 + 3) % 3;
-        SensorMetric prevMetric = (SensorMetric)prevIdx;
-        display.setCursor(labelX, navY);
-        display.printf("< %s", SensorManager::metricToString(prevMetric));
+        // 1h range
+        if (metric == SensorMetric::CO2) {
+            snprintf(rangeStr, sizeof(rangeStr), "%.0f-%.0f", stats1h.min, stats1h.max);
+        } else {
+            snprintf(rangeStr, sizeof(rangeStr), "%.1f-%.1f", stats1h.min, stats1h.max);
+        }
+        display.setCursor(labelX, statsY);
+        display.print(rangeStr);
 
-        // Next metric
-        int nextIdx = ((int)metric + 1) % 3;
-        SensorMetric nextMetric = (SensorMetric)nextIdx;
-        char nextStr[32];
-        snprintf(nextStr, sizeof(nextStr), "%s >", SensorManager::metricToString(nextMetric));
-        display.getTextBounds(nextStr, 0, 0, &x1, &y1, &w, &h);
-        display.setCursor(displayManager.width() - w - 20, navY);
-        display.print(nextStr);
+        // 24h range
+        if (metric == SensorMetric::CO2) {
+            snprintf(rangeStr, sizeof(rangeStr), "%.0f-%.0f", stats24h.min, stats24h.max);
+        } else {
+            snprintf(rangeStr, sizeof(rangeStr), "%.1f-%.1f", stats24h.min, stats24h.max);
+        }
+        display.setCursor(labelX + colWidth, statsY);
+        display.print(rangeStr);
 
-        // Center instruction
-        drawCenteredText("D-pad: Switch    B: Back    LB/RB: Screens", navY, &FreeMonoBold9pt7b);
+        // 48h range
+        if (metric == SensorMetric::CO2) {
+            snprintf(rangeStr, sizeof(rangeStr), "%.0f-%.0f", stats48h.min, stats48h.max);
+        } else {
+            snprintf(rangeStr, sizeof(rangeStr), "%.1f-%.1f", stats48h.min, stats48h.max);
+        }
+        display.setCursor(labelX + colWidth * 2, statsY);
+        display.print(rangeStr);
+
+        // Average below ranges
+        statsY += 14;
+        char avgStr[32];
+
+        // 1h avg
+        if (metric == SensorMetric::CO2) {
+            snprintf(avgStr, sizeof(avgStr), "avg %.0f", stats1h.avg);
+        } else {
+            snprintf(avgStr, sizeof(avgStr), "avg %.1f", stats1h.avg);
+        }
+        display.setCursor(labelX, statsY);
+        display.print(avgStr);
+
+        // 24h avg
+        if (metric == SensorMetric::CO2) {
+            snprintf(avgStr, sizeof(avgStr), "avg %.0f", stats24h.avg);
+        } else {
+            snprintf(avgStr, sizeof(avgStr), "avg %.1f", stats24h.avg);
+        }
+        display.setCursor(labelX + colWidth, statsY);
+        display.print(avgStr);
+
+        // 48h avg
+        if (metric == SensorMetric::CO2) {
+            snprintf(avgStr, sizeof(avgStr), "avg %.0f", stats48h.avg);
+        } else {
+            snprintf(avgStr, sizeof(avgStr), "avg %.1f", stats48h.avg);
+        }
+        display.setCursor(labelX + colWidth * 2, statsY);
+        display.print(avgStr);
+
+        // Navigation bar at bottom
+        display.fillRect(0, displayManager.height() - UI_NAV_BAR_HEIGHT, displayManager.width(), UI_NAV_BAR_HEIGHT, GxEPD_WHITE);
+        display.drawFastHLine(0, displayManager.height() - UI_NAV_BAR_HEIGHT, displayManager.width(), GxEPD_BLACK);
+        display.setFont(&FreeSans9pt7b);
+        drawCenteredText("[D-pad] Metric   [B] Back   [LB/RB] Screens", displayManager.height() - 7, &FreeSans9pt7b);
     } else {
         // No data state
         display.setFont(&FreeMonoBold18pt7b);
@@ -1874,21 +1978,32 @@ void UIManager::drawFullChart(int x, int y, int width, int height, SensorMetric 
     size_t count = sensorManager.getSamples(samples, maxPoints, metric, stride);
 
     if (count < 2) {
-        display.setFont(&FreeMonoBold12pt7b);
+        display.setFont(&FreeSansBold9pt7b);
         display.setCursor(x + 20, y + height / 2);
         display.print("Collecting data...");
         delete[] samples;
         return;
     }
 
-    // Get stats for scaling
+    // Get stats for markers
     SensorStats stats = sensorManager.getStats(metric);
 
-    // Calculate nice scale values
-    float range = stats.max - stats.min;
-    float padding = max(range * 0.1f, 1.0f);
-    float scaleMin = floor((stats.min - padding) / 10) * 10;
-    float scaleMax = ceil((stats.max + padding) / 10) * 10;
+    // Use FIXED ranges for consistent chart scaling (clip values at boundaries)
+    float scaleMin, scaleMax;
+    switch (metric) {
+        case SensorMetric::CO2:
+            scaleMin = CHART_CO2_MIN;
+            scaleMax = CHART_CO2_MAX;
+            break;
+        case SensorMetric::TEMPERATURE:
+            scaleMin = CHART_TEMP_MIN;
+            scaleMax = CHART_TEMP_MAX;
+            break;
+        case SensorMetric::HUMIDITY:
+            scaleMin = CHART_HUMIDITY_MIN;
+            scaleMax = CHART_HUMIDITY_MAX;
+            break;
+    }
 
     // Draw axes
     display.drawFastVLine(x, y, height, GxEPD_BLACK);
@@ -2180,121 +2295,107 @@ void UIManager::showTadoDashboard() {
 void UIManager::drawTadoDashboardContent() {
     DisplayType& display = displayManager.getDisplay();
 
-    int contentY = UI_STATUS_BAR_HEIGHT + 10;
-    int rowHeight = 70;
-    int padding = 10;
-
-    // Title
-    display.setFont(&FreeMonoBold18pt7b);
-    display.setTextColor(GxEPD_BLACK);
-    display.setCursor(20, contentY + 30);
-    display.print("Tado Thermostats");
-
-    // Sensor temperature comparison
-    display.setFont(&FreeMonoBold9pt7b);
-    char sensorStr[48];
-    if (sensorManager.isOperational()) {
-        snprintf(sensorStr, sizeof(sensorStr), "Room Sensor: %.1fC",
-                 sensorManager.getTemperature());
-    } else {
-        snprintf(sensorStr, sizeof(sensorStr), "Room Sensor: --");
-    }
-    display.setCursor(displayManager.width() - 200, contentY + 25);
-    display.print(sensorStr);
-
-    // Draw rooms
     const auto& rooms = tadoManager.getRooms();
-    int startY = contentY + 50;
+
+    // Calculate tile dimensions for 3x3 grid (same as Hue dashboard)
+    int contentStartY = UI_STATUS_BAR_HEIGHT;
+    int contentEndY = displayManager.height() - UI_NAV_BAR_HEIGHT;
+    int contentHeight = contentEndY - contentStartY;
+    int contentWidth = displayManager.width();
+
+    int tileWidth = (contentWidth - (UI_TILE_COLS + 1) * UI_TILE_PADDING) / UI_TILE_COLS;
+    int tileHeight = (contentHeight - (UI_TILE_ROWS + 1) * UI_TILE_PADDING) / UI_TILE_ROWS;
 
     if (rooms.empty()) {
-        display.setFont(&FreeMonoBold12pt7b);
-        drawCenteredText("No rooms found", startY + 100, &FreeMonoBold12pt7b);
-        drawCenteredText("Press B to go back", startY + 140, &FreeMonoBold9pt7b);
-        return;
+        display.setFont(&FreeSansBold12pt7b);
+        drawCenteredText("No rooms found", displayManager.height() / 2, &FreeSansBold12pt7b);
+        display.setFont(&FreeSans9pt7b);
+        drawCenteredText("Connect to Tado first", displayManager.height() / 2 + 30, &FreeSans9pt7b);
+    } else {
+        // Draw room tiles in 3x3 grid
+        for (size_t i = 0; i < rooms.size() && i < (UI_TILE_COLS * UI_TILE_ROWS); i++) {
+            int col = i % UI_TILE_COLS;
+            int row = i / UI_TILE_COLS;
+            bool isSelected = ((int)i == _selectedTadoRoom);
+
+            int tileX = UI_TILE_PADDING + col * (tileWidth + UI_TILE_PADDING);
+            int tileY = contentStartY + UI_TILE_PADDING + row * (tileHeight + UI_TILE_PADDING);
+
+            drawTadoRoomTile(tileX, tileY, tileWidth, tileHeight, rooms[i], isSelected);
+        }
     }
 
-    for (size_t i = 0; i < rooms.size() && i < 5; i++) {  // Max 5 rooms on screen
-        bool isSelected = (i == _selectedTadoRoom);
-        drawTadoRoomRow(padding, startY + (i * rowHeight), displayManager.width() - (2 * padding),
-                        rowHeight - 5, rooms[i], isSelected);
-    }
-
-    // Navigation hints
-    display.setFont(&FreeMonoBold9pt7b);
-    display.setCursor(20, displayManager.height() - 20);
-    display.print("D-pad: Select    LT/RT: Temp    A: Toggle    LB/RB: Screens");
+    // Navigation bar at bottom
+    display.fillRect(0, displayManager.height() - UI_NAV_BAR_HEIGHT, displayManager.width(), UI_NAV_BAR_HEIGHT, GxEPD_WHITE);
+    display.drawFastHLine(0, displayManager.height() - UI_NAV_BAR_HEIGHT, displayManager.width(), GxEPD_BLACK);
+    display.setFont(&FreeSans9pt7b);
+    drawCenteredText("[D-pad] Select   [LT/RT] Temp   [A] Toggle   [B] Back", displayManager.height() - 7, &FreeSans9pt7b);
 }
 
-void UIManager::drawTadoRoomRow(int x, int y, int width, int height,
-                                 const TadoRoom& room, bool isSelected) {
+void UIManager::drawTadoRoomTile(int x, int y, int width, int height,
+                                  const TadoRoom& room, bool isSelected) {
     DisplayType& display = displayManager.getDisplay();
 
-    // Selection highlight
+    // Tile border - thicker for selected
     if (isSelected) {
+        // 2px border for selection
         display.drawRect(x, y, width, height, GxEPD_BLACK);
         display.drawRect(x + 1, y + 1, width - 2, height - 2, GxEPD_BLACK);
     } else {
+        // 1px border
         display.drawRect(x, y, width, height, GxEPD_BLACK);
     }
 
-    int textY = y + height / 2 + 6;
+    int contentX = x + 8;
+    int contentWidth = width - 16;
 
-    // Room name
-    display.setFont(&FreeMonoBold12pt7b);
+    // Room name at top
+    display.setFont(&FreeSansBold9pt7b);
     display.setTextColor(GxEPD_BLACK);
-    display.setCursor(x + 15, textY);
-    display.print(room.name);
+    display.setCursor(contentX, y + 22);
 
-    // Current temp (from Tado sensor)
-    char tadoTempStr[16];
-    snprintf(tadoTempStr, sizeof(tadoTempStr), "%.1fC", room.currentTemp);
-    display.setCursor(x + 250, textY);
-    display.print(tadoTempStr);
+    // Truncate name if too long
+    char truncName[16];
+    strncpy(truncName, room.name.c_str(), 15);
+    truncName[15] = '\0';
+    display.print(truncName);
 
-    // Arrow
-    display.setCursor(x + 340, textY);
-    display.print("->");
+    // Current temperature - large, centered
+    display.setFont(&FreeMonoBold18pt7b);
+    char tempStr[16];
+    snprintf(tempStr, sizeof(tempStr), "%.1f" "\xB0", room.currentTemp);
+    int16_t tx1, ty1;
+    uint16_t tw, th;
+    display.getTextBounds(tempStr, 0, 0, &tx1, &ty1, &tw, &th);
+    display.setCursor(x + (width - tw) / 2, y + height / 2 + 5);
+    display.print(tempStr);
 
-    // Target temp
-    char targetStr[16];
+    // Target temperature and status at bottom
+    display.setFont(&FreeMono9pt7b);
+    char statusStr[24];
     if (room.heating && room.targetTemp > 0) {
-        snprintf(targetStr, sizeof(targetStr), "%.1fC", room.targetTemp);
+        snprintf(statusStr, sizeof(statusStr), "-> %.1f" "\xB0", room.targetTemp);
     } else {
-        snprintf(targetStr, sizeof(targetStr), "OFF");
+        snprintf(statusStr, sizeof(statusStr), "OFF");
     }
-    display.setCursor(x + 380, textY);
-    display.print(targetStr);
+    display.getTextBounds(statusStr, 0, 0, &tx1, &ty1, &tw, &th);
+    display.setCursor(x + (width - tw) / 2, y + height - 20);
+    display.print(statusStr);
 
-    // Heating indicator (flame)
+    // Heating indicator - small flame in corner
     if (room.heating) {
-        int flameX = x + width - 80;
-        int flameY = y + height / 2;
-        // Simple flame shape
-        display.fillTriangle(flameX, flameY + 10, flameX + 10, flameY + 10,
-                            flameX + 5, flameY - 10, GxEPD_BLACK);
-        display.setCursor(flameX + 15, textY);
-        display.setFont(&FreeMonoBold9pt7b);
-        display.print("ON");
+        int flameX = x + width - 18;
+        int flameY = y + 10;
+        // Simple flame triangle
+        display.fillTriangle(flameX, flameY + 10, flameX + 8, flameY + 10,
+                            flameX + 4, flameY, GxEPD_BLACK);
     }
 
-    // Manual override indicator
+    // Manual override indicator in opposite corner
     if (room.manualOverride) {
-        display.setFont(&FreeMonoBold9pt7b);
-        display.setCursor(x + width - 40, textY - 15);
+        display.setFont(&FreeMono9pt7b);
+        display.setCursor(x + 6, y + height - 8);
         display.print("M");
-    }
-
-    // Sensor comparison (if sensor operational)
-    if (sensorManager.isOperational()) {
-        float sensorTemp = sensorManager.getTemperature();
-        float diff = sensorTemp - room.currentTemp;
-        if (abs(diff) > 0.5) {
-            display.setFont(&FreeMonoBold9pt7b);
-            char diffStr[16];
-            snprintf(diffStr, sizeof(diffStr), "%+.1f", diff);
-            display.setCursor(x + 480, textY);
-            display.print(diffStr);
-        }
     }
 }
 

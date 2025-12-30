@@ -4,10 +4,17 @@
 #define ENABLE_GxEPD2_GFX 0
 
 #include <GxEPD2_BW.h>
+// Monospace fonts for data/numbers
 #include <Fonts/FreeMonoBold24pt7b.h>
 #include <Fonts/FreeMonoBold18pt7b.h>
 #include <Fonts/FreeMonoBold12pt7b.h>
 #include <Fonts/FreeMonoBold9pt7b.h>
+#include <Fonts/FreeMono9pt7b.h>
+// Sans-serif fonts for titles/headers (cleaner look)
+#include <Fonts/FreeSansBold18pt7b.h>
+#include <Fonts/FreeSansBold12pt7b.h>
+#include <Fonts/FreeSansBold9pt7b.h>
+#include <Fonts/FreeSans9pt7b.h>
 #include "config.h"
 
 // Display type definition for GDEQ0426T82 (800x480)

@@ -131,16 +131,28 @@
 // UI Configuration
 // -----------------------------------------------------------------------------
 #define UI_TILE_COLS            3           // Number of tile columns
-#define UI_TILE_ROWS            2           // Number of tile rows
-#define UI_TILE_PADDING         10          // Padding between tiles
-#define UI_STATUS_BAR_HEIGHT    40          // Height of status bar at top
+#define UI_TILE_ROWS            3           // Number of tile rows (was 2, now 3x3 grid)
+#define UI_TILE_PADDING         8           // Padding between tiles (reduced for 3x3)
+#define UI_STATUS_BAR_HEIGHT    32          // Height of status bar at top (reduced from 40)
+#define UI_NAV_BAR_HEIGHT       24          // Navigation hints bar at bottom
+#define UI_SELECTION_BORDER     2           // Selection border thickness
 
 // -----------------------------------------------------------------------------
 // Display Refresh Configuration
 // -----------------------------------------------------------------------------
-#define FULL_REFRESH_INTERVAL_MS    300000  // Force full refresh every 5 minutes to clear ghosting
-#define MAX_PARTIAL_UPDATES         50      // Or after this many partial updates
+#define FULL_REFRESH_INTERVAL_MS    150000  // Force full refresh every 2.5 min (was 5 min) for cleaner white
+#define MAX_PARTIAL_UPDATES         30      // Or after this many partial updates (reduced)
 #define PARTIAL_REFRESH_THRESHOLD   3       // If more than this many tiles change, do full refresh
+
+// -----------------------------------------------------------------------------
+// Chart Fixed Ranges
+// -----------------------------------------------------------------------------
+#define CHART_CO2_MIN           0           // CO2 minimum (ppm)
+#define CHART_CO2_MAX           10000       // CO2 maximum (ppm)
+#define CHART_TEMP_MIN          -10         // Temperature minimum (°C)
+#define CHART_TEMP_MAX          50          // Temperature maximum (°C)
+#define CHART_HUMIDITY_MIN      0           // Humidity minimum (%)
+#define CHART_HUMIDITY_MAX      100         // Humidity maximum (%)
 
 // -----------------------------------------------------------------------------
 // STCC4 Sensor Configuration
