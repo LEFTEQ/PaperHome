@@ -62,11 +62,15 @@ export interface TadoRoom {
 }
 
 export interface TelemetryAggregate {
-  bucket: string;
-  avg_co2: number | null;
-  avg_temperature: number | null;
-  avg_humidity: number | null;
-  avg_battery: number | null;
+  time: string;
+  avgCo2: number | null;
+  avgTemperature: number | null;
+  avgHumidity: number | null;
+  avgBattery?: number | null;
+  minCo2?: number | null;
+  maxCo2?: number | null;
+  minTemperature?: number | null;
+  maxTemperature?: number | null;
 }
 
 export interface AuthResponse {

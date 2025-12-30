@@ -68,10 +68,10 @@ function extractChartData(
 
   const key =
     metric === 'co2'
-      ? 'avg_co2'
+      ? 'avgCo2'
       : metric === 'temperature'
-        ? 'avg_temperature'
-        : 'avg_humidity';
+        ? 'avgTemperature'
+        : 'avgHumidity';
 
   return aggregates
     .map((a) => a[key])
@@ -139,10 +139,10 @@ export function DeviceDetailPage() {
 
   // Get latest values from aggregates (last item)
   const latestAggregate = aggregates?.[aggregates.length - 1];
-  const co2 = latestAggregate?.avg_co2 ?? null;
-  const temperature = latestAggregate?.avg_temperature ?? null;
-  const humidity = latestAggregate?.avg_humidity ?? null;
-  const battery = latestAggregate?.avg_battery ?? null;
+  const co2 = latestAggregate?.avgCo2 ?? null;
+  const temperature = latestAggregate?.avgTemperature ?? null;
+  const humidity = latestAggregate?.avgHumidity ?? null;
+  const battery = latestAggregate?.avgBattery ?? null;
 
   const isLoading = deviceLoading;
 
