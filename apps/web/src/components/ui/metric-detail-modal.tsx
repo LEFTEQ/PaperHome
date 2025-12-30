@@ -157,7 +157,7 @@ export function MetricDetailModal({
                     data={chartData}
                     color={config.color}
                     height={160}
-                    showArea={true}
+                    showFill={true}
                     strokeWidth={2}
                   />
                 </div>

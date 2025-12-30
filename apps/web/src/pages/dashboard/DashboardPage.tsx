@@ -393,7 +393,7 @@ export function DashboardPage() {
                         data={co2Data}
                         color="#00e5ff"
                         height={64}
-                        showArea
+                        showFill
                         strokeWidth={2}
                       />
                     </div>
@@ -429,7 +429,7 @@ export function DashboardPage() {
                         data={tempData}
                         color="#f59e0b"
                         height={32}
-                        showArea
+                        showFill
                       />
                     </div>
                   )}
@@ -464,7 +464,7 @@ export function DashboardPage() {
                         data={humidityData}
                         color="#8b5cf6"
                         height={32}
-                        showArea
+                        showFill
                       />
                     </div>
                   )}
