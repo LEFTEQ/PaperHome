@@ -54,11 +54,11 @@ export class DevicesController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get device by ID' })
+  @ApiOperation({ summary: 'Get device by ID (owned or unclaimed)' })
   @ApiResponse({ status: 200, description: 'Device details' })
   @ApiResponse({ status: 404, description: 'Device not found' })
   async findOne(@CurrentUser() user: any, @Param('id') id: string) {
-    return this.devicesService.findOneByOwner(user.id, id);
+    return this.devicesService.findOneForUser(user.id, id);
   }
 
   @Patch(':id')

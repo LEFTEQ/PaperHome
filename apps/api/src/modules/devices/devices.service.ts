@@ -54,6 +54,26 @@ export class DevicesService {
     return device;
   }
 
+  /**
+   * Find a device if user owns it OR if it's unclaimed
+   */
+  async findOneForUser(userId: string, id: string): Promise<Device> {
+    const device = await this.deviceRepository.findOne({
+      where: { id },
+    });
+
+    if (!device) {
+      throw new NotFoundException('Device not found');
+    }
+
+    // User can access if they own it OR if it's unclaimed
+    if (device.ownerId !== null && device.ownerId !== userId) {
+      throw new NotFoundException('Device not found');
+    }
+
+    return device;
+  }
+
   async findByDeviceId(deviceId: string): Promise<Device | null> {
     return this.deviceRepository.findOne({ where: { deviceId } });
   }
