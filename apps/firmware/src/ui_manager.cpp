@@ -1107,65 +1107,72 @@ void UIManager::drawStatusBar(bool wifiConnected, const String& bridgeIP) {
     display.setCursor(batX + 20, textY);
     display.print(batStr);
 
-    // === CENTER: Sensor readings (prominent) ===
-    int centerX = displayManager.width() / 2;
+    // === RIGHT: Sensor readings (compact, right-aligned) ===
+    int rightMargin = 15;
 
     if (sensorManager.isOperational()) {
-        display.setFont(&FreeSansBold12pt7b);
+        // Use consistent 9pt Bold for all sensor text
+        display.setFont(&FreeSansBold9pt7b);
 
-        // CO2 - largest, most prominent
-        char co2Str[16];
-        snprintf(co2Str, sizeof(co2Str), "%.0f", sensorManager.getCO2());
+        // Build sensor strings
+        char co2Str[16], tempStr[16], humStr[16];
+        snprintf(co2Str, sizeof(co2Str), "%.0fppm", sensorManager.getCO2());
+        snprintf(tempStr, sizeof(tempStr), "%.1f" "\xB0" "C", sensorManager.getTemperature());
+        snprintf(humStr, sizeof(humStr), "%.0f%%", sensorManager.getHumidity());
+
+        // Calculate total width needed
         int16_t x1, y1;
-        uint16_t w, h;
-        display.getTextBounds(co2Str, 0, 0, &x1, &y1, &w, &h);
-        display.setCursor(centerX - 180, textY + 2);
-        display.print(co2Str);
-        display.setFont(&FreeSans9pt7b);
-        display.print(" ppm");
+        uint16_t co2W, tempW, humW, sepW, h;
+        display.getTextBounds(co2Str, 0, 0, &x1, &y1, &co2W, &h);
+        display.getTextBounds(tempStr, 0, 0, &x1, &y1, &tempW, &h);
+        display.getTextBounds(humStr, 0, 0, &x1, &y1, &humW, &h);
+        display.getTextBounds("|", 0, 0, &x1, &y1, &sepW, &h);
 
-        // Separator
-        display.setFont(&FreeSans9pt7b);
-        display.setCursor(centerX - 60, textY);
+        int spacing = 8;  // Space around separators
+        int totalWidth = co2W + spacing + sepW + spacing + tempW + spacing + sepW + spacing + humW;
+
+        // Position from right edge
+        int sensorStartX = displayManager.width() - rightMargin - totalWidth;
+
+        // Draw CO2
+        display.setCursor(sensorStartX, textY);
+        display.print(co2Str);
+
+        // Separator 1
+        int sep1X = sensorStartX + co2W + spacing;
+        display.setCursor(sep1X, textY);
         display.print("|");
 
         // Temperature
-        display.setFont(&FreeSansBold12pt7b);
-        char tempStr[16];
-        snprintf(tempStr, sizeof(tempStr), "%.1f", sensorManager.getTemperature());
-        display.setCursor(centerX - 40, textY + 2);
+        int tempX = sep1X + sepW + spacing;
+        display.setCursor(tempX, textY);
         display.print(tempStr);
-        display.setFont(&FreeSans9pt7b);
-        display.print("\xB0" "C");  // degree symbol
 
-        // Separator
-        display.setCursor(centerX + 60, textY);
+        // Separator 2
+        int sep2X = tempX + tempW + spacing;
+        display.setCursor(sep2X, textY);
         display.print("|");
 
         // Humidity
-        display.setFont(&FreeSansBold12pt7b);
-        char humStr[16];
-        snprintf(humStr, sizeof(humStr), "%.0f", sensorManager.getHumidity());
-        display.setCursor(centerX + 80, textY + 2);
+        int humX = sep2X + sepW + spacing;
+        display.setCursor(humX, textY);
         display.print(humStr);
-        display.setFont(&FreeSans9pt7b);
-        display.print("%");
     } else {
-        // Sensor not ready
-        display.setFont(&FreeSans9pt7b);
-        display.setCursor(centerX - 80, textY);
+        // Sensor not ready - right-aligned
+        display.setFont(&FreeSansBold9pt7b);
+        char statusStr[32];
         if (sensorManager.getState() == SensorConnectionState::WARMING_UP) {
             int progress = (int)(sensorManager.getWarmupProgress() * 100);
-            char warmupStr[32];
-            snprintf(warmupStr, sizeof(warmupStr), "Warming up... %d%%", progress);
-            display.print(warmupStr);
+            snprintf(statusStr, sizeof(statusStr), "Warming up... %d%%", progress);
         } else {
-            display.print("Sensor: --");
+            snprintf(statusStr, sizeof(statusStr), "Sensor: --");
         }
+        int16_t x1, y1;
+        uint16_t w, h;
+        display.getTextBounds(statusStr, 0, 0, &x1, &y1, &w, &h);
+        display.setCursor(displayManager.width() - rightMargin - w, textY);
+        display.print(statusStr);
     }
-
-    // === RIGHT: Minimal indicators (only if space needed) ===
-    // Removed Tado/Hue dots to keep status bar clean and sensor-focused
 
     display.setTextColor(GxEPD_BLACK);
 }
@@ -2165,53 +2172,68 @@ void UIManager::showTadoAuth(const TadoAuthInfo& authInfo) {
 void UIManager::drawTadoAuthContent(const TadoAuthInfo& authInfo) {
     DisplayType& display = displayManager.getDisplay();
 
-    int contentY = UI_STATUS_BAR_HEIGHT + 20;
+    int centerX = displayManager.width() / 2;
+    int contentY = UI_STATUS_BAR_HEIGHT + 15;
+    display.setTextColor(GxEPD_BLACK);
 
     // Title
-    display.setFont(&FreeMonoBold18pt7b);
-    display.setTextColor(GxEPD_BLACK);
-    drawCenteredText("TADO LOGIN", contentY + 40, &FreeMonoBold18pt7b);
+    display.setFont(&FreeSansBold12pt7b);
+    drawCenteredText("Tado Login", contentY + 25, &FreeSansBold12pt7b);
 
-    // Instructions
-    display.setFont(&FreeMonoBold12pt7b);
-    drawCenteredText("Open this URL on your phone:", contentY + 100, &FreeMonoBold12pt7b);
+    // Generate QR code from the full verification URL
+    QRCode qrcode;
+    uint8_t qrcodeData[qrcode_getBufferSize(6)];  // Version 6 for longer URLs
+    qrcode_initText(&qrcode, qrcodeData, 6, ECC_MEDIUM, authInfo.verifyUrl.c_str());
 
-    // URL box
-    int boxX = 30;
-    int boxY = contentY + 120;
-    int boxW = displayManager.width() - 60;
-    int boxH = 50;
-    display.drawRect(boxX, boxY, boxW, boxH, GxEPD_BLACK);
+    // Draw QR code - centered
+    int qrSize = qrcode.size;
+    int scale = 4;  // 4px per module for reasonable size
+    int qrPixelSize = qrSize * scale;
+    int qrX = centerX - qrPixelSize / 2;
+    int qrY = contentY + 50;
 
-    // URL text - strip domain, show only path
-    display.setFont(&FreeMonoBold12pt7b);
-    String url = authInfo.verifyUrl;
+    // White background with border
+    display.fillRect(qrX - 10, qrY - 10, qrPixelSize + 20, qrPixelSize + 20, GxEPD_WHITE);
+    display.drawRect(qrX - 10, qrY - 10, qrPixelSize + 20, qrPixelSize + 20, GxEPD_BLACK);
 
-    // Remove https://login.tado.com or similar domain
-    int pathStart = url.indexOf("://");
-    if (pathStart >= 0) {
-        pathStart = url.indexOf("/", pathStart + 3);  // Find first / after ://
-        if (pathStart >= 0) {
-            url = "login.tado.com" + url.substring(pathStart);
+    // Draw QR code modules
+    for (int qy = 0; qy < qrSize; qy++) {
+        for (int qx = 0; qx < qrSize; qx++) {
+            if (qrcode_getModule(&qrcode, qx, qy)) {
+                display.fillRect(qrX + qx * scale, qrY + qy * scale, scale, scale, GxEPD_BLACK);
+            }
         }
     }
 
-    // Center the URL in the box
+    // Instruction below QR
+    int textY = qrY + qrPixelSize + 30;
+    display.setFont(&FreeSansBold9pt7b);
+    drawCenteredText("Scan with your phone camera", textY, &FreeSansBold9pt7b);
+
+    // Divider line with "or"
+    textY += 30;
+    int lineWidth = 100;
+    display.drawFastHLine(centerX - lineWidth - 30, textY - 5, lineWidth, GxEPD_BLACK);
+    display.setFont(&FreeSans9pt7b);
     int16_t x1, y1;
     uint16_t w, h;
-    display.getTextBounds(url.c_str(), 0, 0, &x1, &y1, &w, &h);
-    display.setCursor(boxX + (boxW - w) / 2, boxY + 33);
-    display.print(url);
+    display.getTextBounds("or", 0, 0, &x1, &y1, &w, &h);
+    display.setCursor(centerX - w / 2, textY);
+    display.print("or");
+    display.drawFastHLine(centerX + 30, textY - 5, lineWidth, GxEPD_BLACK);
 
-    // Alternative: enter code
-    display.setFont(&FreeMonoBold12pt7b);
-    drawCenteredText("Or enter this code at login.tado.com/device:", contentY + 210, &FreeMonoBold12pt7b);
+    // Manual code instruction
+    textY += 25;
+    display.setFont(&FreeSans9pt7b);
+    drawCenteredText("Enter code at login.tado.com/device", textY, &FreeSans9pt7b);
 
     // Large user code
-    display.setFont(&FreeMonoBold24pt7b);
-    drawCenteredText(authInfo.userCode.c_str(), contentY + 270, &FreeMonoBold24pt7b);
+    textY += 40;
+    display.setFont(&FreeMonoBold18pt7b);
+    drawCenteredText(authInfo.userCode.c_str(), textY, &FreeMonoBold18pt7b);
 
     // Status with countdown
+    textY += 50;
     unsigned long now = millis();
     int remaining = 0;
     if (authInfo.expiresAt > now) {
@@ -2220,30 +2242,34 @@ void UIManager::drawTadoAuthContent(const TadoAuthInfo& authInfo) {
 
     char statusStr[64];
     if (remaining > 0) {
-        snprintf(statusStr, sizeof(statusStr), "Waiting for login... (expires in %d:%02d)",
+        snprintf(statusStr, sizeof(statusStr), "Expires in %d:%02d",
                  remaining / 60, remaining % 60);
     } else {
         snprintf(statusStr, sizeof(statusStr), "Code expired - press A to retry");
     }
-    display.setFont(&FreeMonoBold12pt7b);
-    drawCenteredText(statusStr, contentY + 350, &FreeMonoBold12pt7b);
+    display.setFont(&FreeSansBold9pt7b);
+    drawCenteredText(statusStr, textY, &FreeSansBold9pt7b);
 
-    // Hint
-    display.setFont(&FreeMonoBold9pt7b);
-    drawCenteredText("[B] Cancel", displayManager.height() - 30, &FreeMonoBold9pt7b);
+    // Navigation bar at bottom
+    display.fillRect(0, displayManager.height() - UI_NAV_BAR_HEIGHT, displayManager.width(), UI_NAV_BAR_HEIGHT, GxEPD_WHITE);
+    display.drawFastHLine(0, displayManager.height() - UI_NAV_BAR_HEIGHT, displayManager.width(), GxEPD_BLACK);
+    display.setFont(&FreeSans9pt7b);
+    drawCenteredText("[A] Retry   [B] Cancel", displayManager.height() - 7, &FreeSans9pt7b);
 }
 
 void UIManager::updateTadoAuth() {
     if (_currentScreen != UIScreen::TADO_AUTH) return;
 
     // Update the countdown timer with partial refresh
+    // Calculate position based on new layout:
+    // QR code is ~164px (version 6, scale 4), then instructions, code, countdown
     DisplayType& display = displayManager.getDisplay();
 
-    int contentY = UI_STATUS_BAR_HEIGHT + 20;
-    int statusY = contentY + 330;
+    // Status is near bottom, above nav bar
+    int statusY = displayManager.height() - UI_NAV_BAR_HEIGHT - 50;
 
     // Partial refresh just the status area
-    display.setPartialWindow(0, statusY, displayManager.width(), 40);
+    display.setPartialWindow(0, statusY - 15, displayManager.width(), 35);
     display.firstPage();
     do {
         display.fillScreen(GxEPD_WHITE);
@@ -2256,15 +2282,15 @@ void UIManager::updateTadoAuth() {
 
         char statusStr[64];
         if (remaining > 0) {
-            snprintf(statusStr, sizeof(statusStr), "Waiting for login... (expires in %d:%02d)",
+            snprintf(statusStr, sizeof(statusStr), "Expires in %d:%02d",
                      remaining / 60, remaining % 60);
         } else {
             snprintf(statusStr, sizeof(statusStr), "Code expired - press A to retry");
         }
 
-        display.setFont(&FreeMonoBold12pt7b);
+        display.setFont(&FreeSansBold9pt7b);
         display.setTextColor(GxEPD_BLACK);
-        drawCenteredText(statusStr, statusY + 20, &FreeMonoBold12pt7b);
+        drawCenteredText(statusStr, statusY, &FreeSansBold9pt7b);
     } while (display.nextPage());
 
     _partialUpdateCount++;
