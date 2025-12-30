@@ -20,6 +20,12 @@
 #include "mqtt_manager.h"
 #include "homekit_manager.h"
 
+#if USE_FREERTOS_TASKS
+#include "freertos_tasks.h"
+#include "input_task.h"
+#include "display_task.h"
+#endif
+
 // Track states for display updates
 HueState lastHueState = HueState::DISCONNECTED;
 bool needsDisplayUpdate = false;
@@ -33,7 +39,9 @@ unsigned long lastDisplayUpdateTime = 0;
 bool pendingSelectionUpdate = false;
 int pendingOldIndex = -1;
 int pendingNewIndex = -1;
+#if !USE_FREERTOS_TASKS
 const unsigned long DISPLAY_UPDATE_DELAY_MS = 150;  // Wait for rapid inputs to settle
+#endif
 
 // Periodic refresh for sensor/status updates when idle
 unsigned long lastPeriodicRefresh = 0;
@@ -73,6 +81,11 @@ void onHueStateChange(HueState state, const char* message) {
 void onRoomsUpdate(const std::vector<HueRoom>& rooms) {
     Serial.printf("[Main] Rooms updated: %d rooms\n", rooms.size());
 
+#if USE_FREERTOS_TASKS
+    // Thread-safe update via InputTask
+    InputTaskManager::updateHueRooms(rooms);
+    InputTaskManager::updateConnectionStatus(WiFi.status() == WL_CONNECTED, hueManager.getBridgeIP());
+#else
     UIScreen currentScreen = uiManager.getCurrentScreen();
 
     if (currentScreen == UIScreen::DASHBOARD) {
@@ -84,6 +97,7 @@ void onRoomsUpdate(const std::vector<HueRoom>& rooms) {
             uiManager.updateRoomControl(rooms[selectedRoomIndex]);
         }
     }
+#endif
 }
 
 // Helper to queue a selection update (deferred display refresh)
@@ -685,17 +699,28 @@ void onTadoStateChange(TadoState state, const char* message) {
 // Callback for Tado auth info (show auth screen)
 void onTadoAuth(const TadoAuthInfo& authInfo) {
     Serial.println("[Main] Tado auth requested, showing auth screen");
+#if USE_FREERTOS_TASKS
+    InputTaskManager::updateTadoAuth(authInfo);
+    // Send event to display task
+    InputEvent event = InputEvent::makeScreenChange(UIScreen::TADO_AUTH);
+    TaskManager::sendEvent(event);
+#else
     uiManager.showTadoAuth(authInfo);
+#endif
 }
 
 // Callback for Tado rooms update
 void onTadoRoomsUpdate(const std::vector<TadoRoom>& rooms) {
     Serial.printf("[Main] Tado rooms updated: %d rooms\n", rooms.size());
 
+#if USE_FREERTOS_TASKS
+    InputTaskManager::updateTadoRooms(rooms);
+#else
     UIScreen currentScreen = uiManager.getCurrentScreen();
     if (currentScreen == UIScreen::TADO_DASHBOARD) {
         uiManager.updateTadoDashboard();
     }
+#endif
 }
 
 // Callback for MQTT state changes
@@ -845,8 +870,14 @@ void setup() {
 
     // Initialize Controller Manager
     Serial.println("[Main] Initializing Controller Manager...");
+#if USE_FREERTOS_TASKS
+    // When using FreeRTOS, input is handled by InputTask
+    // We still need the state callback for logging
+    controllerManager.setStateCallback(onControllerState);
+#else
     controllerManager.setInputCallback(onControllerInput);
     controllerManager.setStateCallback(onControllerState);
+#endif
     controllerManager.init();
 
     // Initialize Sensor Manager
@@ -884,6 +915,27 @@ void setup() {
     // Update display based on Hue state
     updateDisplay();
 
+#if USE_FREERTOS_TASKS
+    // Initialize FreeRTOS tasks for responsive input handling
+    Serial.println("[Main] Initializing FreeRTOS tasks...");
+    TaskManager::initialize();
+
+    // Populate initial shared state
+    TaskManager::acquireStateLock();
+    TaskManager::sharedState.wifiConnected = (WiFi.status() == WL_CONNECTED);
+    TaskManager::sharedState.bridgeIP = hueManager.getBridgeIP();
+    TaskManager::sharedState.hueRooms = hueManager.getRooms();
+    TaskManager::sharedState.tadoRooms = tadoManager.getRooms();
+    if (sensorManager.isOperational()) {
+        TaskManager::sharedState.co2 = sensorManager.getCO2();
+        TaskManager::sharedState.temperature = sensorManager.getTemperature();
+        TaskManager::sharedState.humidity = sensorManager.getHumidity();
+    }
+    TaskManager::sharedState.batteryPercent = powerManager.getBatteryPercent();
+    TaskManager::sharedState.isCharging = powerManager.isCharging();
+    TaskManager::releaseStateLock();
+#endif
+
     Serial.println("[Main] Setup complete!");
     Serial.println("[Main] Press Xbox button on controller to pair");
     Serial.printf("[Main] HomeKit pairing code: %s\n", HOMEKIT_SETUP_CODE);
@@ -891,6 +943,114 @@ void setup() {
 }
 
 void loop() {
+#if USE_FREERTOS_TASKS
+    // =========================================================================
+    // FreeRTOS Mode: Input and Display handled by dedicated tasks
+    // Main loop only handles network managers and periodic updates
+    // =========================================================================
+
+    // Update network managers (these have callbacks that update shared state)
+    hueManager.update();
+    sensorManager.update();
+    powerManager.update();
+    tadoManager.update();
+    mqttManager.update();
+    homekitManager.update();
+
+    // Update HomeKit with sensor values
+    if (sensorManager.isOperational()) {
+        homekitManager.updateTemperature(sensorManager.getTemperature());
+        homekitManager.updateHumidity(sensorManager.getHumidity());
+        homekitManager.updateCO2(sensorManager.getCO2());
+
+        // Update shared state with latest sensor values
+        InputTaskManager::updateSensorData(
+            sensorManager.getCO2(),
+            sensorManager.getTemperature(),
+            sensorManager.getHumidity()
+        );
+    }
+
+    // Update shared state with power info
+    InputTaskManager::updatePowerStatus(
+        powerManager.getBatteryPercent(),
+        powerManager.isCharging()
+    );
+
+    // MQTT telemetry publishing
+    unsigned long now = millis();
+    if (mqttManager.isConnected() && sensorManager.isOperational()) {
+        if (now - lastMqttTelemetry >= MQTT_TELEMETRY_INTERVAL_MS) {
+            lastMqttTelemetry = now;
+            mqttManager.publishTelemetry(
+                sensorManager.getCO2(),
+                sensorManager.getTemperature(),
+                sensorManager.getHumidity(),
+                powerManager.getBatteryPercent(),
+                powerManager.isCharging()
+            );
+        }
+    }
+
+    // Publish Hue state to MQTT periodically
+    if (mqttManager.isConnected() && hueManager.getState() == HueState::CONNECTED) {
+        if (now - lastMqttHueState >= MQTT_HUE_STATE_INTERVAL_MS) {
+            lastMqttHueState = now;
+            const auto& rooms = hueManager.getRooms();
+            JsonDocument doc;
+            JsonArray arr = doc.to<JsonArray>();
+            for (const auto& room : rooms) {
+                JsonObject obj = arr.add<JsonObject>();
+                obj["id"] = room.id;
+                obj["name"] = room.name;
+                obj["anyOn"] = room.anyOn;
+                obj["allOn"] = room.allOn;
+                obj["brightness"] = room.brightness;
+            }
+            String json;
+            serializeJson(doc, json);
+            mqttManager.publishHueState(json.c_str());
+        }
+    }
+
+    // Publish Tado state to MQTT periodically
+    if (mqttManager.isConnected() && tadoManager.isAuthenticated()) {
+        if (now - lastMqttTadoState >= MQTT_TADO_STATE_INTERVAL_MS) {
+            lastMqttTadoState = now;
+            const auto& rooms = tadoManager.getRooms();
+            JsonDocument doc;
+            JsonArray arr = doc.to<JsonArray>();
+            for (const auto& room : rooms) {
+                JsonObject obj = arr.add<JsonObject>();
+                obj["id"] = room.id;
+                obj["name"] = room.name;
+                obj["currentTemp"] = room.currentTemp;
+                obj["targetTemp"] = room.targetTemp;
+                obj["heating"] = room.heating;
+                obj["manualOverride"] = room.manualOverride;
+            }
+            String json;
+            serializeJson(doc, json);
+            mqttManager.publishTadoState(json.c_str());
+        }
+    }
+
+    // Sync Tado with sensor periodically
+    if (tadoManager.isAuthenticated() && sensorManager.isOperational()) {
+        if (now - lastTadoSync >= TADO_SYNC_INTERVAL_MS) {
+            lastTadoSync = now;
+            tadoManager.syncWithSensor(sensorManager.getTemperature());
+        }
+    }
+
+    // Yield to FreeRTOS scheduler
+    vTaskDelay(pdMS_TO_TICKS(10));
+
+#else
+    // =========================================================================
+    // Legacy Mode: Single-threaded cooperative multitasking
+    // =========================================================================
+
     // Update Controller Manager (handles BLE connection and input)
     controllerManager.update();
 
@@ -1049,4 +1209,5 @@ void loop() {
 
     // Minimal delay - just yield to other tasks
     delay(5);
+#endif
 }

@@ -182,4 +182,23 @@
 #define DEBUG_HOMEKIT       true
 #define SERIAL_BAUD         115200
 
+// -----------------------------------------------------------------------------
+// FreeRTOS Task Configuration
+// -----------------------------------------------------------------------------
+// Enable FreeRTOS dual-core architecture for responsive input handling
+#define USE_FREERTOS_TASKS          1
+
+// Task configuration (only used when USE_FREERTOS_TASKS is enabled)
+#define FREERTOS_INPUT_TASK_CORE    0       // Core 0 for input (always responsive)
+#define FREERTOS_DISPLAY_TASK_CORE  1       // Core 1 for display (can block)
+#define FREERTOS_EVENT_QUEUE_LENGTH 16      // Max pending display events
+#define FREERTOS_DISPLAY_BATCH_MS   50      // Batch window for coalescing nav events
+
+// Display update batching (0 = disabled, handled by FreeRTOS batching)
+#if USE_FREERTOS_TASKS
+    #define DISPLAY_UPDATE_DELAY_MS     0   // Handled by task batching
+#else
+    #define DISPLAY_UPDATE_DELAY_MS     150 // Legacy deferred update delay
+#endif
+
 #endif // CONFIG_H

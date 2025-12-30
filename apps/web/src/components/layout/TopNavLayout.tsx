@@ -2,7 +2,7 @@ import { Outlet, useNavigate } from 'react-router-dom';
 import { useState, useMemo } from 'react';
 import { Home, Cpu, Settings, Lightbulb, Thermometer, Activity } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
-import { AnimatedBackground } from './AnimatedBackground';
+import { StaticGradientBackground } from './StaticGradientBackground';
 import { CommandBar, CommandItem } from '@/components/ui/command-bar';
 import { NotificationDropdown, Notification } from '@/components/ui/notification-dropdown';
 import { ProfileDropdown } from '@/components/ui/profile-dropdown';
@@ -128,8 +128,8 @@ export function TopNavLayout() {
 
   return (
     <div className="min-h-screen relative">
-      {/* Animated gradient background */}
-      <AnimatedBackground />
+      {/* Static gradient background */}
+      <StaticGradientBackground />
 
       {/* Top Navigation Bar */}
       <header

@@ -926,6 +926,18 @@ void UIManager::drawSettingsContent() {
     display.print(WiFi.macAddress());
     y += lineHeight - 8;
 
+    // Device ID (used in MQTT topics)
+    display.setCursor(labelX + 15, y);
+    display.print("Device ID:");
+    display.setCursor(valueX, y);
+    uint8_t mac[6];
+    WiFi.macAddress(mac);
+    char deviceId[13];
+    snprintf(deviceId, sizeof(deviceId), "%02X%02X%02X%02X%02X%02X",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    display.print(deviceId);
+    y += lineHeight - 8;
+
     // Version
     display.setCursor(labelX + 15, y);
     display.print("Version:");

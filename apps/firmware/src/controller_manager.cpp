@@ -4,6 +4,11 @@
 #include <stdarg.h>
 #include <XboxSeriesXHIDReportBuilder_asukiaaa.hpp>
 
+#if USE_FREERTOS_TASKS
+#include "freertos_tasks.h"
+#include "input_task.h"
+#endif
+
 // Global instance
 ControllerManager controllerManager;
 
@@ -91,9 +96,13 @@ void ControllerManager::processInput() {
     if (buttonA && !_lastButtonA) {
         log("Button A pressed (Accept)");
         vibrateShort();
+#if USE_FREERTOS_TASKS
+        InputTaskManager::handleButtonA();
+#else
         if (_inputCallback) {
             _inputCallback(ControllerInput::BUTTON_A, 0);
         }
+#endif
     }
     _lastButtonA = buttonA;
 
@@ -102,9 +111,13 @@ void ControllerManager::processInput() {
     if (buttonB && !_lastButtonB) {
         log("Button B pressed (Back)");
         vibrateShort();
+#if USE_FREERTOS_TASKS
+        InputTaskManager::handleButtonB();
+#else
         if (_inputCallback) {
             _inputCallback(ControllerInput::BUTTON_B, 0);
         }
+#endif
     }
     _lastButtonB = buttonB;
 
@@ -113,9 +126,13 @@ void ControllerManager::processInput() {
     if (buttonX && !_lastButtonX) {
         log("Button X pressed (Tado)");
         vibrateShort();
+#if USE_FREERTOS_TASKS
+        InputTaskManager::handleButtonX();
+#else
         if (_inputCallback) {
             _inputCallback(ControllerInput::BUTTON_X, 0);
         }
+#endif
     }
     _lastButtonX = buttonX;
 
@@ -124,9 +141,13 @@ void ControllerManager::processInput() {
     if (buttonY && !_lastButtonY) {
         log("Button Y pressed (Sensor)");
         vibrateShort();
+#if USE_FREERTOS_TASKS
+        InputTaskManager::handleButtonY();
+#else
         if (_inputCallback) {
             _inputCallback(ControllerInput::BUTTON_Y, 0);
         }
+#endif
     }
     _lastButtonY = buttonY;
 
@@ -135,9 +156,13 @@ void ControllerManager::processInput() {
     if (buttonMenu && !_lastButtonMenu) {
         log("Menu button pressed (Settings)");
         vibrateShort();
+#if USE_FREERTOS_TASKS
+        InputTaskManager::handleButtonMenu();
+#else
         if (_inputCallback) {
             _inputCallback(ControllerInput::BUTTON_MENU, 0);
         }
+#endif
     }
     _lastButtonMenu = buttonMenu;
 
@@ -146,9 +171,13 @@ void ControllerManager::processInput() {
     if (bumperL && !_lastBumperL) {
         log("Left bumper pressed (Previous screen)");
         vibrateShort();
+#if USE_FREERTOS_TASKS
+        InputTaskManager::handleBumper(ControllerInput::BUMPER_LEFT);
+#else
         if (_inputCallback) {
             _inputCallback(ControllerInput::BUMPER_LEFT, 0);
         }
+#endif
     }
     _lastBumperL = bumperL;
 
@@ -157,9 +186,13 @@ void ControllerManager::processInput() {
     if (bumperR && !_lastBumperR) {
         log("Right bumper pressed (Next screen)");
         vibrateShort();
+#if USE_FREERTOS_TASKS
+        InputTaskManager::handleBumper(ControllerInput::BUMPER_RIGHT);
+#else
         if (_inputCallback) {
             _inputCallback(ControllerInput::BUMPER_RIGHT, 0);
         }
+#endif
     }
     _lastBumperR = bumperR;
 
@@ -171,9 +204,13 @@ void ControllerManager::processInput() {
         if (navLeft && !wasNavLeft) {
             log("Navigation: LEFT");
             vibrateTick();
+#if USE_FREERTOS_TASKS
+            InputTaskManager::handleNavigation(ControllerInput::NAV_LEFT);
+#else
             if (_inputCallback) {
                 _inputCallback(ControllerInput::NAV_LEFT, 0);
             }
+#endif
             _lastNavTime = now;
         }
 
@@ -183,9 +220,13 @@ void ControllerManager::processInput() {
         if (navRight && !wasNavRight) {
             log("Navigation: RIGHT");
             vibrateTick();
+#if USE_FREERTOS_TASKS
+            InputTaskManager::handleNavigation(ControllerInput::NAV_RIGHT);
+#else
             if (_inputCallback) {
                 _inputCallback(ControllerInput::NAV_RIGHT, 0);
             }
+#endif
             _lastNavTime = now;
         }
 
@@ -195,9 +236,13 @@ void ControllerManager::processInput() {
         if (navUp && !wasNavUp) {
             log("Navigation: UP");
             vibrateTick();
+#if USE_FREERTOS_TASKS
+            InputTaskManager::handleNavigation(ControllerInput::NAV_UP);
+#else
             if (_inputCallback) {
                 _inputCallback(ControllerInput::NAV_UP, 0);
             }
+#endif
             _lastNavTime = now;
         }
 
@@ -207,9 +252,13 @@ void ControllerManager::processInput() {
         if (navDown && !wasNavDown) {
             log("Navigation: DOWN");
             vibrateTick();
+#if USE_FREERTOS_TASKS
+            InputTaskManager::handleNavigation(ControllerInput::NAV_DOWN);
+#else
             if (_inputCallback) {
                 _inputCallback(ControllerInput::NAV_DOWN, 0);
             }
+#endif
             _lastNavTime = now;
         }
     }
