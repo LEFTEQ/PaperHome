@@ -560,7 +560,9 @@ void onControllerInput(ControllerInput input, int16_t value) {
 
     // Handle Menu button globally - opens Settings from ANY screen
     if (input == ControllerInput::BUTTON_MENU) {
-        if (currentScreen != UIScreen::SETTINGS && currentScreen != UIScreen::SETTINGS_HOMEKIT) {
+        if (currentScreen != UIScreen::SETTINGS &&
+            currentScreen != UIScreen::SETTINGS_HOMEKIT &&
+            currentScreen != UIScreen::SETTINGS_ACTIONS) {
             Serial.println("[Main] Opening settings (global)");
             uiManager.showSettings();
             return;

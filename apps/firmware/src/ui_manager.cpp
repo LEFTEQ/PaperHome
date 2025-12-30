@@ -964,7 +964,7 @@ void UIManager::drawSettingsContent() {
 
     // Page indicator
     display.setCursor(displayManager.width() / 2 - 40, y);
-    display.print("Page 1/2");
+    display.print("Page 1/3");
 
     y += 25;
     display.setCursor(labelX, y);
@@ -1071,11 +1071,11 @@ void UIManager::drawSettingsHomeKitContent() {
 
     // Page indicator
     display.setCursor(displayManager.width() / 2 - 40, y);
-    display.print("Page 2/2");
+    display.print("Page 2/3");
 
     y += 25;
     display.setCursor(40, y);
-    display.print("D-pad Left: General    B: Back");
+    display.print("D-pad: General/Actions    B: Back");
 }
 
 void UIManager::drawStatusBar(bool wifiConnected, const String& bridgeIP) {
