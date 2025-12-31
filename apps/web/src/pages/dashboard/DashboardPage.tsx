@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { formatDistanceToNow } from 'date-fns';
 import {
   Wind,
   Thermometer,
@@ -9,18 +10,16 @@ import {
   Cpu,
   Settings2,
   RefreshCw,
+  Gauge,
+  Activity,
 } from 'lucide-react';
 import { DeviceTabBar, DeviceTab } from '@/components/ui/device-tab-bar';
 import { ClaimDeviceBanner } from '@/components/ui/claim-device-banner';
 import { MetricDetailModal, MetricType } from '@/components/ui/metric-detail-modal';
-import { GlassCard, BentoCard } from '@/components/ui/glass-card';
-import { Sparkline } from '@/components/ui/sparkline';
+import { GlassCard } from '@/components/ui/glass-card';
 import { HueWidget, HueRoom } from '@/components/widgets/hue-widget';
 import { TadoWidget, TadoRoom } from '@/components/widgets/tado-widget';
-import {
-  IAQStatCard,
-  PressureStatCard,
-} from '@/components/widgets/stat-card';
+import { SensorWidget, SensorStats } from '@/components/widgets/sensor-widget';
 import { Button } from '@/components/ui/button';
 import { staggerContainer, fadeInUp } from '@/lib/animations';
 import { cn } from '@/lib/utils';
@@ -69,7 +68,7 @@ function transformTadoRooms(
 // Extract chart data from aggregates
 function extractChartData(
   aggregates: ReturnType<typeof useTelemetryAggregates>['data'],
-  metric: 'co2' | 'temperature' | 'humidity' | 'iaq' | 'pressure'
+  metric: 'co2' | 'temperature' | 'humidity' | 'iaq' | 'pressure' | 'battery' | 'bme688Temperature' | 'bme688Humidity'
 ): number[] {
   if (!aggregates) return [];
 
@@ -79,12 +78,25 @@ function extractChartData(
     humidity: 'avgHumidity',
     iaq: 'avgIaq',
     pressure: 'avgPressure',
+    battery: 'avgBattery',
+    bme688Temperature: 'avgBme688Temperature',
+    bme688Humidity: 'avgBme688Humidity',
   };
 
   const key = keyMap[metric];
   return aggregates
     .map((a) => a[key] as number | null | undefined)
     .filter((v): v is number => v !== null && v !== undefined);
+}
+
+// Calculate stats from chart data
+function calculateStats(data: number[]): SensorStats | null {
+  if (!data.length) return null;
+  return {
+    min: Math.min(...data),
+    max: Math.max(...data),
+    avg: data.reduce((a, b) => a + b, 0) / data.length,
+  };
 }
 
 // Get CO2 status color
@@ -178,12 +190,15 @@ export function DashboardPage() {
   const hueRooms = useMemo(() => transformHueRooms(hueRoomsData), [hueRoomsData]);
   const tadoRooms = useMemo(() => transformTadoRooms(tadoRoomsData), [tadoRoomsData]);
 
-  // Extract chart data
+  // Extract chart data for all metrics
   const co2Data = useMemo(() => extractChartData(aggregates, 'co2'), [aggregates]);
   const tempData = useMemo(() => extractChartData(aggregates, 'temperature'), [aggregates]);
   const humidityData = useMemo(() => extractChartData(aggregates, 'humidity'), [aggregates]);
   const iaqData = useMemo(() => extractChartData(aggregates, 'iaq'), [aggregates]);
   const pressureData = useMemo(() => extractChartData(aggregates, 'pressure'), [aggregates]);
+  const batteryData = useMemo(() => extractChartData(aggregates, 'battery'), [aggregates]);
+  const bme688TempData = useMemo(() => extractChartData(aggregates, 'bme688Temperature'), [aggregates]);
+  const bme688HumidityData = useMemo(() => extractChartData(aggregates, 'bme688Humidity'), [aggregates]);
 
   // Get latest values - prefer real-time WebSocket data over aggregates
   const realtimeData = latestTelemetry?.find(
@@ -205,15 +220,22 @@ export function DashboardPage() {
   const bme688Temperature = realtimeData?.bme688Temperature ?? latestAggregate?.avgBme688Temperature ?? null;
   const bme688Humidity = realtimeData?.bme688Humidity ?? latestAggregate?.avgBme688Humidity ?? null;
 
-  // Calculate stats for modal
-  const co2Stats = useMemo(() => {
-    if (!co2Data.length) return { min: 0, max: 0, avg: 0 };
-    return {
-      min: Math.min(...co2Data),
-      max: Math.max(...co2Data),
-      avg: co2Data.reduce((a, b) => a + b, 0) / co2Data.length,
-    };
-  }, [co2Data]);
+  // Calculate stats for all metrics
+  const co2Stats = useMemo(() => calculateStats(co2Data), [co2Data]);
+  const tempStats = useMemo(() => calculateStats(tempData), [tempData]);
+  const humidityStats = useMemo(() => calculateStats(humidityData), [humidityData]);
+  const iaqStats = useMemo(() => calculateStats(iaqData), [iaqData]);
+  const pressureStats = useMemo(() => calculateStats(pressureData), [pressureData]);
+  const batteryStats = useMemo(() => calculateStats(batteryData), [batteryData]);
+  const bme688TempStats = useMemo(() => calculateStats(bme688TempData), [bme688TempData]);
+  const bme688HumidityStats = useMemo(() => calculateStats(bme688HumidityData), [bme688HumidityData]);
+
+  // Calculate last updated timestamp
+  const lastUpdated = useMemo(() => {
+    const time = realtimeData?.time;
+    if (!time) return null;
+    return new Date(time);
+  }, [realtimeData?.time]);
 
   // Check if active device is unclaimed
   const isUnclaimed = activeDevice?.ownerId === null;
@@ -370,7 +392,12 @@ export function DashboardPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            {lastUpdated && (
+              <span className="text-xs text-text-subtle font-mono hidden sm:block">
+                Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}
+              </span>
+            )}
             <Button
               variant="ghost"
               size="icon-sm"
@@ -390,269 +417,129 @@ export function DashboardPage() {
           </div>
         </motion.div>
 
-        {/* Bento Grid - Weather App Style */}
+        {/* Sensor Grid - Fixed 4×3 Layout */}
         <motion.div variants={fadeInUp}>
           {activeDevice?.isOnline && (co2 !== null || temperature !== null || iaq !== null) ? (
-            <div className="bento-grid">
-              {/* CO2 Hero Card (2x2) - Always the main hero */}
-              {co2 !== null && (
-                <BentoCard
-                  bentoSize="2x2"
-                  interactive
-                  onClick={() => handleMetricClick('co2')}
-                  className={cn('metric-card metric-card-co2 cursor-pointer')}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <Wind className="h-4 w-4 text-text-muted" />
-                      <span className="text-sm font-medium text-text-muted uppercase tracking-wider">
-                        Air Quality
-                      </span>
-                    </div>
-                    <span
-                      className={cn(
-                        'text-sm font-semibold px-2.5 py-0.5 rounded-full',
-                        getCO2Status(co2) === 'success' && 'bg-success/20 text-success',
-                        getCO2Status(co2) === 'normal' && 'bg-accent/20 text-accent',
-                        getCO2Status(co2) === 'warning' && 'bg-warning/20 text-warning',
-                        getCO2Status(co2) === 'critical' && 'bg-error/20 text-error'
-                      )}
-                    >
-                      {getCO2Label(co2)}
-                    </span>
-                  </div>
+            <div className="sensor-grid">
+              {/* CO2 Hero (2×2) */}
+              <SensorWidget
+                className="sensor-grid-co2"
+                metricType="co2"
+                sensorSource="STCC4"
+                value={co2}
+                unit="ppm"
+                chartData={co2Data}
+                stats={co2Stats}
+                color="#00e5ff"
+                icon={Wind}
+                bentoSize="2x2"
+                onClick={() => handleMetricClick('co2')}
+              />
 
-                  <div className="flex-1 flex flex-col justify-center">
-                    <div className="flex items-baseline gap-2">
-                      <span className="metric-value-large">{Math.round(co2)}</span>
-                      <span className="text-2xl text-text-muted font-mono">ppm</span>
-                    </div>
-                    <p className="text-sm text-text-subtle mt-2">
-                      CO₂ concentration in your air
-                    </p>
-                  </div>
+              {/* Temperature STCC4 (1×1) */}
+              <SensorWidget
+                className="sensor-grid-temp-stcc4"
+                metricType="temperature"
+                sensorSource="STCC4"
+                value={temperature}
+                unit="°C"
+                chartData={tempData}
+                stats={tempStats}
+                color="#f59e0b"
+                icon={Thermometer}
+                bentoSize="1x1"
+                onClick={() => handleMetricClick('temperature')}
+              />
 
-                  {/* Sparkline */}
-                  {co2Data.length > 0 && (
-                    <div className="mt-4 h-16">
-                      <Sparkline
-                        data={co2Data}
-                        color="#00e5ff"
-                        height={64}
-                        showFill
-                        strokeWidth={2}
-                      />
-                    </div>
-                  )}
-                </BentoCard>
-              )}
+              {/* Temperature BME688 (1×1) */}
+              <SensorWidget
+                className="sensor-grid-temp-bme688"
+                metricType="temperature"
+                sensorSource="BME688"
+                value={bme688Temperature}
+                unit="°C"
+                chartData={bme688TempData}
+                stats={bme688TempStats}
+                color="#f59e0b"
+                icon={Thermometer}
+                bentoSize="1x1"
+                onClick={() => handleMetricClick('temperature')}
+              />
 
-              {/* Temperature STCC4 (1x1) */}
-              {temperature !== null && (
-                <BentoCard
-                  bentoSize="1x1"
-                  interactive
-                  onClick={() => handleMetricClick('temperature')}
-                  className={cn('metric-card metric-card-temperature cursor-pointer')}
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <Thermometer className="h-4 w-4 text-text-muted" />
-                      <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
-                        Temperature
-                      </span>
-                    </div>
-                    <span className="text-[10px] text-text-subtle font-mono">STCC4</span>
-                  </div>
-                  <div className="flex-1 flex flex-col justify-center">
-                    <div className="flex items-baseline gap-1">
-                      <span className="metric-value-medium">
-                        {temperature.toFixed(1)}
-                      </span>
-                      <span className="text-lg text-text-muted font-mono">°C</span>
-                    </div>
-                  </div>
-                  {tempData.length > 0 && (
-                    <div className="mt-2 h-8">
-                      <Sparkline
-                        data={tempData}
-                        color="#f59e0b"
-                        height={32}
-                        showFill
-                      />
-                    </div>
-                  )}
-                </BentoCard>
-              )}
+              {/* Humidity STCC4 (1×1) */}
+              <SensorWidget
+                className="sensor-grid-humid-stcc4"
+                metricType="humidity"
+                sensorSource="STCC4"
+                value={humidity}
+                unit="%"
+                chartData={humidityData}
+                stats={humidityStats}
+                color="#8b5cf6"
+                icon={Droplets}
+                bentoSize="1x1"
+                onClick={() => handleMetricClick('humidity')}
+              />
 
-              {/* Temperature BME688 (1x1) */}
-              {bme688Temperature !== null && (
-                <BentoCard
-                  bentoSize="1x1"
-                  interactive
-                  onClick={() => handleMetricClick('temperature')}
-                  className={cn('metric-card metric-card-temperature cursor-pointer')}
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <Thermometer className="h-4 w-4 text-text-muted" />
-                      <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
-                        Temperature
-                      </span>
-                    </div>
-                    <span className="text-[10px] text-text-subtle font-mono">BME688</span>
-                  </div>
-                  <div className="flex-1 flex flex-col justify-center">
-                    <div className="flex items-baseline gap-1">
-                      <span className="metric-value-medium">
-                        {bme688Temperature.toFixed(1)}
-                      </span>
-                      <span className="text-lg text-text-muted font-mono">°C</span>
-                    </div>
-                  </div>
-                </BentoCard>
-              )}
+              {/* Humidity BME688 (1×1) */}
+              <SensorWidget
+                className="sensor-grid-humid-bme688"
+                metricType="humidity"
+                sensorSource="BME688"
+                value={bme688Humidity}
+                unit="%"
+                chartData={bme688HumidityData}
+                stats={bme688HumidityStats}
+                color="#8b5cf6"
+                icon={Droplets}
+                bentoSize="1x1"
+                onClick={() => handleMetricClick('humidity')}
+              />
 
-              {/* Humidity STCC4 (1x1) */}
-              {humidity !== null && (
-                <BentoCard
-                  bentoSize="1x1"
-                  interactive
-                  onClick={() => handleMetricClick('humidity')}
-                  className={cn('metric-card metric-card-humidity cursor-pointer')}
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <Droplets className="h-4 w-4 text-text-muted" />
-                      <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
-                        Humidity
-                      </span>
-                    </div>
-                    <span className="text-[10px] text-text-subtle font-mono">STCC4</span>
-                  </div>
-                  <div className="flex-1 flex flex-col justify-center">
-                    <div className="flex items-baseline gap-1">
-                      <span className="metric-value-medium">
-                        {Math.round(humidity)}
-                      </span>
-                      <span className="text-lg text-text-muted font-mono">%</span>
-                    </div>
-                  </div>
-                  {humidityData.length > 0 && (
-                    <div className="mt-2 h-8">
-                      <Sparkline
-                        data={humidityData}
-                        color="#8b5cf6"
-                        height={32}
-                        showFill
-                      />
-                    </div>
-                  )}
-                </BentoCard>
-              )}
+              {/* Pressure (1×2 horizontal) */}
+              <SensorWidget
+                className="sensor-grid-pressure"
+                metricType="pressure"
+                sensorSource="BME688"
+                value={pressure}
+                unit="hPa"
+                chartData={pressureData}
+                stats={pressureStats}
+                color="#a855f7"
+                icon={Gauge}
+                bentoSize="2x1"
+                onClick={() => handleMetricClick('pressure')}
+              />
 
-              {/* Humidity BME688 (1x1) */}
-              {bme688Humidity !== null && (
-                <BentoCard
-                  bentoSize="1x1"
-                  interactive
-                  onClick={() => handleMetricClick('humidity')}
-                  className={cn('metric-card metric-card-humidity cursor-pointer')}
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <Droplets className="h-4 w-4 text-text-muted" />
-                      <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
-                        Humidity
-                      </span>
-                    </div>
-                    <span className="text-[10px] text-text-subtle font-mono">BME688</span>
-                  </div>
-                  <div className="flex-1 flex flex-col justify-center">
-                    <div className="flex items-baseline gap-1">
-                      <span className="metric-value-medium">
-                        {Math.round(bme688Humidity)}
-                      </span>
-                      <span className="text-lg text-text-muted font-mono">%</span>
-                    </div>
-                  </div>
-                </BentoCard>
-              )}
+              {/* Battery (1×1) */}
+              <SensorWidget
+                className="sensor-grid-battery"
+                metricType="battery"
+                value={battery}
+                unit="%"
+                chartData={batteryData}
+                stats={batteryStats}
+                color="#22c55e"
+                icon={Battery}
+                bentoSize="1x1"
+                onClick={() => handleMetricClick('battery')}
+              />
 
-              {/* Pressure Card (2x1) - BME688 */}
-              {pressure !== null && (
-                <PressureStatCard
-                  value={pressure}
-                  chartData={pressureData}
-                  bentoSize="2x1"
-                  onClick={() => handleMetricClick('pressure')}
-                  className="cursor-pointer"
-                />
-              )}
-
-              {/* IAQ Card (1x1) - BME688 */}
-              {iaq !== null && (
-                <IAQStatCard
-                  value={iaq}
-                  accuracy={iaqAccuracy}
-                  chartData={iaqData}
-                  bentoSize="1x1"
-                  onClick={() => handleMetricClick('iaq')}
-                  className="cursor-pointer"
-                />
-              )}
-
-              {/* Battery (1x1) */}
-              {battery !== null && (
-                <BentoCard
-                  bentoSize="1x1"
-                  interactive
-                  onClick={() => handleMetricClick('battery')}
-                  className={cn('metric-card metric-card-battery cursor-pointer')}
-                >
-                  <div className="flex items-center gap-2 mb-3">
-                    <Battery className="h-4 w-4 text-text-muted" />
-                    <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
-                      Battery
-                    </span>
-                  </div>
-                  <div className="flex-1 flex flex-col justify-center">
-                    <div className="flex items-baseline gap-1">
-                      <span className="metric-value-medium">
-                        {Math.round(battery)}
-                      </span>
-                      <span className="text-lg text-text-muted font-mono">%</span>
-                    </div>
-                    {/* Battery bar */}
-                    <div className="mt-3 h-2 bg-glass rounded-full overflow-hidden">
-                      <motion.div
-                        className={cn(
-                          'h-full rounded-full',
-                          battery > 60 && 'bg-success',
-                          battery <= 60 && battery > 30 && 'bg-warning',
-                          battery <= 30 && 'bg-error'
-                        )}
-                        initial={{ width: 0 }}
-                        animate={{ width: `${battery}%` }}
-                        transition={{ duration: 0.8, ease: 'easeOut' }}
-                      />
-                    </div>
-                  </div>
-                </BentoCard>
-              )}
-
-              {/* Tado Thermostat (2x2) - Show if available */}
-              {tadoRooms.length > 0 && (
-                <TadoWidget
-                  room={tadoRooms[0]}
-                  onTargetChange={(target) =>
-                    handleTadoTargetChange(tadoRooms[0].id, target)
-                  }
-                  bentoSize="2x2"
-                  variant="full"
-                  className={cn('metric-card metric-card-tado')}
-                />
-              )}
+              {/* IAQ (1×1) */}
+              <SensorWidget
+                className="sensor-grid-iaq"
+                metricType="iaq"
+                sensorSource="BME688"
+                value={iaq}
+                unit="IAQ"
+                chartData={iaqData}
+                stats={iaqStats}
+                color="#14b8a6"
+                icon={Activity}
+                bentoSize="1x1"
+                iaqAccuracy={iaqAccuracy}
+                onClick={() => handleMetricClick('iaq')}
+              />
             </div>
           ) : (
             // Offline or no data state
@@ -711,45 +598,52 @@ export function DashboardPage() {
         onClose={() => setModalOpen(false)}
         metricType={modalMetric}
         currentValue={
-          modalMetric === 'co2'
-            ? co2 ?? 0
-            : modalMetric === 'temperature'
-              ? temperature ?? 0
-              : modalMetric === 'humidity'
-                ? humidity ?? 0
-                : modalMetric === 'iaq'
-                  ? iaq ?? 0
-                  : modalMetric === 'pressure'
-                    ? pressure ?? 0
-                    : battery ?? 0
+          modalMetric === 'co2' ? co2 ?? 0
+          : modalMetric === 'temperature' ? temperature ?? 0
+          : modalMetric === 'humidity' ? humidity ?? 0
+          : modalMetric === 'iaq' ? iaq ?? 0
+          : modalMetric === 'pressure' ? pressure ?? 0
+          : battery ?? 0
         }
         unit={
-          modalMetric === 'co2'
-            ? 'ppm'
-            : modalMetric === 'temperature'
-              ? '°C'
-              : modalMetric === 'humidity' || modalMetric === 'battery'
-                ? '%'
-                : modalMetric === 'iaq'
-                  ? 'IAQ'
-                  : 'hPa'
+          modalMetric === 'co2' ? 'ppm'
+          : modalMetric === 'temperature' ? '°C'
+          : modalMetric === 'humidity' || modalMetric === 'battery' ? '%'
+          : modalMetric === 'iaq' ? 'IAQ'
+          : 'hPa'
         }
         chartData={
-          modalMetric === 'co2'
-            ? co2Data
-            : modalMetric === 'temperature'
-              ? tempData
-              : modalMetric === 'humidity'
-                ? humidityData
-                : modalMetric === 'iaq'
-                  ? iaqData
-                  : modalMetric === 'pressure'
-                    ? pressureData
-                    : []
+          modalMetric === 'co2' ? co2Data
+          : modalMetric === 'temperature' ? tempData
+          : modalMetric === 'humidity' ? humidityData
+          : modalMetric === 'iaq' ? iaqData
+          : modalMetric === 'pressure' ? pressureData
+          : batteryData
         }
-        min={modalMetric === 'co2' ? co2Stats.min : undefined}
-        max={modalMetric === 'co2' ? co2Stats.max : undefined}
-        avg={modalMetric === 'co2' ? co2Stats.avg : undefined}
+        min={
+          modalMetric === 'co2' ? co2Stats?.min
+          : modalMetric === 'temperature' ? tempStats?.min
+          : modalMetric === 'humidity' ? humidityStats?.min
+          : modalMetric === 'iaq' ? iaqStats?.min
+          : modalMetric === 'pressure' ? pressureStats?.min
+          : batteryStats?.min
+        }
+        max={
+          modalMetric === 'co2' ? co2Stats?.max
+          : modalMetric === 'temperature' ? tempStats?.max
+          : modalMetric === 'humidity' ? humidityStats?.max
+          : modalMetric === 'iaq' ? iaqStats?.max
+          : modalMetric === 'pressure' ? pressureStats?.max
+          : batteryStats?.max
+        }
+        avg={
+          modalMetric === 'co2' ? co2Stats?.avg
+          : modalMetric === 'temperature' ? tempStats?.avg
+          : modalMetric === 'humidity' ? humidityStats?.avg
+          : modalMetric === 'iaq' ? iaqStats?.avg
+          : modalMetric === 'pressure' ? pressureStats?.avg
+          : batteryStats?.avg
+        }
       />
     </motion.div>
   );
