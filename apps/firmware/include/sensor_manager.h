@@ -37,6 +37,8 @@ struct SensorSample {
     uint16_t pressure;      // Pressure in Pa/10 (e.g., 10130 = 101300 Pa)
     float gasResistance;    // Gas resistance in Ohms
     uint8_t iaqAccuracy;    // IAQ accuracy (0-3)
+    int16_t bme688Temperature;  // BME688 temp in centidegrees (e.g., 2350 = 23.50C)
+    uint16_t bme688Humidity;    // BME688 humidity in centipercent (e.g., 6500 = 65.00%)
 };
 
 // Statistics for a metric over a time range
@@ -139,6 +141,16 @@ public:
      * Get current gas resistance in kOhms.
      */
     float getGasResistance() const { return _currentSample.gasResistance / 1000.0f; }
+
+    /**
+     * Get BME688 temperature in Celsius.
+     */
+    float getBME688Temperature() const { return _currentSample.bme688Temperature / 100.0f; }
+
+    /**
+     * Get BME688 humidity in percent.
+     */
+    float getBME688Humidity() const { return _currentSample.bme688Humidity / 100.0f; }
 
     /**
      * Get statistics for a metric.

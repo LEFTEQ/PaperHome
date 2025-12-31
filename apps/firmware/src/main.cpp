@@ -1117,7 +1117,9 @@ void loop() {
                 powerManager.isCharging(),
                 sensorManager.getIAQ(),
                 sensorManager.getIAQAccuracy(),
-                sensorManager.getPressure()
+                sensorManager.getPressure(),
+                sensorManager.getBME688Temperature(),
+                sensorManager.getBME688Humidity()
             );
         }
     }
@@ -1223,7 +1225,9 @@ void loop() {
                 powerManager.isCharging(),
                 sensorManager.getIAQ(),
                 sensorManager.getIAQAccuracy(),
-                sensorManager.getPressure()
+                sensorManager.getPressure(),
+                sensorManager.getBME688Temperature(),
+                sensorManager.getBME688Humidity()
             );
         }
     }

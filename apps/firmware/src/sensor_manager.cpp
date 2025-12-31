@@ -562,6 +562,8 @@ bool SensorManager::readBME688() {
     _currentSample.pressure = (uint16_t)(pressure * 10);  // Store as Pa/10
     _currentSample.gasResistance = gasResistance;
     _currentSample.iaqAccuracy = _iaqAccuracyLevel;
+    _currentSample.bme688Temperature = (int16_t)(temperature * 100);  // Store in centidegrees
+    _currentSample.bme688Humidity = (uint16_t)(humidity * 100);       // Store in centipercent
 
     if (DEBUG_SENSOR) {
         logf("BME688: T=%.1fC, RH=%.1f%%, P=%.1fhPa, Gas=%.0fOhm, IAQ=%u (%u/3)",

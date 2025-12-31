@@ -20,7 +20,6 @@ import { TadoWidget, TadoRoom } from '@/components/widgets/tado-widget';
 import {
   IAQStatCard,
   PressureStatCard,
-  DualSensorCompareCard,
 } from '@/components/widgets/stat-card';
 import { Button } from '@/components/ui/button';
 import { staggerContainer, fadeInUp } from '@/lib/animations';
@@ -205,9 +204,6 @@ export function DashboardPage() {
   const pressure = realtimeData?.pressure ?? latestAggregate?.avgPressure ?? null;
   const bme688Temperature = realtimeData?.bme688Temperature ?? latestAggregate?.avgBme688Temperature ?? null;
   const bme688Humidity = realtimeData?.bme688Humidity ?? latestAggregate?.avgBme688Humidity ?? null;
-
-  // Check if we have BME688 data (IAQ or pressure)
-  const hasBme688Data = iaq !== null || pressure !== null;
 
   // Calculate stats for modal
   const co2Stats = useMemo(() => {
@@ -398,17 +394,8 @@ export function DashboardPage() {
         <motion.div variants={fadeInUp}>
           {activeDevice?.isOnline && (co2 !== null || temperature !== null || iaq !== null) ? (
             <div className="bento-grid">
-              {/* IAQ Hero Card (2x2) - BME688 when available, fallback to CO2 */}
-              {hasBme688Data && iaq !== null ? (
-                <IAQStatCard
-                  value={iaq}
-                  accuracy={iaqAccuracy}
-                  chartData={iaqData}
-                  bentoSize="2x2"
-                  onClick={() => handleMetricClick('iaq')}
-                  className="cursor-pointer"
-                />
-              ) : co2 !== null ? (
+              {/* CO2 Hero Card (2x2) - Always the main hero */}
+              {co2 !== null && (
                 <BentoCard
                   bentoSize="2x2"
                   interactive
@@ -458,39 +445,161 @@ export function DashboardPage() {
                     </div>
                   )}
                 </BentoCard>
-              ) : null}
+              )}
 
-              {/* CO2 Card (1x1) - Show when BME688 is hero */}
-              {hasBme688Data && co2 !== null && (
+              {/* Temperature STCC4 (1x1) */}
+              {temperature !== null && (
                 <BentoCard
                   bentoSize="1x1"
                   interactive
-                  onClick={() => handleMetricClick('co2')}
-                  className={cn('metric-card metric-card-co2 cursor-pointer')}
+                  onClick={() => handleMetricClick('temperature')}
+                  className={cn('metric-card metric-card-temperature cursor-pointer')}
                 >
-                  <div className="flex items-center gap-2 mb-3">
-                    <Wind className="h-4 w-4 text-text-muted" />
-                    <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
-                      CO₂
-                    </span>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Thermometer className="h-4 w-4 text-text-muted" />
+                      <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
+                        Temperature
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-text-subtle font-mono">STCC4</span>
                   </div>
                   <div className="flex-1 flex flex-col justify-center">
                     <div className="flex items-baseline gap-1">
-                      <span className="metric-value-medium">{Math.round(co2)}</span>
-                      <span className="text-lg text-text-muted font-mono">ppm</span>
+                      <span className="metric-value-medium">
+                        {temperature.toFixed(1)}
+                      </span>
+                      <span className="text-lg text-text-muted font-mono">°C</span>
                     </div>
                   </div>
-                  {co2Data.length > 0 && (
+                  {tempData.length > 0 && (
                     <div className="mt-2 h-8">
                       <Sparkline
-                        data={co2Data}
-                        color="#00e5ff"
+                        data={tempData}
+                        color="#f59e0b"
                         height={32}
                         showFill
                       />
                     </div>
                   )}
                 </BentoCard>
+              )}
+
+              {/* Temperature BME688 (1x1) */}
+              {bme688Temperature !== null && (
+                <BentoCard
+                  bentoSize="1x1"
+                  interactive
+                  onClick={() => handleMetricClick('temperature')}
+                  className={cn('metric-card metric-card-temperature cursor-pointer')}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Thermometer className="h-4 w-4 text-text-muted" />
+                      <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
+                        Temperature
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-text-subtle font-mono">BME688</span>
+                  </div>
+                  <div className="flex-1 flex flex-col justify-center">
+                    <div className="flex items-baseline gap-1">
+                      <span className="metric-value-medium">
+                        {bme688Temperature.toFixed(1)}
+                      </span>
+                      <span className="text-lg text-text-muted font-mono">°C</span>
+                    </div>
+                  </div>
+                </BentoCard>
+              )}
+
+              {/* Humidity STCC4 (1x1) */}
+              {humidity !== null && (
+                <BentoCard
+                  bentoSize="1x1"
+                  interactive
+                  onClick={() => handleMetricClick('humidity')}
+                  className={cn('metric-card metric-card-humidity cursor-pointer')}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Droplets className="h-4 w-4 text-text-muted" />
+                      <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
+                        Humidity
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-text-subtle font-mono">STCC4</span>
+                  </div>
+                  <div className="flex-1 flex flex-col justify-center">
+                    <div className="flex items-baseline gap-1">
+                      <span className="metric-value-medium">
+                        {Math.round(humidity)}
+                      </span>
+                      <span className="text-lg text-text-muted font-mono">%</span>
+                    </div>
+                  </div>
+                  {humidityData.length > 0 && (
+                    <div className="mt-2 h-8">
+                      <Sparkline
+                        data={humidityData}
+                        color="#8b5cf6"
+                        height={32}
+                        showFill
+                      />
+                    </div>
+                  )}
+                </BentoCard>
+              )}
+
+              {/* Humidity BME688 (1x1) */}
+              {bme688Humidity !== null && (
+                <BentoCard
+                  bentoSize="1x1"
+                  interactive
+                  onClick={() => handleMetricClick('humidity')}
+                  className={cn('metric-card metric-card-humidity cursor-pointer')}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Droplets className="h-4 w-4 text-text-muted" />
+                      <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
+                        Humidity
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-text-subtle font-mono">BME688</span>
+                  </div>
+                  <div className="flex-1 flex flex-col justify-center">
+                    <div className="flex items-baseline gap-1">
+                      <span className="metric-value-medium">
+                        {Math.round(bme688Humidity)}
+                      </span>
+                      <span className="text-lg text-text-muted font-mono">%</span>
+                    </div>
+                  </div>
+                </BentoCard>
+              )}
+
+              {/* Pressure Card (2x1) - BME688 */}
+              {pressure !== null && (
+                <PressureStatCard
+                  value={pressure}
+                  chartData={pressureData}
+                  bentoSize="2x1"
+                  onClick={() => handleMetricClick('pressure')}
+                  className="cursor-pointer"
+                />
+              )}
+
+              {/* IAQ Card (1x1) - BME688 */}
+              {iaq !== null && (
+                <IAQStatCard
+                  value={iaq}
+                  accuracy={iaqAccuracy}
+                  chartData={iaqData}
+                  bentoSize="1x1"
+                  onClick={() => handleMetricClick('iaq')}
+                  className="cursor-pointer"
+                />
               )}
 
               {/* Battery (1x1) */}
@@ -529,99 +638,6 @@ export function DashboardPage() {
                       />
                     </div>
                   </div>
-                </BentoCard>
-              )}
-
-              {/* Pressure Card (2x1) - BME688 */}
-              {pressure !== null && (
-                <PressureStatCard
-                  value={pressure}
-                  chartData={pressureData}
-                  bentoSize="2x1"
-                  onClick={() => handleMetricClick('pressure')}
-                  className="cursor-pointer"
-                />
-              )}
-
-              {/* Dual Sensor Comparison (1x2) - Show both sensors side by side */}
-              {hasBme688Data && temperature !== null && humidity !== null && bme688Temperature !== null && bme688Humidity !== null && (
-                <DualSensorCompareCard
-                  stcc4Temp={temperature}
-                  stcc4Humidity={humidity}
-                  bme688Temp={bme688Temperature}
-                  bme688Humidity={bme688Humidity}
-                  bentoSize="1x2"
-                  className="cursor-pointer"
-                />
-              )}
-
-              {/* Temperature (1x1) - Only show if no dual sensor comparison */}
-              {(!hasBme688Data || bme688Temperature === null) && temperature !== null && (
-                <BentoCard
-                  bentoSize="1x1"
-                  interactive
-                  onClick={() => handleMetricClick('temperature')}
-                  className={cn('metric-card metric-card-temperature cursor-pointer')}
-                >
-                  <div className="flex items-center gap-2 mb-3">
-                    <Thermometer className="h-4 w-4 text-text-muted" />
-                    <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
-                      Temperature
-                    </span>
-                  </div>
-                  <div className="flex-1 flex flex-col justify-center">
-                    <div className="flex items-baseline gap-1">
-                      <span className="metric-value-medium">
-                        {temperature.toFixed(1)}
-                      </span>
-                      <span className="text-lg text-text-muted font-mono">°C</span>
-                    </div>
-                  </div>
-                  {tempData.length > 0 && (
-                    <div className="mt-2 h-8">
-                      <Sparkline
-                        data={tempData}
-                        color="#f59e0b"
-                        height={32}
-                        showFill
-                      />
-                    </div>
-                  )}
-                </BentoCard>
-              )}
-
-              {/* Humidity (1x1) - Only show if no dual sensor comparison */}
-              {(!hasBme688Data || bme688Humidity === null) && humidity !== null && (
-                <BentoCard
-                  bentoSize="1x1"
-                  interactive
-                  onClick={() => handleMetricClick('humidity')}
-                  className={cn('metric-card metric-card-humidity cursor-pointer')}
-                >
-                  <div className="flex items-center gap-2 mb-3">
-                    <Droplets className="h-4 w-4 text-text-muted" />
-                    <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
-                      Humidity
-                    </span>
-                  </div>
-                  <div className="flex-1 flex flex-col justify-center">
-                    <div className="flex items-baseline gap-1">
-                      <span className="metric-value-medium">
-                        {Math.round(humidity)}
-                      </span>
-                      <span className="text-lg text-text-muted font-mono">%</span>
-                    </div>
-                  </div>
-                  {humidityData.length > 0 && (
-                    <div className="mt-2 h-8">
-                      <Sparkline
-                        data={humidityData}
-                        color="#8b5cf6"
-                        height={32}
-                        showFill
-                      />
-                    </div>
-                  )}
                 </BentoCard>
               )}
 

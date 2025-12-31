@@ -132,7 +132,8 @@ bool MqttManager::isConnected() {
 
 void MqttManager::publishTelemetry(float co2, float temperature, float humidity,
                                     float batteryPercent, bool isCharging,
-                                    uint16_t iaq, uint8_t iaqAccuracy, float pressure) {
+                                    uint16_t iaq, uint8_t iaqAccuracy, float pressure,
+                                    float bme688Temperature, float bme688Humidity) {
     if (!isConnected()) return;
 
     JsonDocument doc;
@@ -144,6 +145,8 @@ void MqttManager::publishTelemetry(float co2, float temperature, float humidity,
     doc["iaq"] = iaq;
     doc["iaqAccuracy"] = iaqAccuracy;
     doc["pressure"] = pressure;
+    doc["bme688Temperature"] = bme688Temperature;
+    doc["bme688Humidity"] = bme688Humidity;
     doc["timestamp"] = millis();
 
     String payload;

@@ -610,11 +610,26 @@ void DisplayTaskManager::handleActionEvent(const InputEvent& event) {
             } else if (_currentState.currentScreen == UIScreen::SETTINGS_ACTIONS) {
                 // Execute selected action
                 uiManager.executeAction(_currentState.selectedAction);
+            } else if (_currentState.currentScreen == UIScreen::TADO_AUTH) {
+                // Retry auth if expired, error, or disconnected
+                TadoState state = tadoManager.getState();
+                bool codeExpired = (state == TadoState::AWAITING_AUTH &&
+                                    millis() > _currentState.tadoAuth.expiresAt);
+                if (state == TadoState::ERROR || state == TadoState::DISCONNECTED || codeExpired) {
+                    log("Retrying Tado auth");
+                    tadoManager.startAuth();
+                }
             }
             break;
         }
 
         case InputEventType::ACTION_BACK: {
+            // Cancel Tado auth if on auth screen
+            if (_currentState.currentScreen == UIScreen::TADO_AUTH) {
+                log("Cancelling Tado auth");
+                tadoManager.cancelAuth();
+            }
+
             // Context-aware back navigation
             UIScreen target = _currentState.getBackTarget();
 
@@ -798,20 +813,17 @@ void DisplayTaskManager::renderScreenTransition(UIScreen from, UIScreen to) {
             );
             break;
         case UIScreen::TADO_DASHBOARD:
-            // Check if Tado needs auth - if so, redirect to auth screen
+            // Check if Tado needs auth - if so, start auth flow
             if (!tadoManager.isAuthenticated()) {
-                // Start auth flow and redirect
+                // Start auth flow - the onTadoAuth callback will handle the screen update
+                // with proper auth info once the device code is received
                 tadoManager.startAuth();
                 TaskManager::acquireStateLock();
                 TaskManager::sharedState.tadoNeedsAuth = true;
-                TaskManager::sharedState.currentScreen = UIScreen::TADO_AUTH;
                 TaskManager::releaseStateLock();
-                syncStateFromShared();
-                uiManager.renderTadoAuth(
-                    tadoManager.getAuthInfo(),
-                    _currentState.bridgeIP,
-                    _currentState.wifiConnected
-                );
+                // Don't render here - wait for onTadoAuth callback which has the actual auth info
+                // Show a brief "connecting" message on current screen
+                log("Starting Tado auth, waiting for device code...");
             } else {
                 uiManager.renderTadoDashboard(
                     _currentState.tadoRooms,
