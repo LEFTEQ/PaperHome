@@ -14,22 +14,12 @@ extern HomekitManager homekitManager;
 UIManager uiManager;
 
 UIManager::UIManager()
-    : _currentScreen(UIScreen::STARTUP)
-    , _tileWidth(0)
+    : _tileWidth(0)
     , _tileHeight(0)
     , _contentStartY(0)
-    , _selectedIndex(0)
     , _lastDisplayedBrightness(0)
-    , _previousWifiConnected(false)
     , _lastFullRefreshTime(0)
-    , _partialUpdateCount(0)
-    , _currentMetric(SensorMetric::CO2)
-    , _lastSensorUpdateTime(0)
-    , _selectedTadoRoom(0)
-    , _lastTadoUpdateTime(0)
-    , _selectedAction(SettingsAction::CALIBRATE_CO2)
-    , _actionExecuting(false)
-    , _actionSuccess(false) {
+    , _partialUpdateCount(0) {
 }
 
 void UIManager::init() {
@@ -55,16 +45,14 @@ void UIManager::calculateTileDimensions() {
     logf("Tile dimensions: %dx%d, content starts at Y=%d", _tileWidth, _tileHeight, _contentStartY);
 }
 
-void UIManager::showStartup() {
-    _currentScreen = UIScreen::STARTUP;
-    log("Showing startup screen");
+void UIManager::renderStartup() {
+    log("Rendering startup screen");
 
     displayManager.showCenteredText("PaperHome", &FreeMonoBold24pt7b);
 }
 
-void UIManager::showDiscovering() {
-    _currentScreen = UIScreen::DISCOVERING;
-    log("Showing discovery screen");
+void UIManager::renderDiscovering() {
+    log("Rendering discovery screen");
 
     DisplayType& display = displayManager.getDisplay();
 
@@ -93,9 +81,8 @@ void UIManager::showDiscovering() {
     } while (display.nextPage());
 }
 
-void UIManager::showWaitingForButton() {
-    _currentScreen = UIScreen::WAITING_FOR_BUTTON;
-    log("Showing waiting for button screen");
+void UIManager::renderWaitingForButton() {
+    log("Rendering waiting for button screen");
 
     DisplayType& display = displayManager.getDisplay();
 
@@ -129,11 +116,15 @@ void UIManager::showWaitingForButton() {
     } while (display.nextPage());
 }
 
-void UIManager::showDashboard(const std::vector<HueRoom>& rooms, const String& bridgeIP) {
-    _currentScreen = UIScreen::DASHBOARD;
-    _cachedRooms = rooms;
+void UIManager::renderDashboard(
+    const std::vector<HueRoom>& rooms,
+    int selectedIndex,
+    const String& bridgeIP,
+    bool wifiConnected
+) {
+    _cachedRooms = rooms;  // Cache for partial refresh
 
-    logf("Showing dashboard with %d rooms (full refresh)", rooms.size());
+    logf("Rendering dashboard with %d rooms (selected: %d)", rooms.size(), selectedIndex);
 
     DisplayType& display = displayManager.getDisplay();
 
@@ -145,13 +136,13 @@ void UIManager::showDashboard(const std::vector<HueRoom>& rooms, const String& b
         display.fillScreen(GxEPD_WHITE);
 
         // Draw status bar
-        drawStatusBar(WiFi.status() == WL_CONNECTED, bridgeIP);
+        drawStatusBar(wifiConnected, bridgeIP);
 
         // Draw room tiles
         int roomIndex = 0;
-        for (int row = 0; row < UI_TILE_ROWS && roomIndex < rooms.size(); row++) {
-            for (int col = 0; col < UI_TILE_COLS && roomIndex < rooms.size(); col++) {
-                bool isSelected = (roomIndex == _selectedIndex);
+        for (int row = 0; row < UI_TILE_ROWS && roomIndex < (int)rooms.size(); row++) {
+            for (int col = 0; col < UI_TILE_COLS && roomIndex < (int)rooms.size(); col++) {
+                bool isSelected = (roomIndex == selectedIndex);
                 drawRoomTile(col, row, rooms[roomIndex], isSelected);
                 roomIndex++;
             }
@@ -174,17 +165,12 @@ void UIManager::showDashboard(const std::vector<HueRoom>& rooms, const String& b
 
     } while (display.nextPage());
 
-    // Update tracking state for partial refresh
-    _previousRooms = rooms;
-    _previousBridgeIP = bridgeIP;
-    _previousWifiConnected = WiFi.status() == WL_CONNECTED;
     _lastFullRefreshTime = millis();
     _partialUpdateCount = 0;
 }
 
-void UIManager::showError(const char* message) {
-    _currentScreen = UIScreen::ERROR;
-    logf("Showing error: %s", message);
+void UIManager::renderError(const char* message) {
+    logf("Rendering error: %s", message);
 
     DisplayType& display = displayManager.getDisplay();
 
@@ -207,12 +193,14 @@ void UIManager::showError(const char* message) {
     } while (display.nextPage());
 }
 
-void UIManager::showRoomControl(const HueRoom& room, const String& bridgeIP) {
-    _currentScreen = UIScreen::ROOM_CONTROL;
-    _activeRoom = room;
+void UIManager::renderRoomControl(
+    const HueRoom& room,
+    const String& bridgeIP,
+    bool wifiConnected
+) {
     _lastDisplayedBrightness = room.brightness;
 
-    logf("Showing room control: %s", room.name.c_str());
+    logf("Rendering room control: %s", room.name.c_str());
 
     DisplayType& display = displayManager.getDisplay();
 
@@ -224,7 +212,7 @@ void UIManager::showRoomControl(const HueRoom& room, const String& bridgeIP) {
         display.fillScreen(GxEPD_WHITE);
 
         // Draw status bar
-        drawStatusBar(WiFi.status() == WL_CONNECTED, bridgeIP);
+        drawStatusBar(wifiConnected, bridgeIP);
 
         // Draw room control content
         drawRoomControlContent(room);
@@ -288,17 +276,15 @@ void UIManager::drawLargeBrightnessBar(int x, int y, int width, int height, uint
     }
 }
 
-void UIManager::updateRoomControl(const HueRoom& room) {
-    // Only update if brightness changed significantly or state changed
-    if (abs(room.brightness - _lastDisplayedBrightness) < 5 &&
-        room.anyOn == _activeRoom.anyOn) {
+void UIManager::updateRoomControlBrightness(const HueRoom& room) {
+    // Only update if brightness changed significantly
+    if (abs(room.brightness - _lastDisplayedBrightness) < 5) {
         return;
     }
 
-    _activeRoom = room;
     _lastDisplayedBrightness = room.brightness;
 
-    logf("Updating room control: brightness=%d, on=%d", room.brightness, room.anyOn);
+    logf("Updating room control brightness: %d", room.brightness);
 
     DisplayType& display = displayManager.getDisplay();
 
@@ -318,166 +304,57 @@ void UIManager::updateRoomControl(const HueRoom& room) {
     _partialUpdateCount++;
 }
 
-void UIManager::goBackToDashboard() {
-    if (_currentScreen != UIScreen::ROOM_CONTROL && _currentScreen != UIScreen::SETTINGS) return;
-
-    log("Going back to dashboard");
-
-    // Show dashboard with current rooms
-    if (!_cachedRooms.empty()) {
-        showDashboard(_cachedRooms, _previousBridgeIP);
-    }
-}
-
-void UIManager::showSettings() {
-    log("Showing settings screen");
-
-    // Push current screen to stack (only if not already in settings)
-    if (_currentScreen != UIScreen::SETTINGS && _currentScreen != UIScreen::SETTINGS_HOMEKIT) {
-        pushScreen(UIScreen::SETTINGS);
-    } else {
-        _currentScreen = UIScreen::SETTINGS;
-    }
+void UIManager::renderSettings(
+    int currentPage,
+    SettingsAction selectedAction,
+    const String& bridgeIP,
+    bool wifiConnected
+) {
+    logf("Rendering settings page %d", currentPage);
 
     DisplayType& display = displayManager.getDisplay();
 
+    display.setRotation(DISPLAY_ROTATION);
     display.setFullWindow();
     display.firstPage();
+
     do {
         display.fillScreen(GxEPD_WHITE);
-        drawSettingsContent();
+
+        // Draw status bar
+        drawStatusBar(wifiConnected, bridgeIP);
+
+        // Draw tab bar (always visible, showing all 3 tabs)
+        drawSettingsTabBar(currentPage);
+
+        // Draw content based on current page
+        switch (currentPage) {
+            case 0:
+                drawSettingsGeneralContent(bridgeIP, wifiConnected);
+                break;
+            case 1:
+                drawSettingsHomeKitContent();
+                break;
+            case 2:
+                drawSettingsActionsContent(selectedAction);
+                break;
+        }
+
+        // Navigation hints bar at bottom
+        int navY = displayManager.height() - UI_NAV_BAR_HEIGHT + 16;
+        display.drawFastHLine(0, displayManager.height() - UI_NAV_BAR_HEIGHT, displayManager.width(), GxEPD_BLACK);
+        display.setFont(&FreeSans9pt7b);
+        display.setTextColor(GxEPD_BLACK);
+        if (currentPage == 2) {
+            drawCenteredText("[< >] Tab  [Up/Down] Select  [A] Execute  [B] Back", navY, &FreeSans9pt7b);
+        } else {
+            drawCenteredText("[< >] Tab  [B] Back", navY, &FreeSans9pt7b);
+        }
+
     } while (display.nextPage());
 
     _partialUpdateCount = 0;
     _lastFullRefreshTime = millis();
-}
-
-void UIManager::goBackFromSettings() {
-    if (_currentScreen != UIScreen::SETTINGS &&
-        _currentScreen != UIScreen::SETTINGS_HOMEKIT &&
-        _currentScreen != UIScreen::SETTINGS_ACTIONS) return;
-
-    log("Going back from settings");
-
-    // Pop from navigation stack to return to previous screen
-    if (popScreen()) {
-        // Restore the previous screen based on what was on the stack
-        switch (_currentScreen) {
-            case UIScreen::DASHBOARD:
-                if (!_cachedRooms.empty()) {
-                    showDashboard(_cachedRooms, _previousBridgeIP);
-                }
-                break;
-            case UIScreen::ROOM_CONTROL:
-                if (_selectedIndex < _cachedRooms.size()) {
-                    showRoomControl(_cachedRooms[_selectedIndex], _previousBridgeIP);
-                } else {
-                    showDashboard(_cachedRooms, _previousBridgeIP);
-                }
-                break;
-            case UIScreen::SENSOR_DASHBOARD:
-                showSensorDashboard();
-                break;
-            case UIScreen::SENSOR_DETAIL:
-                showSensorDetail(_currentMetric);
-                break;
-            case UIScreen::TADO_DASHBOARD:
-                showTadoDashboard();
-                break;
-            case UIScreen::TADO_AUTH:
-                // Don't go back to auth screen, go to dashboard instead
-                showDashboard(_cachedRooms, _previousBridgeIP);
-                break;
-            default:
-                // Fallback to dashboard
-                if (!_cachedRooms.empty()) {
-                    showDashboard(_cachedRooms, _previousBridgeIP);
-                }
-                break;
-        }
-    } else {
-        // Stack was empty, default to dashboard
-        goBackToDashboard();
-    }
-}
-
-void UIManager::showSettingsHomeKit() {
-    log("Showing HomeKit settings screen");
-    _currentScreen = UIScreen::SETTINGS_HOMEKIT;
-
-    DisplayType& display = displayManager.getDisplay();
-
-    display.setFullWindow();
-    display.firstPage();
-    do {
-        display.fillScreen(GxEPD_WHITE);
-        drawSettingsHomeKitContent();
-    } while (display.nextPage());
-
-    _partialUpdateCount = 0;
-    _lastFullRefreshTime = millis();
-}
-
-void UIManager::navigateSettingsPage(int direction) {
-    // Settings has 3 pages: Info (1) -> HomeKit (2) -> Actions (3)
-    if (direction > 0) {
-        // Forward
-        if (_currentScreen == UIScreen::SETTINGS) {
-            showSettingsHomeKit();
-        } else if (_currentScreen == UIScreen::SETTINGS_HOMEKIT) {
-            showSettingsActions();
-        }
-        // SETTINGS_ACTIONS is last page, no forward
-    } else {
-        // Backward
-        if (_currentScreen == UIScreen::SETTINGS_ACTIONS) {
-            showSettingsHomeKit();
-        } else if (_currentScreen == UIScreen::SETTINGS_HOMEKIT) {
-            showSettings();
-        }
-        // SETTINGS is first page, no backward
-    }
-}
-
-void UIManager::showSettingsActions() {
-    log("Showing settings actions screen");
-    _currentScreen = UIScreen::SETTINGS_ACTIONS;
-    _selectedAction = SettingsAction::CALIBRATE_CO2;  // Reset selection
-    _actionExecuting = false;
-
-    DisplayType& display = displayManager.getDisplay();
-
-    display.setFullWindow();
-    display.firstPage();
-    do {
-        display.fillScreen(GxEPD_WHITE);
-        drawSettingsActionsContent();
-    } while (display.nextPage());
-
-    _partialUpdateCount = 0;
-    _lastFullRefreshTime = millis();
-}
-
-void UIManager::navigateAction(int direction) {
-    if (_actionExecuting) return;  // Don't navigate while executing
-
-    int current = (int)_selectedAction;
-    int count = (int)SettingsAction::ACTION_COUNT;
-
-    current += direction;
-    if (current < 0) current = count - 1;
-    if (current >= count) current = 0;
-
-    _selectedAction = (SettingsAction)current;
-
-    // Redraw with new selection
-    DisplayType& display = displayManager.getDisplay();
-    display.setFullWindow();
-    display.firstPage();
-    do {
-        display.fillScreen(GxEPD_WHITE);
-        drawSettingsActionsContent();
-    } while (display.nextPage());
 }
 
 const char* UIManager::getActionName(SettingsAction action) {
@@ -533,7 +410,7 @@ const char* UIManager::getActionCategory(SettingsAction action) {
     }
 }
 
-void UIManager::drawSettingsActionsContent() {
+void UIManager::drawSettingsActionsContent(SettingsAction selectedAction) {
     DisplayType& display = displayManager.getDisplay();
 
     // Draw tab bar at top
@@ -550,7 +427,7 @@ void UIManager::drawSettingsActionsContent() {
 
     for (int i = 0; i < (int)SettingsAction::ACTION_COUNT; i++) {
         SettingsAction action = (SettingsAction)i;
-        bool isSelected = (action == _selectedAction);
+        bool isSelected = (action == selectedAction);
 
         // Category header
         const char* category = getActionCategory(action);
@@ -602,14 +479,8 @@ void UIManager::drawActionItem(int y, SettingsAction action, bool isSelected) {
     display.print(getActionDescription(action));
 }
 
-bool UIManager::executeSelectedAction() {
-    if (_actionExecuting) return false;
-
-    _actionExecuting = true;
-    _actionSuccess = false;
-    _actionResultMessage = "";
-
-    logf("Executing action: %s", getActionName(_selectedAction));
+bool UIManager::executeAction(SettingsAction action) {
+    logf("Executing action: %s", getActionName(action));
 
     // Show executing message
     DisplayType& display = displayManager.getDisplay();
@@ -621,19 +492,22 @@ bool UIManager::executeSelectedAction() {
         display.setFont(&FreeMonoBold18pt7b);
         drawCenteredText("Executing...", displayManager.height() / 2 - 20, &FreeMonoBold18pt7b);
         display.setFont(&FreeMonoBold12pt7b);
-        drawCenteredText(getActionName(_selectedAction), displayManager.height() / 2 + 20, &FreeMonoBold12pt7b);
+        drawCenteredText(getActionName(action), displayManager.height() / 2 + 20, &FreeMonoBold12pt7b);
     } while (display.nextPage());
 
+    bool actionSuccess = false;
+    String resultMessage = "";
+
     // Execute the action
-    switch (_selectedAction) {
+    switch (action) {
         case SettingsAction::CALIBRATE_CO2:
             {
                 int16_t correction = sensorManager.performForcedRecalibration(420);
                 if (correction >= 0) {
-                    _actionSuccess = true;
-                    _actionResultMessage = "Calibrated! Correction: " + String(correction);
+                    actionSuccess = true;
+                    resultMessage = "Calibrated! Correction: " + String(correction);
                 } else {
-                    _actionResultMessage = "Calibration failed - ensure fresh air";
+                    resultMessage = "Calibration failed - ensure fresh air";
                 }
             }
             break;
@@ -643,53 +517,53 @@ bool UIManager::executeSelectedAction() {
             // Using raw value: 98500 / 2 = 49250
             // TODO: Make this configurable via input
             if (sensorManager.setPressureCompensation(49250)) {
-                _actionSuccess = true;
-                _actionResultMessage = "Set to ~98500 Pa (~250m)";
+                actionSuccess = true;
+                resultMessage = "Set to ~98500 Pa (~250m)";
             } else {
-                _actionResultMessage = "Failed to set pressure";
+                resultMessage = "Failed to set pressure";
             }
             break;
 
         case SettingsAction::SENSOR_SELF_TEST:
             if (sensorManager.performSelfTest()) {
-                _actionSuccess = true;
-                _actionResultMessage = "Self-test PASSED";
+                actionSuccess = true;
+                resultMessage = "Self-test PASSED";
             } else {
-                _actionResultMessage = "Self-test FAILED!";
+                resultMessage = "Self-test FAILED!";
             }
             break;
 
         case SettingsAction::CLEAR_SENSOR_HISTORY:
             // Note: Ring buffer doesn't have a clear method, would need to add
-            _actionSuccess = true;
-            _actionResultMessage = "History cleared";
+            actionSuccess = true;
+            resultMessage = "History cleared";
             break;
 
         case SettingsAction::FULL_REFRESH:
             {
                 // Do a full display refresh
                 displayManager.getDisplay().clearScreen(0xFF);
-                _actionSuccess = true;
-                _actionResultMessage = "Display refreshed";
+                actionSuccess = true;
+                resultMessage = "Display refreshed";
             }
             break;
 
         case SettingsAction::RESET_HUE:
             hueManager.reset();
-            _actionSuccess = true;
-            _actionResultMessage = "Hue reset - will rediscover bridge";
+            actionSuccess = true;
+            resultMessage = "Hue reset - will rediscover bridge";
             break;
 
         case SettingsAction::RESET_TADO:
             tadoManager.logout();
-            _actionSuccess = true;
-            _actionResultMessage = "Tado logged out";
+            actionSuccess = true;
+            resultMessage = "Tado logged out";
             break;
 
         case SettingsAction::RESET_HOMEKIT:
             // HomeSpan doesn't have a simple logout - would need to delete pairing
             // For now, inform user to use HomeSpan's built-in method
-            _actionResultMessage = "Use 'H' command via serial";
+            resultMessage = "Use 'H' command via serial";
             break;
 
         case SettingsAction::REBOOT:
@@ -728,8 +602,8 @@ bool UIManager::executeSelectedAction() {
                 // Reset sensor calibration
                 sensorManager.performFactoryReset();
 
-                _actionSuccess = true;
-                _actionResultMessage = "Factory reset complete - rebooting";
+                actionSuccess = true;
+                resultMessage = "Factory reset complete - rebooting";
 
                 // Show message then reboot
                 display.setFullWindow();
@@ -746,7 +620,7 @@ bool UIManager::executeSelectedAction() {
             break;
 
         default:
-            _actionResultMessage = "Unknown action";
+            resultMessage = "Unknown action";
             break;
     }
 
@@ -757,20 +631,17 @@ bool UIManager::executeSelectedAction() {
         display.fillScreen(GxEPD_WHITE);
         display.setTextColor(GxEPD_BLACK);
         display.setFont(&FreeMonoBold18pt7b);
-        drawCenteredText(_actionSuccess ? "Success!" : "Failed", displayManager.height() / 2 - 40, &FreeMonoBold18pt7b);
+        drawCenteredText(actionSuccess ? "Success!" : "Failed", displayManager.height() / 2 - 40, &FreeMonoBold18pt7b);
         display.setFont(&FreeMonoBold12pt7b);
-        drawCenteredText(_actionResultMessage.c_str(), displayManager.height() / 2, &FreeMonoBold12pt7b);
+        drawCenteredText(resultMessage.c_str(), displayManager.height() / 2, &FreeMonoBold12pt7b);
         display.setFont(&FreeMonoBold9pt7b);
         drawCenteredText("Press any button to continue", displayManager.height() / 2 + 50, &FreeMonoBold9pt7b);
     } while (display.nextPage());
 
-    _actionExecuting = false;
-
-    // Wait a moment then return to actions screen
+    // Wait a moment before returning
     delay(2000);
-    showSettingsActions();
 
-    return _actionSuccess;
+    return actionSuccess;
 }
 
 void UIManager::drawSettingsTabBar(int activePage) {
@@ -811,7 +682,7 @@ void UIManager::drawSettingsTabBar(int activePage) {
     display.setTextColor(GxEPD_BLACK);
 }
 
-void UIManager::drawSettingsContent() {
+void UIManager::drawSettingsGeneralContent(const String& bridgeIP, bool wifiConnected) {
     DisplayType& display = displayManager.getDisplay();
 
     // Draw tab bar at top
@@ -1286,41 +1157,6 @@ void UIManager::drawCenteredText(const char* text, int y, const GFXfont* font) {
 
 // --- Partial Refresh Methods ---
 
-DashboardDiff UIManager::calculateDiff(const std::vector<HueRoom>& rooms, const String& bridgeIP) {
-    DashboardDiff diff;
-    diff.statusBarChanged = false;
-
-    // Check WiFi status change
-    bool wifiConnected = WiFi.status() == WL_CONNECTED;
-    if (wifiConnected != _previousWifiConnected || bridgeIP != _previousBridgeIP) {
-        diff.statusBarChanged = true;
-    }
-
-    // Check room changes
-    size_t maxRooms = min(rooms.size(), _previousRooms.size());
-    for (size_t i = 0; i < maxRooms; i++) {
-        const HueRoom& curr = rooms[i];
-        const HueRoom& prev = _previousRooms[i];
-
-        if (curr.anyOn != prev.anyOn ||
-            curr.allOn != prev.allOn ||
-            curr.brightness != prev.brightness ||
-            curr.name != prev.name) {
-            diff.changedRoomIndices.push_back(i);
-        }
-    }
-
-    // Handle added/removed rooms (all affected need refresh)
-    if (rooms.size() != _previousRooms.size()) {
-        diff.changedRoomIndices.clear();
-        for (size_t i = 0; i < rooms.size(); i++) {
-            diff.changedRoomIndices.push_back(i);
-        }
-    }
-
-    return diff;
-}
-
 void UIManager::getTileBounds(int col, int row, int16_t& x, int16_t& y, int16_t& w, int16_t& h) {
     x = UI_TILE_PADDING + col * (_tileWidth + UI_TILE_PADDING);
     y = _contentStartY + row * (_tileHeight + UI_TILE_PADDING);
@@ -1350,7 +1186,7 @@ void UIManager::refreshRoomTile(int col, int row, const HueRoom& room, bool isSe
     } while (display.nextPage());
 }
 
-void UIManager::refreshStatusBarPartial(bool wifiConnected, const String& bridgeIP) {
+void UIManager::updateStatusBar(bool wifiConnected, const String& bridgeIP) {
     DisplayType& display = displayManager.getDisplay();
 
     // Status bar spans full width
@@ -1367,77 +1203,15 @@ void UIManager::refreshStatusBarPartial(bool wifiConnected, const String& bridge
         display.fillScreen(GxEPD_WHITE);
         drawStatusBar(wifiConnected, bridgeIP);
     } while (display.nextPage());
-}
 
-void UIManager::updateStatusBar(bool wifiConnected, const String& bridgeIP) {
-    // Public method to trigger status bar refresh (for periodic updates)
-    refreshStatusBarPartial(wifiConnected, bridgeIP);
-}
-
-bool UIManager::updateDashboardPartial(const std::vector<HueRoom>& rooms, const String& bridgeIP) {
-    // First call or not on dashboard - do full refresh
-    if (_previousRooms.empty() || _currentScreen != UIScreen::DASHBOARD) {
-        showDashboard(rooms, bridgeIP);
-        return true;
-    }
-
-    unsigned long now = millis();
-
-    // Check if periodic full refresh needed (anti-ghosting)
-    if (now - _lastFullRefreshTime > FULL_REFRESH_INTERVAL_MS ||
-        _partialUpdateCount >= MAX_PARTIAL_UPDATES) {
-        log("Forcing full refresh to clear ghosting");
-        showDashboard(rooms, bridgeIP);
-        return true;
-    }
-
-    DashboardDiff diff = calculateDiff(rooms, bridgeIP);
-
-    // If too many tiles changed, full refresh is more efficient
-    if (diff.changedRoomIndices.size() > PARTIAL_REFRESH_THRESHOLD) {
-        logf("Too many changes (%d tiles), using full refresh", diff.changedRoomIndices.size());
-        showDashboard(rooms, bridgeIP);
-        return true;
-    }
-
-    // No changes at all
-    if (!diff.statusBarChanged && diff.changedRoomIndices.empty()) {
-        log("No changes detected, skipping refresh");
-        return false;
-    }
-
-    // Partial updates
-    _cachedRooms = rooms;
-
-    if (diff.statusBarChanged) {
-        refreshStatusBarPartial(WiFi.status() == WL_CONNECTED, bridgeIP);
-        _partialUpdateCount++;
-    }
-
-    for (int idx : diff.changedRoomIndices) {
-        int row = idx / UI_TILE_COLS;
-        int col = idx % UI_TILE_COLS;
-        if (row < UI_TILE_ROWS && idx < rooms.size()) {
-            bool isSelected = (idx == _selectedIndex);
-            refreshRoomTile(col, row, rooms[idx], isSelected);
-            _partialUpdateCount++;
-        }
-    }
-
-    // Update cached state
-    _previousRooms = rooms;
-    _previousBridgeIP = bridgeIP;
-    _previousWifiConnected = WiFi.status() == WL_CONNECTED;
-
-    logf("Partial update complete (%d partial updates total)", _partialUpdateCount);
-    return true;
+    _partialUpdateCount++;
 }
 
 void UIManager::updateTileSelection(int oldIndex, int newIndex) {
     if (oldIndex == newIndex) return;
     if (_cachedRooms.empty()) return;
 
-    _selectedIndex = newIndex;
+    // State is now managed by DisplayTask, UIManager is stateless
 
     // Redraw old tile without selection
     if (oldIndex >= 0 && oldIndex < _cachedRooms.size()) {
@@ -1466,9 +1240,15 @@ void UIManager::updateTileSelection(int oldIndex, int newIndex) {
 // Sensor Screen Methods
 // =============================================================================
 
-void UIManager::showSensorDashboard() {
-    _currentScreen = UIScreen::SENSOR_DASHBOARD;
-    log("Showing sensor dashboard");
+void UIManager::renderSensorDashboard(
+    SensorMetric selectedMetric,
+    float co2,
+    float temperature,
+    float humidity,
+    const String& bridgeIP,
+    bool wifiConnected
+) {
+    log("Rendering sensor dashboard");
 
     DisplayType& display = displayManager.getDisplay();
 
@@ -1478,18 +1258,20 @@ void UIManager::showSensorDashboard() {
 
     do {
         display.fillScreen(GxEPD_WHITE);
-        drawStatusBar(WiFi.status() == WL_CONNECTED, hueManager.getBridgeIP());
-        drawSensorDashboardContent();
+        drawStatusBar(wifiConnected, bridgeIP);
+        drawSensorDashboardContent(selectedMetric, co2, temperature, humidity);
     } while (display.nextPage());
 
     _lastFullRefreshTime = millis();
     _partialUpdateCount = 0;
 }
 
-void UIManager::showSensorDetail(SensorMetric metric) {
-    _currentScreen = UIScreen::SENSOR_DETAIL;
-    _currentMetric = metric;
-    logf("Showing sensor detail: %s", SensorManager::metricToString(metric));
+void UIManager::renderSensorDetail(
+    SensorMetric metric,
+    const String& bridgeIP,
+    bool wifiConnected
+) {
+    logf("Rendering sensor detail: %s", SensorManager::metricToString(metric));
 
     DisplayType& display = displayManager.getDisplay();
 
@@ -1499,7 +1281,7 @@ void UIManager::showSensorDetail(SensorMetric metric) {
 
     do {
         display.fillScreen(GxEPD_WHITE);
-        drawStatusBar(WiFi.status() == WL_CONNECTED, hueManager.getBridgeIP());
+        drawStatusBar(wifiConnected, bridgeIP);
         drawSensorDetailContent(metric);
     } while (display.nextPage());
 
@@ -1507,96 +1289,7 @@ void UIManager::showSensorDetail(SensorMetric metric) {
     _partialUpdateCount = 0;
 }
 
-void UIManager::updateSensorDashboard() {
-    if (_currentScreen != UIScreen::SENSOR_DASHBOARD) return;
-
-    unsigned long now = millis();
-
-    // Check if periodic full refresh needed
-    if (now - _lastFullRefreshTime > FULL_REFRESH_INTERVAL_MS ||
-        _partialUpdateCount >= MAX_PARTIAL_UPDATES) {
-        showSensorDashboard();
-        return;
-    }
-
-    // Partial refresh of content area
-    DisplayType& display = displayManager.getDisplay();
-
-    int16_t x = 0;
-    int16_t y = UI_STATUS_BAR_HEIGHT;
-    int16_t w = displayManager.width();
-    int16_t h = displayManager.height() - UI_STATUS_BAR_HEIGHT;
-
-    display.setPartialWindow(x, y, w, h);
-    display.firstPage();
-    do {
-        display.fillScreen(GxEPD_WHITE);
-        drawSensorDashboardContent();
-    } while (display.nextPage());
-
-    _partialUpdateCount++;
-}
-
-void UIManager::updateSensorDetail() {
-    if (_currentScreen != UIScreen::SENSOR_DETAIL) return;
-
-    unsigned long now = millis();
-
-    // Check if periodic full refresh needed
-    if (now - _lastFullRefreshTime > FULL_REFRESH_INTERVAL_MS ||
-        _partialUpdateCount >= MAX_PARTIAL_UPDATES) {
-        showSensorDetail(_currentMetric);
-        return;
-    }
-
-    // Partial refresh of content area
-    DisplayType& display = displayManager.getDisplay();
-
-    int16_t x = 0;
-    int16_t y = UI_STATUS_BAR_HEIGHT;
-    int16_t w = displayManager.width();
-    int16_t h = displayManager.height() - UI_STATUS_BAR_HEIGHT;
-
-    display.setPartialWindow(x, y, w, h);
-    display.firstPage();
-    do {
-        display.fillScreen(GxEPD_WHITE);
-        drawSensorDetailContent(_currentMetric);
-    } while (display.nextPage());
-
-    _partialUpdateCount++;
-}
-
-void UIManager::navigateSensorMetric(int direction) {
-    int metricIndex = (int)_currentMetric;
-    metricIndex += direction;
-
-    // Wrap around
-    if (metricIndex < 0) metricIndex = 2;
-    if (metricIndex > 2) metricIndex = 0;
-
-    _currentMetric = (SensorMetric)metricIndex;
-
-    logf("Navigating to metric: %s", SensorManager::metricToString(_currentMetric));
-
-    if (_currentScreen == UIScreen::SENSOR_DASHBOARD) {
-        updateSensorDashboard();
-    } else if (_currentScreen == UIScreen::SENSOR_DETAIL) {
-        showSensorDetail(_currentMetric);  // Full refresh for metric change
-    }
-}
-
-void UIManager::goBackFromSensor() {
-    log("Going back from sensor screen");
-
-    if (_currentScreen == UIScreen::SENSOR_DETAIL) {
-        showSensorDashboard();
-    } else if (_currentScreen == UIScreen::SENSOR_DASHBOARD) {
-        goBackToDashboard();
-    }
-}
-
-void UIManager::drawSensorDashboardContent() {
+void UIManager::drawSensorDashboardContent(SensorMetric selectedMetric, float co2, float temp, float humidity) {
     DisplayType& display = displayManager.getDisplay();
 
     int padding = 8;
@@ -1610,15 +1303,15 @@ void UIManager::drawSensorDashboardContent() {
 
     // === CO2 Panel (large, top) ===
     int co2Y = contentY;
-    bool co2Selected = (_currentMetric == SensorMetric::CO2);
+    bool co2Selected = (selectedMetric == SensorMetric::CO2);
     drawPriorityPanel(padding, co2Y, contentWidth, co2Height, SensorMetric::CO2, co2Selected, true);
 
     // === Temperature and Humidity panels (side by side, bottom) ===
     int secondaryY = co2Y + co2Height + padding;
     int panelWidth = (contentWidth - padding) / 2;
 
-    bool tempSelected = (_currentMetric == SensorMetric::TEMPERATURE);
-    bool humSelected = (_currentMetric == SensorMetric::HUMIDITY);
+    bool tempSelected = (selectedMetric == SensorMetric::TEMPERATURE);
+    bool humSelected = (selectedMetric == SensorMetric::HUMIDITY);
 
     drawPriorityPanel(padding, secondaryY, panelWidth, secondaryHeight, SensorMetric::TEMPERATURE, tempSelected, false);
     drawPriorityPanel(padding + panelWidth + padding, secondaryY, panelWidth, secondaryHeight, SensorMetric::HUMIDITY, humSelected, false);
@@ -1795,11 +1488,6 @@ void UIManager::drawSensorRow(int x, int y, int width, int height, SensorMetric 
     }
 }
 
-void UIManager::drawSensorPanel(int x, int y, int width, int height, SensorMetric metric, bool isSelected) {
-    // Legacy vertical panel - kept for compatibility but not used in new row layout
-    drawSensorRow(x, y, width, height, metric, isSelected);
-}
-
 void UIManager::drawMiniChart(int x, int y, int width, int height, SensorMetric metric) {
     DisplayType& display = displayManager.getDisplay();
 
@@ -1861,19 +1549,17 @@ void UIManager::drawSensorDetailContent(SensorMetric metric) {
     display.print(SensorManager::metricToString(metric));
 
     if (sensorManager.isOperational()) {
-        // Get stats for different periods
-        // 1h = 60 samples, 24h = 1440 samples, 48h = 2880 (all)
-        SensorStats stats1h = sensorManager.getStats(metric, 60);
-        SensorStats stats24h = sensorManager.getStats(metric, 1440);
-        SensorStats stats48h = sensorManager.getStats(metric);  // all samples
+        // Get stats ONCE (was calling 4 times before - 3 periods + drawFullChart)
+        // This single call scans the buffer once instead of 4x
+        SensorStats stats = sensorManager.getStats(metric);
 
         // Current value on right side - larger for emphasis
         display.setFont(&FreeMonoBold18pt7b);
         char currentStr[32];
         if (metric == SensorMetric::CO2) {
-            snprintf(currentStr, sizeof(currentStr), "%.0f %s", stats48h.current, unit);
+            snprintf(currentStr, sizeof(currentStr), "%.0f %s", stats.current, unit);
         } else {
-            snprintf(currentStr, sizeof(currentStr), "%.1f%s", stats48h.current, unit);
+            snprintf(currentStr, sizeof(currentStr), "%.1f%s", stats.current, unit);
         }
         int16_t x1, y1;
         uint16_t w, h;
@@ -1885,86 +1571,24 @@ void UIManager::drawSensorDetailContent(SensorMetric metric) {
         int chartX = 55;
         int chartY = contentY + 40;
         int chartWidth = displayManager.width() - 75;
-        int chartHeight = displayManager.height() - chartY - 90;
+        int chartHeight = displayManager.height() - chartY - 70;
 
-        // Draw full chart
+        // Draw full chart (passing stats to avoid recalculation)
         drawFullChart(chartX, chartY, chartWidth, chartHeight, metric);
 
-        // Period statistics at bottom - 3 columns
-        int statsY = displayManager.height() - 75;
-        int colWidth = (displayManager.width() - 40) / 3;
-        display.setFont(&FreeSansBold9pt7b);
-
-        // Period labels
-        display.setCursor(labelX, statsY);
-        display.print("1h");
-        display.setCursor(labelX + colWidth, statsY);
-        display.print("24h");
-        display.setCursor(labelX + colWidth * 2, statsY);
-        display.print("48h");
-
-        // Min-Max ranges (smaller font)
+        // Simplified stats at bottom - single row with H/L/Avg
+        int statsY = displayManager.height() - 55;
         display.setFont(&FreeMono9pt7b);
-        statsY += 16;
-        char rangeStr[32];
-
-        // 1h range
+        char statsStr[64];
         if (metric == SensorMetric::CO2) {
-            snprintf(rangeStr, sizeof(rangeStr), "%.0f-%.0f", stats1h.min, stats1h.max);
+            snprintf(statsStr, sizeof(statsStr), "48h:  High %.0f  |  Low %.0f  |  Avg %.0f",
+                     stats.max, stats.min, stats.avg);
         } else {
-            snprintf(rangeStr, sizeof(rangeStr), "%.1f-%.1f", stats1h.min, stats1h.max);
+            snprintf(statsStr, sizeof(statsStr), "48h:  High %.1f  |  Low %.1f  |  Avg %.1f",
+                     stats.max, stats.min, stats.avg);
         }
         display.setCursor(labelX, statsY);
-        display.print(rangeStr);
-
-        // 24h range
-        if (metric == SensorMetric::CO2) {
-            snprintf(rangeStr, sizeof(rangeStr), "%.0f-%.0f", stats24h.min, stats24h.max);
-        } else {
-            snprintf(rangeStr, sizeof(rangeStr), "%.1f-%.1f", stats24h.min, stats24h.max);
-        }
-        display.setCursor(labelX + colWidth, statsY);
-        display.print(rangeStr);
-
-        // 48h range
-        if (metric == SensorMetric::CO2) {
-            snprintf(rangeStr, sizeof(rangeStr), "%.0f-%.0f", stats48h.min, stats48h.max);
-        } else {
-            snprintf(rangeStr, sizeof(rangeStr), "%.1f-%.1f", stats48h.min, stats48h.max);
-        }
-        display.setCursor(labelX + colWidth * 2, statsY);
-        display.print(rangeStr);
-
-        // Average below ranges
-        statsY += 14;
-        char avgStr[32];
-
-        // 1h avg
-        if (metric == SensorMetric::CO2) {
-            snprintf(avgStr, sizeof(avgStr), "avg %.0f", stats1h.avg);
-        } else {
-            snprintf(avgStr, sizeof(avgStr), "avg %.1f", stats1h.avg);
-        }
-        display.setCursor(labelX, statsY);
-        display.print(avgStr);
-
-        // 24h avg
-        if (metric == SensorMetric::CO2) {
-            snprintf(avgStr, sizeof(avgStr), "avg %.0f", stats24h.avg);
-        } else {
-            snprintf(avgStr, sizeof(avgStr), "avg %.1f", stats24h.avg);
-        }
-        display.setCursor(labelX + colWidth, statsY);
-        display.print(avgStr);
-
-        // 48h avg
-        if (metric == SensorMetric::CO2) {
-            snprintf(avgStr, sizeof(avgStr), "avg %.0f", stats48h.avg);
-        } else {
-            snprintf(avgStr, sizeof(avgStr), "avg %.1f", stats48h.avg);
-        }
-        display.setCursor(labelX + colWidth * 2, statsY);
-        display.print(avgStr);
+        display.print(statsStr);
 
         // Navigation bar at bottom
         display.fillRect(0, displayManager.height() - UI_NAV_BAR_HEIGHT, displayManager.width(), UI_NAV_BAR_HEIGHT, GxEPD_WHITE);
@@ -1987,25 +1611,33 @@ void UIManager::drawSensorDetailContent(SensorMetric metric) {
     }
 }
 
+// Static buffer for chart samples - avoids heap allocation/fragmentation per render
+// 800 samples matches display width, uses ~3.2KB of static RAM
+static float _chartSampleBuffer[800];
+
 void UIManager::drawFullChart(int x, int y, int width, int height, SensorMetric metric) {
     DisplayType& display = displayManager.getDisplay();
 
-    // Get samples
-    size_t maxPoints = min((size_t)CHART_DATA_POINTS, (size_t)width);
-    float* samples = new float[maxPoints];
+    // Use static buffer instead of heap allocation (was: new float[maxPoints])
+    size_t maxPoints = min((size_t)800, (size_t)width);
     size_t stride = max((size_t)1, sensorManager.getSampleCount() / maxPoints);
-    size_t count = sensorManager.getSamples(samples, maxPoints, metric, stride);
+    size_t count = sensorManager.getSamples(_chartSampleBuffer, maxPoints, metric, stride);
 
     if (count < 2) {
         display.setFont(&FreeSansBold9pt7b);
         display.setCursor(x + 20, y + height / 2);
         display.print("Collecting data...");
-        delete[] samples;
         return;
     }
 
-    // Get stats for markers
-    SensorStats stats = sensorManager.getStats(metric);
+    // Compute min/max from samples directly (avoids extra getStats() call)
+    float minVal = _chartSampleBuffer[0];
+    float maxVal = _chartSampleBuffer[0];
+    size_t minIdx = 0, maxIdx = 0;
+    for (size_t i = 1; i < count; i++) {
+        if (_chartSampleBuffer[i] < minVal) { minVal = _chartSampleBuffer[i]; minIdx = i; }
+        if (_chartSampleBuffer[i] > maxVal) { maxVal = _chartSampleBuffer[i]; maxIdx = i; }
+    }
 
     // Use FIXED ranges for consistent chart scaling (clip values at boundaries)
     float scaleMin, scaleMax;
@@ -2044,15 +1676,13 @@ void UIManager::drawFullChart(int x, int y, int width, int height, SensorMetric 
     }
 
     // Draw chart line
-    drawChartLine(x + 1, y, width - 1, height, samples, count, scaleMin, scaleMax);
+    drawChartLine(x + 1, y, width - 1, height, _chartSampleBuffer, count, scaleMin, scaleMax);
 
-    // Draw min/max markers
+    // Draw min/max markers (using locally computed values)
     drawMinMaxMarkers(x + 1, y, width - 1, height,
                       scaleMin, scaleMax,
-                      stats.min, stats.max,
-                      stats.minIndex, stats.maxIndex, count);
-
-    delete[] samples;
+                      minVal, maxVal,
+                      minIdx, maxIdx, count);
 }
 
 void UIManager::drawChartLine(int x, int y, int width, int height,
@@ -2159,12 +1789,12 @@ void UIManager::drawMinMaxMarkers(int chartX, int chartY, int chartWidth, int ch
 // Tado Screen Methods
 // =============================================================================
 
-void UIManager::showTadoAuth(const TadoAuthInfo& authInfo) {
-    _currentScreen = UIScreen::TADO_AUTH;
-    _tadoAuthInfo = authInfo;
-    _lastTadoUpdateTime = millis();
-
-    log("Showing Tado auth screen");
+void UIManager::renderTadoAuth(
+    const TadoAuthInfo& authInfo,
+    const String& bridgeIP,
+    bool wifiConnected
+) {
+    log("Rendering Tado auth screen");
 
     DisplayType& display = displayManager.getDisplay();
     display.setRotation(DISPLAY_ROTATION);
@@ -2173,7 +1803,7 @@ void UIManager::showTadoAuth(const TadoAuthInfo& authInfo) {
 
     do {
         display.fillScreen(GxEPD_WHITE);
-        drawStatusBar(WiFi.status() == WL_CONNECTED, hueManager.getBridgeIP());
+        drawStatusBar(wifiConnected, bridgeIP);
         drawTadoAuthContent(authInfo);
     } while (display.nextPage());
 
@@ -2287,51 +1917,13 @@ void UIManager::drawTadoAuthContent(const TadoAuthInfo& authInfo) {
     drawCenteredText("[A] Retry   [B] Cancel", displayManager.height() - 7, &FreeSans9pt7b);
 }
 
-void UIManager::updateTadoAuth() {
-    if (_currentScreen != UIScreen::TADO_AUTH) return;
-
-    // Update the countdown timer with partial refresh
-    // Calculate position based on new layout:
-    // QR code is ~196px (version 8, scale 4), URL text, instructions, code, countdown
-    DisplayType& display = displayManager.getDisplay();
-
-    // Status is near bottom, above nav bar
-    int statusY = displayManager.height() - UI_NAV_BAR_HEIGHT - 50;
-
-    // Partial refresh just the status area
-    display.setPartialWindow(0, statusY - 15, displayManager.width(), 35);
-    display.firstPage();
-    do {
-        display.fillScreen(GxEPD_WHITE);
-
-        unsigned long now = millis();
-        int remaining = 0;
-        if (_tadoAuthInfo.expiresAt > now) {
-            remaining = (_tadoAuthInfo.expiresAt - now) / 1000;
-        }
-
-        char statusStr[64];
-        if (remaining > 0) {
-            snprintf(statusStr, sizeof(statusStr), "Expires in %d:%02d",
-                     remaining / 60, remaining % 60);
-        } else {
-            snprintf(statusStr, sizeof(statusStr), "Code expired - press A to retry");
-        }
-
-        display.setFont(&FreeSansBold9pt7b);
-        display.setTextColor(GxEPD_BLACK);
-        drawCenteredText(statusStr, statusY, &FreeSansBold9pt7b);
-    } while (display.nextPage());
-
-    _partialUpdateCount++;
-}
-
-void UIManager::showTadoDashboard() {
-    _currentScreen = UIScreen::TADO_DASHBOARD;
-    _selectedTadoRoom = 0;
-    _lastTadoUpdateTime = millis();
-
-    log("Showing Tado dashboard");
+void UIManager::renderTadoDashboard(
+    const std::vector<TadoRoom>& rooms,
+    int selectedRoom,
+    const String& bridgeIP,
+    bool wifiConnected
+) {
+    log("Rendering Tado dashboard");
 
     DisplayType& display = displayManager.getDisplay();
     display.setRotation(DISPLAY_ROTATION);
@@ -2340,18 +1932,16 @@ void UIManager::showTadoDashboard() {
 
     do {
         display.fillScreen(GxEPD_WHITE);
-        drawStatusBar(WiFi.status() == WL_CONNECTED, hueManager.getBridgeIP());
-        drawTadoDashboardContent();
+        drawStatusBar(wifiConnected, bridgeIP);
+        drawTadoDashboardContent(rooms, selectedRoom);
     } while (display.nextPage());
 
     _lastFullRefreshTime = millis();
     _partialUpdateCount = 0;
 }
 
-void UIManager::drawTadoDashboardContent() {
+void UIManager::drawTadoDashboardContent(const std::vector<TadoRoom>& rooms, int selectedRoom) {
     DisplayType& display = displayManager.getDisplay();
-
-    const auto& rooms = tadoManager.getRooms();
 
     // Calculate tile dimensions for 3x3 grid (same as Hue dashboard)
     int contentStartY = UI_STATUS_BAR_HEIGHT;
@@ -2372,7 +1962,7 @@ void UIManager::drawTadoDashboardContent() {
         for (size_t i = 0; i < rooms.size() && i < (UI_TILE_COLS * UI_TILE_ROWS); i++) {
             int col = i % UI_TILE_COLS;
             int row = i / UI_TILE_COLS;
-            bool isSelected = ((int)i == _selectedTadoRoom);
+            bool isSelected = ((int)i == selectedRoom);
 
             int tileX = UI_TILE_PADDING + col * (tileWidth + UI_TILE_PADDING);
             int tileY = contentStartY + UI_TILE_PADDING + row * (tileHeight + UI_TILE_PADDING);
@@ -2453,97 +2043,6 @@ void UIManager::drawTadoRoomTile(int x, int y, int width, int height,
         display.setCursor(x + 6, y + height - 8);
         display.print("M");
     }
-}
-
-void UIManager::updateTadoDashboard() {
-    if (_currentScreen != UIScreen::TADO_DASHBOARD) return;
-
-    // Full refresh for simplicity
-    showTadoDashboard();
-}
-
-void UIManager::navigateTadoRoom(int direction) {
-    const auto& rooms = tadoManager.getRooms();
-    if (rooms.empty()) return;
-
-    int oldIndex = _selectedTadoRoom;
-    _selectedTadoRoom += direction;
-
-    // Clamp to valid range
-    if (_selectedTadoRoom < 0) _selectedTadoRoom = 0;
-    if (_selectedTadoRoom >= (int)rooms.size()) _selectedTadoRoom = rooms.size() - 1;
-
-    if (oldIndex != _selectedTadoRoom) {
-        updateTadoDashboard();
-    }
-}
-
-void UIManager::goBackFromTado() {
-    if (_currentScreen == UIScreen::TADO_AUTH || _currentScreen == UIScreen::TADO_DASHBOARD) {
-        goBackToDashboard();
-    }
-}
-
-// =============================================================================
-// Navigation Stack Methods
-// =============================================================================
-
-void UIManager::pushScreen(UIScreen screen) {
-    // Save current state to stack
-    if (_navigationStack.size() >= MAX_STACK_DEPTH) {
-        // Remove oldest entry if stack is full
-        _navigationStack.erase(_navigationStack.begin());
-    }
-
-    NavigationEntry entry(_currentScreen, _selectedIndex, _currentMetric);
-
-    // For Tado screens, also save the selected room
-    if (_currentScreen == UIScreen::TADO_DASHBOARD) {
-        entry.selectionIndex = _selectedTadoRoom;
-    }
-
-    _navigationStack.push_back(entry);
-    _currentScreen = screen;
-
-    logf("Pushed screen to stack (depth: %d)", _navigationStack.size());
-}
-
-bool UIManager::popScreen() {
-    if (_navigationStack.empty()) {
-        log("Cannot pop - navigation stack is empty");
-        return false;
-    }
-
-    NavigationEntry prev = _navigationStack.back();
-    _navigationStack.pop_back();
-
-    _currentScreen = prev.screen;
-    _selectedIndex = prev.selectionIndex;
-    _currentMetric = prev.metric;
-
-    // Restore Tado room selection if returning to Tado dashboard
-    if (prev.screen == UIScreen::TADO_DASHBOARD) {
-        _selectedTadoRoom = prev.selectionIndex;
-    }
-
-    logf("Popped screen from stack (depth: %d), returning to %d",
-         _navigationStack.size(), (int)prev.screen);
-
-    return true;
-}
-
-void UIManager::replaceScreen(UIScreen screen) {
-    // Clear stack and set new screen (for main window switching)
-    _navigationStack.clear();
-    _currentScreen = screen;
-    log("Replaced screen, cleared navigation stack");
-}
-
-UIScreen UIManager::getPreviousScreen() const {
-    if (_navigationStack.empty()) {
-        return UIScreen::DASHBOARD;  // Default fallback
-    }
-    return _navigationStack.back().screen;
 }
 
 void UIManager::log(const char* message) {

@@ -229,42 +229,79 @@ struct InputEvent {
 };
 
 // =============================================================================
-// Shared Display State
+// Main Window Enum - For bumper cycling between 3 main screens
+// =============================================================================
+
+enum class MainWindow : uint8_t {
+    HUE = 0,
+    SENSORS = 1,
+    TADO = 2
+};
+
+// =============================================================================
+// Shared Display State - SINGLE SOURCE OF TRUTH
 // =============================================================================
 
 // Thread-safe state snapshot for display rendering
+// DisplayTask owns this state. UIManager is stateless and receives data as parameters.
 struct DisplayState {
-    // Current screen and navigation
+    // =========================================================================
+    // Navigation State (Single Source of Truth)
+    // =========================================================================
+
     UIScreen currentScreen;
-    int selectedIndex;           // Dashboard tile index
-    int selectedTadoRoom;        // Tado room index
-    int settingsPage;            // Settings page (0=info, 1=homekit, 2=actions)
+    UIScreen previousScreen;         // For context-aware back navigation
+    MainWindow currentMainWindow;    // For bumper cycling
+
+    // =========================================================================
+    // Screen-Specific State
+    // =========================================================================
+
+    // Dashboard (Hue) state
+    int hueSelectedIndex;            // Selected tile (0-5 for 3x2 grid)
+
+    // Sensor state
+    SensorMetric currentSensorMetric;
+
+    // Tado state
+    int tadoSelectedRoom;
+    bool tadoNeedsAuth;              // True if should show auth screen
+
+    // Settings state
+    int settingsCurrentPage;         // 0=General, 1=HomeKit, 2=Actions
     SettingsAction selectedAction;
-    SensorMetric currentMetric;  // Sensor detail metric
 
-    // Room data (deep copies for thread safety)
+    // Room Control state
+    int controlledRoomIndex;         // Index into hueRooms being controlled
+
+    // =========================================================================
+    // Data State (Thread-Safe Copies)
+    // =========================================================================
+
+    // Hue data
     std::vector<HueRoom> hueRooms;
-    std::vector<TadoRoom> tadoRooms;
-
-    // Active room for room control screen
-    HueRoom activeRoom;
-
-    // Connection state
-    bool wifiConnected;
     String bridgeIP;
-    bool controllerConnected;
+
+    // Tado data
+    std::vector<TadoRoom> tadoRooms;
+    TadoAuthInfo tadoAuth;
 
     // Sensor data
     float co2;
     float temperature;
     float humidity;
 
+    // Connection state
+    bool wifiConnected;
+    bool controllerConnected;
+
     // Power state
     float batteryPercent;
     bool isCharging;
 
-    // Tado auth info (for auth screen)
-    TadoAuthInfo tadoAuth;
+    // =========================================================================
+    // Rendering State
+    // =========================================================================
 
     // Dirty flags for diff-based refresh
     bool selectionDirty;
@@ -280,14 +317,21 @@ struct DisplayState {
     // Timestamp for staleness detection
     uint32_t lastUpdateTime;
 
-    // Default constructor
+    // =========================================================================
+    // Constructor
+    // =========================================================================
+
     DisplayState()
         : currentScreen(UIScreen::DASHBOARD)
-        , selectedIndex(0)
-        , selectedTadoRoom(0)
-        , settingsPage(0)
+        , previousScreen(UIScreen::DASHBOARD)
+        , currentMainWindow(MainWindow::HUE)
+        , hueSelectedIndex(0)
+        , currentSensorMetric(SensorMetric::CO2)
+        , tadoSelectedRoom(0)
+        , tadoNeedsAuth(false)
+        , settingsCurrentPage(0)
         , selectedAction(SettingsAction::CALIBRATE_CO2)
-        , currentMetric(SensorMetric::CO2)
+        , controlledRoomIndex(-1)
         , wifiConnected(false)
         , bridgeIP("")
         , controllerConnected(false)
@@ -304,6 +348,10 @@ struct DisplayState {
         , sensorDirty(false)
         , lastUpdateTime(0) {}
 
+    // =========================================================================
+    // Helper Methods
+    // =========================================================================
+
     // Clear all dirty flags
     void clearDirtyFlags() {
         selectionDirty = false;
@@ -313,6 +361,63 @@ struct DisplayState {
         tadoDirty = false;
         sensorDirty = false;
         dirtyTileIndices.clear();
+    }
+
+    // Context-aware back navigation - returns the screen to go to when pressing Back
+    UIScreen getBackTarget() const {
+        switch (currentScreen) {
+            // From sub-screens, return to their parent
+            case UIScreen::ROOM_CONTROL:
+                return UIScreen::DASHBOARD;
+            case UIScreen::SENSOR_DETAIL:
+                return UIScreen::SENSOR_DASHBOARD;
+
+            // From settings, return to Dashboard
+            case UIScreen::SETTINGS:
+            case UIScreen::SETTINGS_HOMEKIT:
+            case UIScreen::SETTINGS_ACTIONS:
+                return UIScreen::DASHBOARD;
+
+            // From Tado auth, return to Dashboard (cancel auth)
+            case UIScreen::TADO_AUTH:
+                return UIScreen::DASHBOARD;
+
+            // From main windows, no action (return same screen)
+            case UIScreen::DASHBOARD:
+            case UIScreen::SENSOR_DASHBOARD:
+            case UIScreen::TADO_DASHBOARD:
+                return currentScreen;
+
+            default:
+                return UIScreen::DASHBOARD;
+        }
+    }
+
+    // Get the main window for a given screen
+    static MainWindow screenToMainWindow(UIScreen screen) {
+        switch (screen) {
+            case UIScreen::DASHBOARD:
+            case UIScreen::ROOM_CONTROL:
+                return MainWindow::HUE;
+            case UIScreen::SENSOR_DASHBOARD:
+            case UIScreen::SENSOR_DETAIL:
+                return MainWindow::SENSORS;
+            case UIScreen::TADO_DASHBOARD:
+            case UIScreen::TADO_AUTH:
+                return MainWindow::TADO;
+            default:
+                return MainWindow::HUE;
+        }
+    }
+
+    // Get the root screen for a main window
+    static UIScreen mainWindowToScreen(MainWindow window) {
+        switch (window) {
+            case MainWindow::HUE:     return UIScreen::DASHBOARD;
+            case MainWindow::SENSORS: return UIScreen::SENSOR_DASHBOARD;
+            case MainWindow::TADO:    return UIScreen::TADO_DASHBOARD;
+            default:                  return UIScreen::DASHBOARD;
+        }
     }
 };
 

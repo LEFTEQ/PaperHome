@@ -18,6 +18,10 @@ InputEvent DisplayTaskManager::_pendingEvents[EVENT_QUEUE_LENGTH];
 uint8_t DisplayTaskManager::_pendingEventCount = 0;
 uint32_t DisplayTaskManager::_batchStartTime = 0;
 
+// Cooldown tracking for sensor screen updates (prevents excessive re-renders)
+static uint32_t _lastSensorScreenRenderTime = 0;
+static const uint32_t SENSOR_SCREEN_COOLDOWN_MS = 300000;  // 5 minutes between automatic updates
+
 // =============================================================================
 // Task Lifecycle
 // =============================================================================
@@ -227,13 +231,13 @@ void DisplayTaskManager::processEvent(const InputEvent& event) {
 
     switch (event.type) {
         // =====================================================================
-        // Navigation Events
+        // Navigation Events - Handled by DisplayTask
         // =====================================================================
 
         case InputEventType::NAV_DASHBOARD_MOVE: {
             // Grid navigation with wrap-around - keep lock for entire operation
             TaskManager::acquireStateLock();
-            int oldIndex = TaskManager::sharedState.selectedIndex;
+            int oldIndex = TaskManager::sharedState.hueSelectedIndex;
             int total = TaskManager::sharedState.hueRooms.size();
 
             if (total == 0) {
@@ -259,7 +263,7 @@ void DisplayTaskManager::processEvent(const InputEvent& event) {
             }
 
             if (newIndex != oldIndex) {
-                TaskManager::sharedState.selectedIndex = newIndex;
+                TaskManager::sharedState.hueSelectedIndex = newIndex;
                 TaskManager::releaseStateLock();
 
                 uiManager.updateTileSelection(oldIndex, newIndex);
@@ -271,32 +275,93 @@ void DisplayTaskManager::processEvent(const InputEvent& event) {
         }
 
         case InputEventType::NAV_SETTINGS_PAGE: {
+            // Settings page navigation - handled by DisplayTask
             int direction = event.settingsPage.direction;
-            uiManager.navigateSettingsPage(direction);
 
-            // Update shared state to reflect current screen
-            syncStateFromShared();
+            TaskManager::acquireStateLock();
+            int currentPage = TaskManager::sharedState.settingsCurrentPage;
+            int newPage = currentPage + direction;
+
+            // Clamp to valid range (0-2)
+            if (newPage < 0) newPage = 0;
+            if (newPage > 2) newPage = 2;
+
+            if (newPage != currentPage) {
+                TaskManager::sharedState.settingsCurrentPage = newPage;
+                // Update screen enum based on page
+                switch (newPage) {
+                    case 0: TaskManager::sharedState.currentScreen = UIScreen::SETTINGS; break;
+                    case 1: TaskManager::sharedState.currentScreen = UIScreen::SETTINGS_HOMEKIT; break;
+                    case 2: TaskManager::sharedState.currentScreen = UIScreen::SETTINGS_ACTIONS; break;
+                }
+                TaskManager::releaseStateLock();
+
+                syncStateFromShared();
+                renderFullScreen();
+            } else {
+                TaskManager::releaseStateLock();
+            }
             break;
         }
 
         case InputEventType::NAV_SETTINGS_ACTION: {
+            // Action selection navigation - handled by DisplayTask
             int direction = event.settingsAction.direction;
-            uiManager.navigateAction(direction);
+
+            TaskManager::acquireStateLock();
+            int current = (int)TaskManager::sharedState.selectedAction;
+            int count = (int)SettingsAction::ACTION_COUNT;
+
+            current += direction;
+            if (current < 0) current = count - 1;
+            if (current >= count) current = 0;
+
+            TaskManager::sharedState.selectedAction = (SettingsAction)current;
+            TaskManager::releaseStateLock();
+
+            syncStateFromShared();
+            renderFullScreen();
             break;
         }
 
         case InputEventType::NAV_SENSOR_METRIC: {
+            // Sensor metric navigation - handled by DisplayTask
             int direction = event.sensorMetric.direction;
-            uiManager.navigateSensorMetric(direction);
 
-            // Update shared state
+            TaskManager::acquireStateLock();
+            int current = (int)TaskManager::sharedState.currentSensorMetric;
+            current += direction;
+
+            // Wrap around (3 metrics: CO2, TEMP, HUMIDITY)
+            if (current < 0) current = 2;
+            if (current > 2) current = 0;
+
+            TaskManager::sharedState.currentSensorMetric = (SensorMetric)current;
+            TaskManager::releaseStateLock();
+
             syncStateFromShared();
+            renderFullScreen();
             break;
         }
 
         case InputEventType::NAV_TADO_ROOM: {
+            // Tado room navigation - handled by DisplayTask
             int direction = event.tadoRoom.direction;
-            uiManager.navigateTadoRoom(direction);
+
+            TaskManager::acquireStateLock();
+            int current = TaskManager::sharedState.tadoSelectedRoom;
+            int total = TaskManager::sharedState.tadoRooms.size();
+
+            if (total > 0) {
+                current += direction;
+                if (current < 0) current = total - 1;
+                if (current >= total) current = 0;
+                TaskManager::sharedState.tadoSelectedRoom = current;
+            }
+            TaskManager::releaseStateLock();
+
+            syncStateFromShared();
+            renderFullScreen();
             break;
         }
 
@@ -413,9 +478,13 @@ void DisplayTaskManager::processEvent(const InputEvent& event) {
             } else if (screen == UIScreen::ROOM_CONTROL) {
                 // Re-render room control with updated data
                 syncStateFromShared();
-                if (_currentState.selectedIndex < (int)_currentState.hueRooms.size()) {
-                    _currentState.activeRoom = _currentState.hueRooms[_currentState.selectedIndex];
-                    uiManager.showRoomControl(_currentState.activeRoom, _currentState.bridgeIP);
+                int roomIdx = _currentState.controlledRoomIndex;
+                if (roomIdx >= 0 && roomIdx < (int)_currentState.hueRooms.size()) {
+                    uiManager.renderRoomControl(
+                        _currentState.hueRooms[roomIdx],
+                        _currentState.bridgeIP,
+                        _currentState.wifiConnected
+                    );
                 }
             }
             break;
@@ -426,22 +495,46 @@ void DisplayTaskManager::processEvent(const InputEvent& event) {
             UIScreen screen = _currentState.currentScreen;
             if (screen == UIScreen::TADO_DASHBOARD) {
                 syncStateFromShared();
-                uiManager.showTadoDashboard();
+                uiManager.renderTadoDashboard(
+                    _currentState.tadoRooms,
+                    _currentState.tadoSelectedRoom,
+                    _currentState.bridgeIP,
+                    _currentState.wifiConnected
+                );
             }
             break;
         }
 
         case InputEventType::SENSOR_DATA_UPDATED: {
-            // Sensor data changed - re-render if on sensor screen
+            // Sensor data changed - re-render if on sensor screen AND cooldown elapsed
+            // This prevents constant re-rendering from 60-second sensor updates
             UIScreen screen = _currentState.currentScreen;
-            if (screen == UIScreen::SENSOR_DASHBOARD) {
-                syncStateFromShared();
-                uiManager.showSensorDashboard();
-            } else if (screen == UIScreen::SENSOR_DETAIL) {
-                syncStateFromShared();
-                uiManager.showSensorDetail(_currentState.currentMetric);
+            uint32_t now = millis();
+            bool cooldownElapsed = (now - _lastSensorScreenRenderTime) >= SENSOR_SCREEN_COOLDOWN_MS;
+
+            if (cooldownElapsed) {
+                if (screen == UIScreen::SENSOR_DASHBOARD) {
+                    syncStateFromShared();
+                    uiManager.renderSensorDashboard(
+                        _currentState.currentSensorMetric,
+                        _currentState.co2,
+                        _currentState.temperature,
+                        _currentState.humidity,
+                        _currentState.bridgeIP,
+                        _currentState.wifiConnected
+                    );
+                    _lastSensorScreenRenderTime = now;
+                } else if (screen == UIScreen::SENSOR_DETAIL) {
+                    syncStateFromShared();
+                    uiManager.renderSensorDetail(
+                        _currentState.currentSensorMetric,
+                        _currentState.bridgeIP,
+                        _currentState.wifiConnected
+                    );
+                    _lastSensorScreenRenderTime = now;
+                }
             }
-            // Status bar also shows sensor data, handled by renderDiff()
+            // Status bar also shows sensor data, handled by renderDiff() with its own thresholds
             break;
         }
 
@@ -479,19 +572,28 @@ void DisplayTaskManager::handleActionEvent(const InputEvent& event) {
             // Context-aware select based on current screen
             if (_currentState.currentScreen == UIScreen::DASHBOARD) {
                 // Enter room control for selected room
-                if (_currentState.selectedIndex < (int)_currentState.hueRooms.size()) {
+                int selectedIdx = _currentState.hueSelectedIndex;
+                if (selectedIdx >= 0 && selectedIdx < (int)_currentState.hueRooms.size()) {
                     TaskManager::acquireStateLock();
-                    TaskManager::sharedState.activeRoom = TaskManager::sharedState.hueRooms[_currentState.selectedIndex];
+                    TaskManager::sharedState.controlledRoomIndex = selectedIdx;
                     TaskManager::sharedState.currentScreen = UIScreen::ROOM_CONTROL;
                     TaskManager::releaseStateLock();
 
                     syncStateFromShared();
-                    uiManager.showRoomControl(_currentState.activeRoom, _currentState.bridgeIP);
+                    uiManager.renderRoomControl(
+                        _currentState.hueRooms[selectedIdx],
+                        _currentState.bridgeIP,
+                        _currentState.wifiConnected
+                    );
                     resetPartialRefreshCount();
                 }
             } else if (_currentState.currentScreen == UIScreen::ROOM_CONTROL) {
                 // Toggle the room on/off
-                hueManager.setRoomState(_currentState.activeRoom.id, !_currentState.activeRoom.anyOn);
+                int roomIdx = _currentState.controlledRoomIndex;
+                if (roomIdx >= 0 && roomIdx < (int)_currentState.hueRooms.size()) {
+                    const HueRoom& room = _currentState.hueRooms[roomIdx];
+                    hueManager.setRoomState(room.id, !room.anyOn);
+                }
             } else if (_currentState.currentScreen == UIScreen::SENSOR_DASHBOARD) {
                 // Enter sensor detail for selected metric
                 TaskManager::acquireStateLock();
@@ -499,33 +601,26 @@ void DisplayTaskManager::handleActionEvent(const InputEvent& event) {
                 TaskManager::releaseStateLock();
 
                 syncStateFromShared();
-                uiManager.showSensorDetail(_currentState.currentMetric);
+                uiManager.renderSensorDetail(
+                    _currentState.currentSensorMetric,
+                    _currentState.bridgeIP,
+                    _currentState.wifiConnected
+                );
                 resetPartialRefreshCount();
             } else if (_currentState.currentScreen == UIScreen::SETTINGS_ACTIONS) {
                 // Execute selected action
-                uiManager.executeSelectedAction();
+                uiManager.executeAction(_currentState.selectedAction);
             }
             break;
         }
 
         case InputEventType::ACTION_BACK: {
-            // Back action based on current screen
-            UIScreen current = _currentState.currentScreen;
-            UIScreen target = UIScreen::DASHBOARD;
+            // Context-aware back navigation
+            UIScreen target = _currentState.getBackTarget();
 
-            switch (current) {
-                case UIScreen::ROOM_CONTROL:
-                case UIScreen::SENSOR_DASHBOARD:
-                case UIScreen::SENSOR_DETAIL:
-                case UIScreen::TADO_DASHBOARD:
-                case UIScreen::TADO_AUTH:
-                case UIScreen::SETTINGS:
-                case UIScreen::SETTINGS_HOMEKIT:
-                case UIScreen::SETTINGS_ACTIONS:
-                    target = UIScreen::DASHBOARD;
-                    break;
-                default:
-                    return;  // No action needed
+            // If target is same as current (main windows), no action needed
+            if (target == _currentState.currentScreen) {
+                return;
             }
 
             TaskManager::acquireStateLock();
@@ -539,14 +634,23 @@ void DisplayTaskManager::handleActionEvent(const InputEvent& event) {
         }
 
         case InputEventType::ACTION_SETTINGS: {
-            // Show settings
+            // Only show settings from Dashboard
+            if (_currentState.currentScreen != UIScreen::DASHBOARD) {
+                return;
+            }
+
             TaskManager::acquireStateLock();
             TaskManager::sharedState.currentScreen = UIScreen::SETTINGS;
-            TaskManager::sharedState.settingsPage = 0;
+            TaskManager::sharedState.settingsCurrentPage = 0;
             TaskManager::releaseStateLock();
 
             syncStateFromShared();
-            uiManager.showSettings();
+            uiManager.renderSettings(
+                _currentState.settingsCurrentPage,
+                _currentState.selectedAction,
+                _currentState.bridgeIP,
+                _currentState.wifiConnected
+            );
             resetPartialRefreshCount();
             break;
         }
@@ -625,13 +729,18 @@ std::vector<int> DisplayTaskManager::findChangedTiles() {
 }
 
 bool DisplayTaskManager::statusBarChanged() {
+    // Use wider thresholds to prevent constant flickering from sensor noise
+    // Temperature: 1.0°C (was 0.1°C - too sensitive to natural drift)
+    // Humidity: 5% (was 1% - indoor humidity fluctuates naturally)
+    // CO2: 20ppm hysteresis (was exact match - any PPM change triggered refresh)
+    // Battery: 5% (was 1% - prevents micro-fluctuations from triggering updates)
     return _currentState.wifiConnected != _renderedState.wifiConnected ||
            _currentState.bridgeIP != _renderedState.bridgeIP ||
            _currentState.controllerConnected != _renderedState.controllerConnected ||
-           abs(_currentState.batteryPercent - _renderedState.batteryPercent) > 1.0f ||
-           abs(_currentState.temperature - _renderedState.temperature) > 0.1f ||
-           abs(_currentState.humidity - _renderedState.humidity) > 1.0f ||
-           _currentState.co2 != _renderedState.co2;
+           abs(_currentState.batteryPercent - _renderedState.batteryPercent) > 5.0f ||
+           abs(_currentState.temperature - _renderedState.temperature) > 1.0f ||
+           abs(_currentState.humidity - _renderedState.humidity) > 5.0f ||
+           abs(_currentState.co2 - _renderedState.co2) > 20.0f;
 }
 
 // =============================================================================
@@ -641,9 +750,11 @@ bool DisplayTaskManager::statusBarChanged() {
 void DisplayTaskManager::renderScreenTransition(UIScreen from, UIScreen to) {
     logf("Screen transition: %d -> %d", static_cast<int>(from), static_cast<int>(to));
 
-    // Update shared state
+    // Update shared state with new screen and main window
     TaskManager::acquireStateLock();
+    TaskManager::sharedState.previousScreen = from;
     TaskManager::sharedState.currentScreen = to;
+    TaskManager::sharedState.currentMainWindow = DisplayState::screenToMainWindow(to);
     TaskManager::releaseStateLock();
 
     syncStateFromShared();
@@ -651,43 +762,90 @@ void DisplayTaskManager::renderScreenTransition(UIScreen from, UIScreen to) {
     // Render new screen
     switch (to) {
         case UIScreen::DASHBOARD:
-            uiManager.showDashboard(_currentState.hueRooms, _currentState.bridgeIP);
+            uiManager.renderDashboard(
+                _currentState.hueRooms,
+                _currentState.hueSelectedIndex,
+                _currentState.bridgeIP,
+                _currentState.wifiConnected
+            );
             break;
-        case UIScreen::ROOM_CONTROL:
-            if (_currentState.selectedIndex < _currentState.hueRooms.size()) {
-                uiManager.showRoomControl(_currentState.hueRooms[_currentState.selectedIndex],
-                                          _currentState.bridgeIP);
+        case UIScreen::ROOM_CONTROL: {
+            int roomIdx = _currentState.controlledRoomIndex;
+            if (roomIdx >= 0 && roomIdx < (int)_currentState.hueRooms.size()) {
+                uiManager.renderRoomControl(
+                    _currentState.hueRooms[roomIdx],
+                    _currentState.bridgeIP,
+                    _currentState.wifiConnected
+                );
             }
             break;
+        }
         case UIScreen::SENSOR_DASHBOARD:
-            uiManager.showSensorDashboard();
+            uiManager.renderSensorDashboard(
+                _currentState.currentSensorMetric,
+                _currentState.co2,
+                _currentState.temperature,
+                _currentState.humidity,
+                _currentState.bridgeIP,
+                _currentState.wifiConnected
+            );
             break;
         case UIScreen::SENSOR_DETAIL:
-            uiManager.showSensorDetail(_currentState.currentMetric);
+            uiManager.renderSensorDetail(
+                _currentState.currentSensorMetric,
+                _currentState.bridgeIP,
+                _currentState.wifiConnected
+            );
             break;
         case UIScreen::TADO_DASHBOARD:
-            if (tadoManager.isAuthenticated()) {
-                uiManager.showTadoDashboard();
-            } else {
-                // Start auth flow
+            // Check if Tado needs auth - if so, redirect to auth screen
+            if (!tadoManager.isAuthenticated()) {
+                // Start auth flow and redirect
                 tadoManager.startAuth();
-                uiManager.showTadoAuth(tadoManager.getAuthInfo());
+                TaskManager::acquireStateLock();
+                TaskManager::sharedState.tadoNeedsAuth = true;
+                TaskManager::sharedState.currentScreen = UIScreen::TADO_AUTH;
+                TaskManager::releaseStateLock();
+                syncStateFromShared();
+                uiManager.renderTadoAuth(
+                    tadoManager.getAuthInfo(),
+                    _currentState.bridgeIP,
+                    _currentState.wifiConnected
+                );
+            } else {
+                uiManager.renderTadoDashboard(
+                    _currentState.tadoRooms,
+                    _currentState.tadoSelectedRoom,
+                    _currentState.bridgeIP,
+                    _currentState.wifiConnected
+                );
             }
             break;
         case UIScreen::TADO_AUTH:
-            uiManager.showTadoAuth(_currentState.tadoAuth);
+            uiManager.renderTadoAuth(
+                _currentState.tadoAuth,
+                _currentState.bridgeIP,
+                _currentState.wifiConnected
+            );
             break;
         case UIScreen::SETTINGS:
-            uiManager.showSettings();
-            break;
         case UIScreen::SETTINGS_HOMEKIT:
-            uiManager.showSettingsHomeKit();
-            break;
         case UIScreen::SETTINGS_ACTIONS:
-            uiManager.showSettingsActions();
+            // All settings screens use the unified renderSettings with page index
+            uiManager.renderSettings(
+                _currentState.settingsCurrentPage,
+                _currentState.selectedAction,
+                _currentState.bridgeIP,
+                _currentState.wifiConnected
+            );
             break;
         default:
-            uiManager.showDashboard(_currentState.hueRooms, _currentState.bridgeIP);
+            uiManager.renderDashboard(
+                _currentState.hueRooms,
+                _currentState.hueSelectedIndex,
+                _currentState.bridgeIP,
+                _currentState.wifiConnected
+            );
             break;
     }
 }
@@ -705,7 +863,7 @@ void DisplayTaskManager::renderPartialTiles(const std::vector<int>& indices) {
             // Refresh individual tile using UIManager
             int col = idx % UI_TILE_COLS;
             int row = idx / UI_TILE_COLS;
-            bool isSelected = (idx == _currentState.selectedIndex);
+            bool isSelected = (idx == _currentState.hueSelectedIndex);
 
             // Note: This requires UIManager to expose tile refresh method
             // For now, we'll do a selection update which refreshes both tiles
@@ -723,34 +881,73 @@ void DisplayTaskManager::renderFullScreen() {
 
     switch (_currentState.currentScreen) {
         case UIScreen::DASHBOARD:
-            uiManager.showDashboard(_currentState.hueRooms, _currentState.bridgeIP);
+            uiManager.renderDashboard(
+                _currentState.hueRooms,
+                _currentState.hueSelectedIndex,
+                _currentState.bridgeIP,
+                _currentState.wifiConnected
+            );
             break;
-        case UIScreen::ROOM_CONTROL:
-            uiManager.showRoomControl(_currentState.activeRoom, _currentState.bridgeIP);
+        case UIScreen::ROOM_CONTROL: {
+            int roomIdx = _currentState.controlledRoomIndex;
+            if (roomIdx >= 0 && roomIdx < (int)_currentState.hueRooms.size()) {
+                uiManager.renderRoomControl(
+                    _currentState.hueRooms[roomIdx],
+                    _currentState.bridgeIP,
+                    _currentState.wifiConnected
+                );
+            }
             break;
+        }
         case UIScreen::SENSOR_DASHBOARD:
-            uiManager.showSensorDashboard();
+            uiManager.renderSensorDashboard(
+                _currentState.currentSensorMetric,
+                _currentState.co2,
+                _currentState.temperature,
+                _currentState.humidity,
+                _currentState.bridgeIP,
+                _currentState.wifiConnected
+            );
             break;
         case UIScreen::SENSOR_DETAIL:
-            uiManager.showSensorDetail(_currentState.currentMetric);
+            uiManager.renderSensorDetail(
+                _currentState.currentSensorMetric,
+                _currentState.bridgeIP,
+                _currentState.wifiConnected
+            );
             break;
         case UIScreen::TADO_DASHBOARD:
-            uiManager.showTadoDashboard();
+            uiManager.renderTadoDashboard(
+                _currentState.tadoRooms,
+                _currentState.tadoSelectedRoom,
+                _currentState.bridgeIP,
+                _currentState.wifiConnected
+            );
             break;
         case UIScreen::TADO_AUTH:
-            uiManager.showTadoAuth(_currentState.tadoAuth);
+            uiManager.renderTadoAuth(
+                _currentState.tadoAuth,
+                _currentState.bridgeIP,
+                _currentState.wifiConnected
+            );
             break;
         case UIScreen::SETTINGS:
-            uiManager.showSettings();
-            break;
         case UIScreen::SETTINGS_HOMEKIT:
-            uiManager.showSettingsHomeKit();
-            break;
         case UIScreen::SETTINGS_ACTIONS:
-            uiManager.showSettingsActions();
+            uiManager.renderSettings(
+                _currentState.settingsCurrentPage,
+                _currentState.selectedAction,
+                _currentState.bridgeIP,
+                _currentState.wifiConnected
+            );
             break;
         default:
-            uiManager.showDashboard(_currentState.hueRooms, _currentState.bridgeIP);
+            uiManager.renderDashboard(
+                _currentState.hueRooms,
+                _currentState.hueSelectedIndex,
+                _currentState.bridgeIP,
+                _currentState.wifiConnected
+            );
             break;
     }
 }

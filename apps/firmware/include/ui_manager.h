@@ -10,16 +10,19 @@
 #include "power_manager.h"
 #include "tado_manager.h"
 
-// UI Screen states
+// =============================================================================
+// UI Screen States
+// =============================================================================
+
 enum class UIScreen {
     STARTUP,
     DISCOVERING,
     WAITING_FOR_BUTTON,
     DASHBOARD,          // Room grid view
     ROOM_CONTROL,       // Single room control view (after pressing A on a room)
-    SETTINGS,           // Settings/info screen (general stats)
-    SETTINGS_HOMEKIT,   // HomeKit pairing screen with QR code
-    SETTINGS_ACTIONS,   // Actions page (calibration, reset, etc.)
+    SETTINGS,           // Settings page 1: General stats
+    SETTINGS_HOMEKIT,   // Settings page 2: HomeKit pairing QR code
+    SETTINGS_ACTIONS,   // Settings page 3: Actions (calibration, reset, etc.)
     SENSOR_DASHBOARD,   // Sensor overview with 3 panels
     SENSOR_DETAIL,      // Full chart for single metric
     TADO_AUTH,          // Tado OAuth login screen
@@ -27,7 +30,10 @@ enum class UIScreen {
     ERROR
 };
 
-// Settings action types
+// =============================================================================
+// Settings Action Types
+// =============================================================================
+
 enum class SettingsAction {
     // Sensor actions
     CALIBRATE_CO2,          // Perform FRC with 420 ppm
@@ -50,366 +56,227 @@ enum class SettingsAction {
     ACTION_COUNT            // Number of actions (for iteration)
 };
 
-// Tracks what changed for partial refresh decisions
-struct DashboardDiff {
-    bool statusBarChanged;
-    std::vector<int> changedRoomIndices;
-};
-
-// Navigation stack entry for screen history
-struct NavigationEntry {
-    UIScreen screen;
-    int selectionIndex;      // Dashboard tile or Tado room index
-    SensorMetric metric;     // For sensor screens
-
-    NavigationEntry()
-        : screen(UIScreen::DASHBOARD)
-        , selectionIndex(0)
-        , metric(SensorMetric::CO2) {}
-
-    NavigationEntry(UIScreen s, int idx, SensorMetric m)
-        : screen(s), selectionIndex(idx), metric(m) {}
-};
+// =============================================================================
+// UIManager - STATELESS RENDERER
+// =============================================================================
+//
+// UIManager is a pure renderer with NO internal navigation state.
+// All state is owned by DisplayTask and passed as parameters to render methods.
+// This eliminates state divergence bugs between UIManager and DisplayTask.
+//
+// =============================================================================
 
 class UIManager {
 public:
     UIManager();
 
     /**
-     * Initialize the UI Manager
+     * Initialize the UI Manager (calculates tile dimensions, etc.)
      */
     void init();
 
-    /**
-     * Show startup screen
-     */
-    void showStartup();
+    // =========================================================================
+    // Stateless Render Methods - ALL state passed as parameters
+    // =========================================================================
 
     /**
-     * Show bridge discovery screen
+     * Render startup screen
      */
-    void showDiscovering();
+    void renderStartup();
 
     /**
-     * Show "press link button" screen
+     * Render bridge discovery screen
      */
-    void showWaitingForButton();
+    void renderDiscovering();
 
     /**
-     * Show dashboard with room tiles
+     * Render "press link button" screen
+     */
+    void renderWaitingForButton();
+
+    /**
+     * Render dashboard with room tiles
      * @param rooms Vector of room data
+     * @param selectedIndex Currently selected tile index
      * @param bridgeIP Hue Bridge IP address
+     * @param wifiConnected WiFi connection status
      */
-    void showDashboard(const std::vector<HueRoom>& rooms, const String& bridgeIP);
+    void renderDashboard(
+        const std::vector<HueRoom>& rooms,
+        int selectedIndex,
+        const String& bridgeIP,
+        bool wifiConnected
+    );
 
     /**
-     * Show error screen
-     * @param message Error message to display
-     */
-    void showError(const char* message);
-
-    /**
-     * Show room control screen for a specific room
+     * Render room control screen for a specific room
      * @param room The room to control
      * @param bridgeIP Hue Bridge IP address
+     * @param wifiConnected WiFi connection status
      */
-    void showRoomControl(const HueRoom& room, const String& bridgeIP);
+    void renderRoomControl(
+        const HueRoom& room,
+        const String& bridgeIP,
+        bool wifiConnected
+    );
 
     /**
-     * Update room control screen (partial refresh for brightness changes)
-     * @param room The room data
+     * Render settings screen with tab bar
+     * @param currentPage Current page index (0=General, 1=HomeKit, 2=Actions)
+     * @param selectedAction Currently selected action (for Actions page)
+     * @param bridgeIP Hue Bridge IP address
+     * @param wifiConnected WiFi connection status
      */
-    void updateRoomControl(const HueRoom& room);
+    void renderSettings(
+        int currentPage,
+        SettingsAction selectedAction,
+        const String& bridgeIP,
+        bool wifiConnected
+    );
 
     /**
-     * Go back from room control to dashboard
+     * Render sensor dashboard with all 3 metrics
+     * @param selectedMetric Currently highlighted metric
+     * @param co2 Current CO2 reading
+     * @param temperature Current temperature reading
+     * @param humidity Current humidity reading
+     * @param bridgeIP Hue Bridge IP address
+     * @param wifiConnected WiFi connection status
      */
-    void goBackToDashboard();
+    void renderSensorDashboard(
+        SensorMetric selectedMetric,
+        float co2,
+        float temperature,
+        float humidity,
+        const String& bridgeIP,
+        bool wifiConnected
+    );
 
     /**
-     * Show settings screen
-     */
-    void showSettings();
-
-    /**
-     * Show HomeKit settings screen with QR code
-     */
-    void showSettingsHomeKit();
-
-    /**
-     * Show settings actions screen
-     */
-    void showSettingsActions();
-
-    /**
-     * Navigate between settings pages (3 pages: Info, HomeKit, Actions)
-     * @param direction -1 for previous page, +1 for next page
-     */
-    void navigateSettingsPage(int direction);
-
-    /**
-     * Navigate action selection on actions page
-     * @param direction -1 for previous, +1 for next
-     */
-    void navigateAction(int direction);
-
-    /**
-     * Execute currently selected action
-     * @return true if action was executed, false if cancelled/failed
-     */
-    bool executeSelectedAction();
-
-    /**
-     * Get currently selected action
-     */
-    SettingsAction getSelectedAction() const { return _selectedAction; }
-
-    /**
-     * Check if an action is currently executing
-     */
-    bool isActionExecuting() const { return _actionExecuting; }
-
-    /**
-     * Go back from settings to dashboard
-     */
-    void goBackFromSettings();
-
-    // -------------------------------------------------------------------------
-    // Sensor Screen Methods
-    // -------------------------------------------------------------------------
-
-    /**
-     * Show sensor dashboard with all 3 metrics in panels
-     */
-    void showSensorDashboard();
-
-    /**
-     * Show sensor detail chart for a specific metric
+     * Render sensor detail chart for a specific metric
      * @param metric The metric to show (CO2, Temperature, or Humidity)
+     * @param bridgeIP Hue Bridge IP address
+     * @param wifiConnected WiFi connection status
      */
-    void showSensorDetail(SensorMetric metric);
+    void renderSensorDetail(
+        SensorMetric metric,
+        const String& bridgeIP,
+        bool wifiConnected
+    );
 
     /**
-     * Update sensor dashboard (partial refresh)
-     */
-    void updateSensorDashboard();
-
-    /**
-     * Update sensor detail chart (partial refresh)
-     */
-    void updateSensorDetail();
-
-    /**
-     * Navigate between metrics on sensor screens
-     * @param direction -1 for previous, +1 for next
-     */
-    void navigateSensorMetric(int direction);
-
-    /**
-     * Go back from sensor screens
-     */
-    void goBackFromSensor();
-
-    /**
-     * Get currently selected/displayed metric
-     */
-    SensorMetric getCurrentSensorMetric() const { return _currentMetric; }
-
-    // -------------------------------------------------------------------------
-    // Tado Screen Methods
-    // -------------------------------------------------------------------------
-
-    /**
-     * Show Tado auth screen with login URL and code
+     * Render Tado auth screen with login URL and code
      * @param authInfo Auth info with URL, code, expiry
+     * @param bridgeIP Hue Bridge IP address
+     * @param wifiConnected WiFi connection status
      */
-    void showTadoAuth(const TadoAuthInfo& authInfo);
+    void renderTadoAuth(
+        const TadoAuthInfo& authInfo,
+        const String& bridgeIP,
+        bool wifiConnected
+    );
 
     /**
-     * Update Tado auth screen (countdown timer)
+     * Render Tado dashboard with rooms and temperatures
+     * @param rooms Vector of Tado room data
+     * @param selectedRoom Currently selected room index
+     * @param bridgeIP Hue Bridge IP address
+     * @param wifiConnected WiFi connection status
      */
-    void updateTadoAuth();
+    void renderTadoDashboard(
+        const std::vector<TadoRoom>& rooms,
+        int selectedRoom,
+        const String& bridgeIP,
+        bool wifiConnected
+    );
 
     /**
-     * Show Tado dashboard with rooms and temperatures
+     * Render error screen
+     * @param message Error message to display
      */
-    void showTadoDashboard();
+    void renderError(const char* message);
 
-    /**
-     * Update Tado dashboard (partial refresh)
-     */
-    void updateTadoDashboard();
-
-    /**
-     * Navigate Tado room selection
-     * @param direction -1 for up, +1 for down
-     */
-    void navigateTadoRoom(int direction);
-
-    /**
-     * Go back from Tado screens
-     */
-    void goBackFromTado();
-
-    /**
-     * Get selected Tado room index
-     */
-    int getSelectedTadoRoom() const { return _selectedTadoRoom; }
+    // =========================================================================
+    // Partial Refresh Methods
+    // =========================================================================
 
     /**
      * Update status bar only (partial refresh)
      * @param wifiConnected WiFi connection status
-     * @param bridgeIP Hue Bridge IP (empty if not connected)
+     * @param bridgeIP Hue Bridge IP address
      */
     void updateStatusBar(bool wifiConnected, const String& bridgeIP);
 
     /**
-     * Update dashboard with partial refresh (only changed tiles)
-     * Falls back to full refresh if too many changes or periodic refresh needed
-     * @param rooms Vector of room data
-     * @param bridgeIP Hue Bridge IP address
-     * @return true if update was performed
-     */
-    bool updateDashboardPartial(const std::vector<HueRoom>& rooms, const String& bridgeIP);
-
-    /**
-     * Update only the selection highlight (for controller navigation)
+     * Update only the selection highlight on dashboard (for controller navigation)
      * @param oldIndex Previously selected tile index
      * @param newIndex Newly selected tile index
      */
     void updateTileSelection(int oldIndex, int newIndex);
 
     /**
-     * Get current screen
+     * Update room control brightness bar (partial refresh)
+     * @param room The room data with new brightness
      */
-    UIScreen getCurrentScreen() const { return _currentScreen; }
+    void updateRoomControlBrightness(const HueRoom& room);
+
+    // =========================================================================
+    // Action Execution (still has side effects - talks to hardware)
+    // =========================================================================
 
     /**
-     * Get/set selected room index for controller navigation
+     * Execute a settings action
+     * @param action The action to execute
+     * @return true if action was executed successfully
      */
-    int getSelectedIndex() const { return _selectedIndex; }
-    void setSelectedIndex(int index) { _selectedIndex = index; }
-
-    // -------------------------------------------------------------------------
-    // Navigation Stack Methods
-    // -------------------------------------------------------------------------
-
-    /**
-     * Push current screen onto navigation stack and switch to new screen
-     * Used when entering a sub-screen (Dashboard -> Room Control)
-     */
-    void pushScreen(UIScreen screen);
-
-    /**
-     * Pop screen from navigation stack and restore previous screen
-     * Used when pressing back button
-     * @return true if successful, false if stack was empty
-     */
-    bool popScreen();
-
-    /**
-     * Replace current screen (clears navigation stack)
-     * Used for main window switching (Hue -> Sensors -> Tado)
-     */
-    void replaceScreen(UIScreen screen);
-
-    /**
-     * Check if navigation stack has entries (can go back)
-     */
-    bool canGoBack() const { return !_navigationStack.empty(); }
-
-    /**
-     * Get previous screen from stack (without popping)
-     */
-    UIScreen getPreviousScreen() const;
-
-    /**
-     * Clear navigation stack (reset to root)
-     */
-    void clearNavigationStack() { _navigationStack.clear(); }
-
-    /**
-     * Get number of cached rooms
-     */
-    int getRoomCount() const { return _cachedRooms.size(); }
+    bool executeAction(SettingsAction action);
 
 private:
-    UIScreen _currentScreen;
-    std::vector<HueRoom> _cachedRooms;
-
-    // Navigation stack for back navigation
-    std::vector<NavigationEntry> _navigationStack;
-    static const size_t MAX_STACK_DEPTH = 8;
-
-    // Tile dimensions (calculated based on display size)
+    // Display dimensions (calculated once in init)
     int _tileWidth;
     int _tileHeight;
     int _contentStartY;
 
-    // Selection state for controller navigation
-    int _selectedIndex;
+    // Cached rooms for partial refresh comparison (rendering optimization only)
+    std::vector<HueRoom> _cachedRooms;
+    uint8_t _lastDisplayedBrightness;
 
-    // Room control state
-    HueRoom _activeRoom;              // Room currently being controlled
-    uint8_t _lastDisplayedBrightness; // For partial refresh optimization
-
-    // State tracking for partial refresh
-    std::vector<HueRoom> _previousRooms;
-    String _previousBridgeIP;
-    bool _previousWifiConnected;
+    // Partial refresh tracking (rendering optimization only)
     unsigned long _lastFullRefreshTime;
     int _partialUpdateCount;
 
-    // Sensor screen state
-    SensorMetric _currentMetric;
-    unsigned long _lastSensorUpdateTime;
-
-    // Tado screen state
-    int _selectedTadoRoom;
-    TadoAuthInfo _tadoAuthInfo;
-    unsigned long _lastTadoUpdateTime;
-
-    // Settings actions screen state
-    SettingsAction _selectedAction;
-    bool _actionExecuting;
-    String _actionResultMessage;
-    bool _actionSuccess;
+    // =========================================================================
+    // Drawing Primitives
+    // =========================================================================
 
     void calculateTileDimensions();
-
     void drawStatusBar(bool wifiConnected, const String& bridgeIP);
-    void drawRoomTile(int col, int row, const HueRoom& room, bool isSelected = false);
+    void drawRoomTile(int col, int row, const HueRoom& room, bool isSelected);
     void drawBrightnessBar(int x, int y, int width, int height, uint8_t brightness, bool isOn);
     void drawCenteredText(const char* text, int y, const GFXfont* font);
-
-    // Partial refresh helpers
-    DashboardDiff calculateDiff(const std::vector<HueRoom>& rooms, const String& bridgeIP);
     void getTileBounds(int col, int row, int16_t& x, int16_t& y, int16_t& w, int16_t& h);
     void refreshRoomTile(int col, int row, const HueRoom& room, bool isSelected);
-    void refreshStatusBarPartial(bool wifiConnected, const String& bridgeIP);
 
-    // Room control screen helpers
+    // Room control helpers
     void drawRoomControlContent(const HueRoom& room);
     void drawLargeBrightnessBar(int x, int y, int width, int height, uint8_t brightness, bool isOn);
 
     // Settings screen helpers
-    void drawSettingsContent();
-    void drawSettingsHomeKitContent();
-    void drawSettingsActionsContent();
     void drawSettingsTabBar(int activePage);
+    void drawSettingsGeneralContent(const String& bridgeIP, bool wifiConnected);
+    void drawSettingsHomeKitContent();
+    void drawSettingsActionsContent(SettingsAction selectedAction);
     void drawActionItem(int y, SettingsAction action, bool isSelected);
     const char* getActionName(SettingsAction action);
     const char* getActionDescription(SettingsAction action);
     const char* getActionCategory(SettingsAction action);
 
     // Sensor screen helpers
-    void drawSensorDashboardContent();
+    void drawSensorDashboardContent(SensorMetric selectedMetric, float co2, float temp, float humidity);
     void drawPriorityPanel(int x, int y, int width, int height,
                            SensorMetric metric, bool isSelected, bool isLarge);
     void drawSensorRow(int x, int y, int width, int height,
                        SensorMetric metric, bool isSelected);
-    void drawSensorPanel(int x, int y, int width, int height,
-                         SensorMetric metric, bool isSelected);
     void drawMiniChart(int x, int y, int width, int height, SensorMetric metric);
     void drawSensorDetailContent(SensorMetric metric);
     void drawFullChart(int x, int y, int width, int height, SensorMetric metric);
@@ -425,7 +292,7 @@ private:
 
     // Tado screen helpers
     void drawTadoAuthContent(const TadoAuthInfo& authInfo);
-    void drawTadoDashboardContent();
+    void drawTadoDashboardContent(const std::vector<TadoRoom>& rooms, int selectedRoom);
     void drawTadoRoomTile(int x, int y, int width, int height,
                           const TadoRoom& room, bool isSelected);
 

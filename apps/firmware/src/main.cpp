@@ -48,9 +48,11 @@ unsigned long lastPeriodicRefresh = 0;
 const unsigned long STATUS_BAR_REFRESH_MS = 30000;   // Refresh status bar every 30s
 const unsigned long SENSOR_SCREEN_REFRESH_MS = 60000; // Refresh sensor screens every 60s
 
-// Main window cycling (LB/RB bumpers)
-// 0 = Hue (Dashboard/RoomControl), 1 = Sensors, 2 = Tado
+// Main window cycling (LB/RB bumpers) - use MainWindow from freertos_tasks.h when using FreeRTOS
+#if !USE_FREERTOS_TASKS
+// Legacy MainWindow enum for non-FreeRTOS mode
 enum class MainWindow { HUE = 0, SENSORS = 1, TADO = 2 };
+#endif
 const int MAIN_WINDOW_COUNT = 3;
 
 // Tado sensor sync timing
@@ -110,6 +112,12 @@ void queueSelectionUpdate(int oldIdx, int newIdx) {
     pendingSelectionUpdate = true;
     lastInputTime = millis();
 }
+
+// =============================================================================
+// LEGACY INPUT HANDLERS - Only used when FreeRTOS is disabled
+// When USE_FREERTOS_TASKS is enabled, input is handled by InputTask
+// =============================================================================
+#if !USE_FREERTOS_TASKS
 
 // Handle input on Dashboard screen
 void handleDashboardInput(ControllerInput input, int16_t value) {
@@ -674,6 +682,8 @@ void onControllerInput(ControllerInput input, int16_t value) {
     }
 }
 
+#endif // !USE_FREERTOS_TASKS
+
 // Callback for controller state changes
 void onControllerState(ControllerState state) {
     const char* stateNames[] = {"DISCONNECTED", "SCANNING", "CONNECTED", "ACTIVE"};
@@ -691,12 +701,25 @@ void onTadoStateChange(TadoState state, const char* message) {
                   TadoManager::stateToString(state),
                   message ? message : "");
 
-    UIScreen currentScreen = uiManager.getCurrentScreen();
+#if USE_FREERTOS_TASKS
+    // Auto-navigate on auth success via event queue
+    if (state == TadoState::CONNECTED) {
+        TaskManager::acquireStateLock();
+        UIScreen currentScreen = TaskManager::sharedState.currentScreen;
+        TaskManager::sharedState.tadoNeedsAuth = false;
+        TaskManager::releaseStateLock();
 
-    // Auto-navigate on auth success
+        if (currentScreen == UIScreen::TADO_AUTH) {
+            InputEvent event = InputEvent::makeScreenChange(UIScreen::TADO_DASHBOARD);
+            TaskManager::sendEvent(event);
+        }
+    }
+#else
+    UIScreen currentScreen = uiManager.getCurrentScreen();
     if (state == TadoState::CONNECTED && currentScreen == UIScreen::TADO_AUTH) {
         uiManager.showTadoDashboard();
     }
+#endif
 }
 
 // Callback for Tado auth info (show auth screen)
@@ -903,19 +926,24 @@ void updateDisplay() {
     switch (hueManager.getState()) {
         case HueState::DISCONNECTED:
         case HueState::DISCOVERING:
-            uiManager.showDiscovering();
+            uiManager.renderDiscovering();
             break;
 
         case HueState::WAITING_FOR_BUTTON:
-            uiManager.showWaitingForButton();
+            uiManager.renderWaitingForButton();
             break;
 
         case HueState::CONNECTED:
-            uiManager.showDashboard(hueManager.getRooms(), hueManager.getBridgeIP());
+            uiManager.renderDashboard(
+                hueManager.getRooms(),
+                0,  // Default selection
+                hueManager.getBridgeIP(),
+                WiFi.status() == WL_CONNECTED
+            );
             break;
 
         case HueState::ERROR:
-            uiManager.showError("Connection error");
+            uiManager.renderError("Connection error");
             break;
 
         default:
@@ -948,16 +976,16 @@ void setup() {
     uiManager.init();
 
     // Show startup screen
-    uiManager.showStartup();
+    uiManager.renderStartup();
     delay(1000);
 
     // Connect to WiFi
     Serial.println("[Main] Connecting to WiFi...");
-    uiManager.showDiscovering(); // Show discovering while connecting
+    uiManager.renderDiscovering(); // Show discovering while connecting
     connectToWiFi();
 
     if (WiFi.status() != WL_CONNECTED) {
-        uiManager.showError("WiFi connection failed");
+        uiManager.renderError("WiFi connection failed");
         return;
     }
 
@@ -1104,7 +1132,8 @@ void loop() {
                 obj["name"] = room.name;
                 obj["anyOn"] = room.anyOn;
                 obj["allOn"] = room.allOn;
-                obj["brightness"] = room.brightness;
+                // Convert Hue brightness (0-254) to percentage (0-100)
+                obj["brightness"] = map(room.brightness, 0, 254, 0, 100);
             }
             String json;
             serializeJson(doc, json);
@@ -1207,7 +1236,8 @@ void loop() {
                 obj["name"] = room.name;
                 obj["anyOn"] = room.anyOn;
                 obj["allOn"] = room.allOn;
-                obj["brightness"] = room.brightness;
+                // Convert Hue brightness (0-254) to percentage (0-100)
+                obj["brightness"] = map(room.brightness, 0, 254, 0, 100);
             }
             String json;
             serializeJson(doc, json);

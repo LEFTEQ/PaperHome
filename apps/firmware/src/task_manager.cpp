@@ -46,7 +46,7 @@ void TaskManager::initialize() {
     acquireStateLock();
     sharedState = DisplayState();  // Reset to defaults
     sharedState.currentScreen = UIScreen::DASHBOARD;
-    sharedState.selectedIndex = 0;
+    sharedState.hueSelectedIndex = 0;
     sharedState.wifiConnected = WiFi.status() == WL_CONNECTED;
     sharedState.lastUpdateTime = millis();
     releaseStateLock();
