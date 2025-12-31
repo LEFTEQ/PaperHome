@@ -28,7 +28,7 @@ export function DeviceTabBar({
   return (
     <div className={cn('flex items-center justify-center', className)}>
       <motion.div
-        className="flex items-center gap-2 p-1.5 rounded-2xl bg-glass border border-glass-border backdrop-blur-xl"
+        className="flex items-center gap-1 p-1 rounded-full bg-glass border border-glass-border backdrop-blur-xl"
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3, ease: 'easeOut' }}

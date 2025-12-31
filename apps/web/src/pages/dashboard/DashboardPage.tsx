@@ -540,31 +540,6 @@ export function DashboardPage() {
                 </BentoCard>
               )}
 
-              {/* Hue Lights (2x1) - Show if available */}
-              {hueRooms.length > 0 && (
-                <BentoCard
-                  bentoSize="2x1"
-                  className={cn('metric-card metric-card-hue')}
-                >
-                  <div className="flex items-center gap-2 mb-4">
-                    <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
-                      Hue Lights
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    {hueRooms.slice(0, 2).map((room) => (
-                      <HueWidget
-                        key={room.id}
-                        room={room}
-                        onToggle={(isOn) => handleHueToggle(room.id, isOn)}
-                        onBrightnessChange={(b) => handleBrightnessChange(room.id, b)}
-                        compact
-                      />
-                    ))}
-                  </div>
-                </BentoCard>
-              )}
-
               {/* Tado Thermostat (2x2) - Show if available */}
               {tadoRooms.length > 0 && (
                 <TadoWidget
@@ -594,12 +569,12 @@ export function DashboardPage() {
           )}
         </motion.div>
 
-        {/* Additional Hue Rooms */}
-        {hueRooms.length > 2 && (
+        {/* Lights Section */}
+        {hueRooms.length > 0 && (
           <motion.div variants={fadeInUp}>
-            <h2 className="text-lg font-semibold text-white mb-4">More Lights</h2>
+            <h2 className="text-lg font-semibold text-white mb-4">Lights</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {hueRooms.slice(2).map((room) => (
+              {hueRooms.map((room) => (
                 <HueWidget
                   key={room.id}
                   room={room}
