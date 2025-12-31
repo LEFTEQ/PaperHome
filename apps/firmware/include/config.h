@@ -153,6 +153,10 @@
 #define CHART_TEMP_MAX          50          // Temperature maximum (°C)
 #define CHART_HUMIDITY_MIN      0           // Humidity minimum (%)
 #define CHART_HUMIDITY_MAX      100         // Humidity maximum (%)
+#define CHART_IAQ_MIN           0           // IAQ minimum (index)
+#define CHART_IAQ_MAX           500         // IAQ maximum (index)
+#define CHART_PRESSURE_MIN      950         // Pressure minimum (hPa)
+#define CHART_PRESSURE_MAX      1050        // Pressure maximum (hPa)
 
 // -----------------------------------------------------------------------------
 // STCC4 Sensor Configuration
@@ -163,10 +167,33 @@
 #define SENSOR_WARMUP_TIME_MS       7200000         // 2 hours for stable readings
 #define SENSOR_ERROR_THRESHOLD      5               // Consecutive errors before marking as failed
 
+// -----------------------------------------------------------------------------
+// BME688 Sensor Configuration (BSEC2)
+// -----------------------------------------------------------------------------
+#define BME688_I2C_ADDRESS          0x77            // BME688 I2C address (0x77 or 0x76)
+#define BSEC_SAVE_INTERVAL_MS       14400000        // Save BSEC state every 4 hours
+#define BSEC_NVS_NAMESPACE          "bsec"          // NVS namespace for BSEC state
+#define BSEC_NVS_STATE_KEY          "state"         // NVS key for state blob
+#define BSEC_NVS_STATE_LEN_KEY      "state_len"     // NVS key for state length
+
+// IAQ Thresholds (Standard BSEC levels)
+#define IAQ_EXCELLENT_MAX           50              // 0-50: Excellent
+#define IAQ_GOOD_MAX                100             // 51-100: Good
+#define IAQ_LIGHTLY_POLLUTED_MAX    150             // 101-150: Lightly Polluted
+#define IAQ_MODERATELY_POLLUTED_MAX 200             // 151-200: Moderately Polluted
+#define IAQ_HEAVILY_POLLUTED_MAX    250             // 201-250: Heavily Polluted
+#define IAQ_SEVERELY_POLLUTED_MAX   350             // 251-350: Severely Polluted
+#define IAQ_EXTREMELY_POLLUTED_MAX  500             // 351-500: Extremely Polluted
+
+// Pressure thresholds for weather prediction
+#define PRESSURE_HIGH_HPA           1020.0f         // High pressure (fair weather)
+#define PRESSURE_LOW_HPA            1000.0f         // Low pressure (stormy)
+#define PRESSURE_TREND_THRESHOLD    2.0f            // hPa change over 3 hours for trend
+
 // Chart rendering
 #define CHART_DATA_POINTS           720             // Points to render (matches display width)
 #define CHART_LINE_THICKNESS        2               // Line thickness in pixels
-#define CHART_PANEL_COUNT           3               // Number of metric panels on dashboard
+#define CHART_PANEL_COUNT           6               // Number of metric panels (CO2, Temp, Humid, IAQ, Pressure, dual)
 
 // -----------------------------------------------------------------------------
 // Debug Configuration

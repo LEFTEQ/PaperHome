@@ -17,6 +17,11 @@ import { GlassCard, BentoCard } from '@/components/ui/glass-card';
 import { Sparkline } from '@/components/ui/sparkline';
 import { HueWidget, HueRoom } from '@/components/widgets/hue-widget';
 import { TadoWidget, TadoRoom } from '@/components/widgets/tado-widget';
+import {
+  IAQStatCard,
+  PressureStatCard,
+  DualSensorCompareCard,
+} from '@/components/widgets/stat-card';
 import { Button } from '@/components/ui/button';
 import { staggerContainer, fadeInUp } from '@/lib/animations';
 import { cn } from '@/lib/utils';
@@ -65,20 +70,22 @@ function transformTadoRooms(
 // Extract chart data from aggregates
 function extractChartData(
   aggregates: ReturnType<typeof useTelemetryAggregates>['data'],
-  metric: 'co2' | 'temperature' | 'humidity'
+  metric: 'co2' | 'temperature' | 'humidity' | 'iaq' | 'pressure'
 ): number[] {
   if (!aggregates) return [];
 
-  const key =
-    metric === 'co2'
-      ? 'avgCo2'
-      : metric === 'temperature'
-        ? 'avgTemperature'
-        : 'avgHumidity';
+  const keyMap: Record<string, keyof NonNullable<typeof aggregates>[0]> = {
+    co2: 'avgCo2',
+    temperature: 'avgTemperature',
+    humidity: 'avgHumidity',
+    iaq: 'avgIaq',
+    pressure: 'avgPressure',
+  };
 
+  const key = keyMap[metric];
   return aggregates
-    .map((a) => a[key])
-    .filter((v): v is number => v !== null);
+    .map((a) => a[key] as number | null | undefined)
+    .filter((v): v is number => v !== null && v !== undefined);
 }
 
 // Get CO2 status color
@@ -176,6 +183,8 @@ export function DashboardPage() {
   const co2Data = useMemo(() => extractChartData(aggregates, 'co2'), [aggregates]);
   const tempData = useMemo(() => extractChartData(aggregates, 'temperature'), [aggregates]);
   const humidityData = useMemo(() => extractChartData(aggregates, 'humidity'), [aggregates]);
+  const iaqData = useMemo(() => extractChartData(aggregates, 'iaq'), [aggregates]);
+  const pressureData = useMemo(() => extractChartData(aggregates, 'pressure'), [aggregates]);
 
   // Get latest values - prefer real-time WebSocket data over aggregates
   const realtimeData = latestTelemetry?.find(
@@ -184,10 +193,21 @@ export function DashboardPage() {
   const latestAggregate = aggregates?.[aggregates.length - 1];
 
   // Use real-time values when available, fall back to aggregates
+  // STCC4 sensor data
   const co2 = realtimeData?.co2 ?? latestAggregate?.avgCo2 ?? null;
   const temperature = realtimeData?.temperature ?? latestAggregate?.avgTemperature ?? null;
   const humidity = realtimeData?.humidity ?? latestAggregate?.avgHumidity ?? null;
   const battery = realtimeData?.battery ?? latestAggregate?.avgBattery ?? null;
+
+  // BME688/BSEC2 sensor data
+  const iaq = realtimeData?.iaq ?? latestAggregate?.avgIaq ?? null;
+  const iaqAccuracy = realtimeData?.iaqAccuracy ?? 0;
+  const pressure = realtimeData?.pressure ?? latestAggregate?.avgPressure ?? null;
+  const bme688Temperature = realtimeData?.bme688Temperature ?? latestAggregate?.avgBme688Temperature ?? null;
+  const bme688Humidity = realtimeData?.bme688Humidity ?? latestAggregate?.avgBme688Humidity ?? null;
+
+  // Check if we have BME688 data (IAQ or pressure)
+  const hasBme688Data = iaq !== null || pressure !== null;
 
   // Calculate stats for modal
   const co2Stats = useMemo(() => {
@@ -376,10 +396,19 @@ export function DashboardPage() {
 
         {/* Bento Grid - Weather App Style */}
         <motion.div variants={fadeInUp}>
-          {activeDevice?.isOnline && (co2 !== null || temperature !== null) ? (
+          {activeDevice?.isOnline && (co2 !== null || temperature !== null || iaq !== null) ? (
             <div className="bento-grid">
-              {/* CO2 - Hero Card (2x2) */}
-              {co2 !== null && (
+              {/* IAQ Hero Card (2x2) - BME688 when available, fallback to CO2 */}
+              {hasBme688Data && iaq !== null ? (
+                <IAQStatCard
+                  value={iaq}
+                  accuracy={iaqAccuracy}
+                  chartData={iaqData}
+                  bentoSize="2x2"
+                  onClick={() => handleMetricClick('iaq')}
+                  className="cursor-pointer"
+                />
+              ) : co2 !== null ? (
                 <BentoCard
                   bentoSize="2x2"
                   interactive
@@ -429,70 +458,33 @@ export function DashboardPage() {
                     </div>
                   )}
                 </BentoCard>
-              )}
+              ) : null}
 
-              {/* Temperature (1x1) */}
-              {temperature !== null && (
+              {/* CO2 Card (1x1) - Show when BME688 is hero */}
+              {hasBme688Data && co2 !== null && (
                 <BentoCard
                   bentoSize="1x1"
                   interactive
-                  onClick={() => handleMetricClick('temperature')}
-                  className={cn('metric-card metric-card-temperature cursor-pointer')}
+                  onClick={() => handleMetricClick('co2')}
+                  className={cn('metric-card metric-card-co2 cursor-pointer')}
                 >
                   <div className="flex items-center gap-2 mb-3">
-                    <Thermometer className="h-4 w-4 text-text-muted" />
+                    <Wind className="h-4 w-4 text-text-muted" />
                     <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
-                      Temperature
+                      CO₂
                     </span>
                   </div>
                   <div className="flex-1 flex flex-col justify-center">
                     <div className="flex items-baseline gap-1">
-                      <span className="metric-value-medium">
-                        {temperature.toFixed(1)}
-                      </span>
-                      <span className="text-lg text-text-muted font-mono">°C</span>
+                      <span className="metric-value-medium">{Math.round(co2)}</span>
+                      <span className="text-lg text-text-muted font-mono">ppm</span>
                     </div>
                   </div>
-                  {tempData.length > 0 && (
+                  {co2Data.length > 0 && (
                     <div className="mt-2 h-8">
                       <Sparkline
-                        data={tempData}
-                        color="#f59e0b"
-                        height={32}
-                        showFill
-                      />
-                    </div>
-                  )}
-                </BentoCard>
-              )}
-
-              {/* Humidity (1x1) */}
-              {humidity !== null && (
-                <BentoCard
-                  bentoSize="1x1"
-                  interactive
-                  onClick={() => handleMetricClick('humidity')}
-                  className={cn('metric-card metric-card-humidity cursor-pointer')}
-                >
-                  <div className="flex items-center gap-2 mb-3">
-                    <Droplets className="h-4 w-4 text-text-muted" />
-                    <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
-                      Humidity
-                    </span>
-                  </div>
-                  <div className="flex-1 flex flex-col justify-center">
-                    <div className="flex items-baseline gap-1">
-                      <span className="metric-value-medium">
-                        {Math.round(humidity)}
-                      </span>
-                      <span className="text-lg text-text-muted font-mono">%</span>
-                    </div>
-                  </div>
-                  {humidityData.length > 0 && (
-                    <div className="mt-2 h-8">
-                      <Sparkline
-                        data={humidityData}
-                        color="#8b5cf6"
+                        data={co2Data}
+                        color="#00e5ff"
                         height={32}
                         showFill
                       />
@@ -537,6 +529,99 @@ export function DashboardPage() {
                       />
                     </div>
                   </div>
+                </BentoCard>
+              )}
+
+              {/* Pressure Card (2x1) - BME688 */}
+              {pressure !== null && (
+                <PressureStatCard
+                  value={pressure}
+                  chartData={pressureData}
+                  bentoSize="2x1"
+                  onClick={() => handleMetricClick('pressure')}
+                  className="cursor-pointer"
+                />
+              )}
+
+              {/* Dual Sensor Comparison (1x2) - Show both sensors side by side */}
+              {hasBme688Data && temperature !== null && humidity !== null && bme688Temperature !== null && bme688Humidity !== null && (
+                <DualSensorCompareCard
+                  stcc4Temp={temperature}
+                  stcc4Humidity={humidity}
+                  bme688Temp={bme688Temperature}
+                  bme688Humidity={bme688Humidity}
+                  bentoSize="1x2"
+                  className="cursor-pointer"
+                />
+              )}
+
+              {/* Temperature (1x1) - Only show if no dual sensor comparison */}
+              {(!hasBme688Data || bme688Temperature === null) && temperature !== null && (
+                <BentoCard
+                  bentoSize="1x1"
+                  interactive
+                  onClick={() => handleMetricClick('temperature')}
+                  className={cn('metric-card metric-card-temperature cursor-pointer')}
+                >
+                  <div className="flex items-center gap-2 mb-3">
+                    <Thermometer className="h-4 w-4 text-text-muted" />
+                    <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
+                      Temperature
+                    </span>
+                  </div>
+                  <div className="flex-1 flex flex-col justify-center">
+                    <div className="flex items-baseline gap-1">
+                      <span className="metric-value-medium">
+                        {temperature.toFixed(1)}
+                      </span>
+                      <span className="text-lg text-text-muted font-mono">°C</span>
+                    </div>
+                  </div>
+                  {tempData.length > 0 && (
+                    <div className="mt-2 h-8">
+                      <Sparkline
+                        data={tempData}
+                        color="#f59e0b"
+                        height={32}
+                        showFill
+                      />
+                    </div>
+                  )}
+                </BentoCard>
+              )}
+
+              {/* Humidity (1x1) - Only show if no dual sensor comparison */}
+              {(!hasBme688Data || bme688Humidity === null) && humidity !== null && (
+                <BentoCard
+                  bentoSize="1x1"
+                  interactive
+                  onClick={() => handleMetricClick('humidity')}
+                  className={cn('metric-card metric-card-humidity cursor-pointer')}
+                >
+                  <div className="flex items-center gap-2 mb-3">
+                    <Droplets className="h-4 w-4 text-text-muted" />
+                    <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
+                      Humidity
+                    </span>
+                  </div>
+                  <div className="flex-1 flex flex-col justify-center">
+                    <div className="flex items-baseline gap-1">
+                      <span className="metric-value-medium">
+                        {Math.round(humidity)}
+                      </span>
+                      <span className="text-lg text-text-muted font-mono">%</span>
+                    </div>
+                  </div>
+                  {humidityData.length > 0 && (
+                    <div className="mt-2 h-8">
+                      <Sparkline
+                        data={humidityData}
+                        color="#8b5cf6"
+                        height={32}
+                        showFill
+                      />
+                    </div>
+                  )}
                 </BentoCard>
               )}
 
@@ -616,14 +701,22 @@ export function DashboardPage() {
               ? temperature ?? 0
               : modalMetric === 'humidity'
                 ? humidity ?? 0
-                : battery ?? 0
+                : modalMetric === 'iaq'
+                  ? iaq ?? 0
+                  : modalMetric === 'pressure'
+                    ? pressure ?? 0
+                    : battery ?? 0
         }
         unit={
           modalMetric === 'co2'
             ? 'ppm'
             : modalMetric === 'temperature'
               ? '°C'
-              : '%'
+              : modalMetric === 'humidity' || modalMetric === 'battery'
+                ? '%'
+                : modalMetric === 'iaq'
+                  ? 'IAQ'
+                  : 'hPa'
         }
         chartData={
           modalMetric === 'co2'
@@ -632,7 +725,11 @@ export function DashboardPage() {
               ? tempData
               : modalMetric === 'humidity'
                 ? humidityData
-                : []
+                : modalMetric === 'iaq'
+                  ? iaqData
+                  : modalMetric === 'pressure'
+                    ? pressureData
+                    : []
         }
         min={modalMetric === 'co2' ? co2Stats.min : undefined}
         max={modalMetric === 'co2' ? co2Stats.max : undefined}

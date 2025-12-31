@@ -4,7 +4,7 @@ import { X, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Sparkline } from './sparkline';
 
-export type MetricType = 'co2' | 'temperature' | 'humidity' | 'battery';
+export type MetricType = 'co2' | 'temperature' | 'humidity' | 'battery' | 'iaq' | 'pressure';
 export type TimeRange = '24h' | '7d' | '30d';
 
 export interface MetricDetailModalProps {
@@ -44,6 +44,16 @@ const metricConfig: Record<
     label: 'Battery',
     color: '#22c55e',
     gradientClass: 'metric-card-battery',
+  },
+  iaq: {
+    label: 'Indoor Air Quality',
+    color: '#14b8a6',
+    gradientClass: 'metric-card-iaq',
+  },
+  pressure: {
+    label: 'Barometric Pressure',
+    color: '#a855f7',
+    gradientClass: 'metric-card-pressure',
   },
 };
 
@@ -114,7 +124,7 @@ export function MetricDetailModal({
                   </p>
                   <div className="flex items-baseline gap-2 mt-1">
                     <span className="metric-value-large">
-                      {metricType === 'temperature'
+                      {metricType === 'temperature' || metricType === 'pressure'
                         ? currentValue.toFixed(1)
                         : Math.round(currentValue)}
                     </span>
@@ -172,7 +182,7 @@ export function MetricDetailModal({
                   </p>
                   <div className="flex items-center gap-2">
                     <span className="text-xl font-mono font-semibold text-white">
-                      {metricType === 'temperature'
+                      {metricType === 'temperature' || metricType === 'pressure'
                         ? currentValue.toFixed(1)
                         : Math.round(currentValue)}
                     </span>
@@ -202,7 +212,7 @@ export function MetricDetailModal({
                   </p>
                   <span className="text-xl font-mono font-semibold text-white">
                     {min !== undefined
-                      ? metricType === 'temperature'
+                      ? metricType === 'temperature' || metricType === 'pressure'
                         ? min.toFixed(1)
                         : Math.round(min)
                       : '--'}
@@ -216,7 +226,7 @@ export function MetricDetailModal({
                   </p>
                   <span className="text-xl font-mono font-semibold text-white">
                     {max !== undefined
-                      ? metricType === 'temperature'
+                      ? metricType === 'temperature' || metricType === 'pressure'
                         ? max.toFixed(1)
                         : Math.round(max)
                       : '--'}
@@ -230,7 +240,7 @@ export function MetricDetailModal({
                   </p>
                   <span className="text-xl font-mono font-semibold text-white">
                     {avg !== undefined
-                      ? metricType === 'temperature'
+                      ? metricType === 'temperature' || metricType === 'pressure'
                         ? avg.toFixed(1)
                         : Math.round(avg)
                       : '--'}

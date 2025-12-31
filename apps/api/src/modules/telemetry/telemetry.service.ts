@@ -47,10 +47,17 @@ export class TelemetryService {
         deviceName: device.name,
         isOnline: device.isOnline,
         time: latest?.time || null,
+        // STCC4 sensor data
         co2: latest?.co2 || null,
         temperature: latest?.temperature || null,
         humidity: latest?.humidity || null,
         battery: latest?.battery || null,
+        // BME688/BSEC2 sensor data
+        iaq: latest?.iaq ?? null,
+        iaqAccuracy: latest?.iaqAccuracy ?? null,
+        pressure: latest?.pressure ?? null,
+        bme688Temperature: latest?.bme688Temperature ?? null,
+        bme688Humidity: latest?.bme688Humidity ?? null,
       });
     }
 
@@ -102,7 +109,15 @@ export class TelemetryService {
         MIN(co2) AS min_co2,
         MAX(co2) AS max_co2,
         MIN(temperature) AS min_temperature,
-        MAX(temperature) AS max_temperature
+        MAX(temperature) AS max_temperature,
+        AVG(iaq) AS avg_iaq,
+        MIN(iaq) AS min_iaq,
+        MAX(iaq) AS max_iaq,
+        AVG(pressure) AS avg_pressure,
+        MIN(pressure) AS min_pressure,
+        MAX(pressure) AS max_pressure,
+        AVG(bme688_temperature) AS avg_bme688_temperature,
+        AVG(bme688_humidity) AS avg_bme688_humidity
       FROM telemetry
       WHERE device_id = $2 AND time >= $3 AND time <= $4
       GROUP BY bucket
@@ -113,6 +128,7 @@ export class TelemetryService {
 
     return result.map((row: any) => ({
       time: row.bucket,
+      // STCC4 aggregates
       avgCo2: row.avg_co2 ? parseFloat(row.avg_co2) : null,
       avgTemperature: row.avg_temperature
         ? parseFloat(row.avg_temperature)
@@ -125,6 +141,19 @@ export class TelemetryService {
         : null,
       maxTemperature: row.max_temperature
         ? parseFloat(row.max_temperature)
+        : null,
+      // BME688 aggregates
+      avgIaq: row.avg_iaq ? parseFloat(row.avg_iaq) : null,
+      minIaq: row.min_iaq ? parseFloat(row.min_iaq) : null,
+      maxIaq: row.max_iaq ? parseFloat(row.max_iaq) : null,
+      avgPressure: row.avg_pressure ? parseFloat(row.avg_pressure) : null,
+      minPressure: row.min_pressure ? parseFloat(row.min_pressure) : null,
+      maxPressure: row.max_pressure ? parseFloat(row.max_pressure) : null,
+      avgBme688Temperature: row.avg_bme688_temperature
+        ? parseFloat(row.avg_bme688_temperature)
+        : null,
+      avgBme688Humidity: row.avg_bme688_humidity
+        ? parseFloat(row.avg_bme688_humidity)
         : null,
     }));
   }

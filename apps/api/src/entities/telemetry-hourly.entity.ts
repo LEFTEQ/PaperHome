@@ -54,6 +54,31 @@ export class TelemetryHourly {
   @Column({ name: 'avg_battery', type: 'float', nullable: true })
   avgBattery: number | null;
 
+  // BME688/BSEC2 aggregated data
+  @Column({ name: 'avg_iaq', type: 'float', nullable: true })
+  avgIaq: number | null;
+
+  @Column({ name: 'min_iaq', type: 'float', nullable: true })
+  minIaq: number | null;
+
+  @Column({ name: 'max_iaq', type: 'float', nullable: true })
+  maxIaq: number | null;
+
+  @Column({ name: 'avg_pressure', type: 'float', nullable: true })
+  avgPressure: number | null;
+
+  @Column({ name: 'min_pressure', type: 'float', nullable: true })
+  minPressure: number | null;
+
+  @Column({ name: 'max_pressure', type: 'float', nullable: true })
+  maxPressure: number | null;
+
+  @Column({ name: 'avg_bme688_temperature', type: 'float', nullable: true })
+  avgBme688Temperature: number | null;
+
+  @Column({ name: 'avg_bme688_humidity', type: 'float', nullable: true })
+  avgBme688Humidity: number | null;
+
   @Column({ name: 'sample_count', type: 'int', default: 0 })
   sampleCount: number;
 }

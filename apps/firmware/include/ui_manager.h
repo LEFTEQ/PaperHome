@@ -23,7 +23,7 @@ enum class UIScreen {
     SETTINGS,           // Settings page 1: General stats
     SETTINGS_HOMEKIT,   // Settings page 2: HomeKit pairing QR code
     SETTINGS_ACTIONS,   // Settings page 3: Actions (calibration, reset, etc.)
-    SENSOR_DASHBOARD,   // Sensor overview with 3 panels
+    SENSOR_DASHBOARD,   // Sensor overview with 5 panels
     SENSOR_DETAIL,      // Full chart for single metric
     TADO_AUTH,          // Tado OAuth login screen
     TADO_DASHBOARD,     // Tado rooms/thermostats view
@@ -135,7 +135,7 @@ public:
     );
 
     /**
-     * Render sensor dashboard with all 3 metrics
+     * Render sensor dashboard with all 5 metrics
      * @param selectedMetric Currently highlighted metric
      * @param co2 Current CO2 reading
      * @param temperature Current temperature reading

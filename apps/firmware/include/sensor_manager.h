@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <SensirionI2cStcc4.h>
+#include <Adafruit_BME680.h>
 #include "config.h"
 #include "ring_buffer.h"
 
@@ -20,7 +21,9 @@ enum class SensorConnectionState {
 enum class SensorMetric {
     CO2,
     TEMPERATURE,
-    HUMIDITY
+    HUMIDITY,
+    IAQ,
+    PRESSURE
 };
 
 // Single sensor reading with timestamp
@@ -29,6 +32,11 @@ struct SensorSample {
     int16_t temperature;    // Temperature in centidegrees (e.g., 2350 = 23.50C)
     uint16_t humidity;      // Relative humidity in centipercent (e.g., 6500 = 65.00%)
     uint32_t timestamp;     // millis() when sample was taken
+    // BME688 readings
+    uint16_t iaq;           // Indoor Air Quality index (0-500)
+    uint16_t pressure;      // Pressure in Pa/10 (e.g., 10130 = 101300 Pa)
+    float gasResistance;    // Gas resistance in Ohms
+    uint8_t iaqAccuracy;    // IAQ accuracy (0-3)
 };
 
 // Statistics for a metric over a time range
@@ -99,6 +107,38 @@ public:
      * Get current humidity in percent.
      */
     float getHumidity() const { return _currentSample.humidity / 100.0f; }
+
+    // -------------------------------------------------------------------------
+    // BME688 Accessors
+    // -------------------------------------------------------------------------
+
+    /**
+     * Check if BME688 sensor is operational.
+     */
+    bool isBME688Operational() const { return _bme688Initialized; }
+
+    /**
+     * Get current IAQ (Indoor Air Quality) index (0-500).
+     * Lower is better: 0-50 = Excellent, 51-100 = Good, 101-150 = Moderate,
+     * 151-200 = Poor, 201-300 = Very Poor, 301-500 = Hazardous
+     */
+    uint16_t getIAQ() const { return _currentSample.iaq; }
+
+    /**
+     * Get IAQ accuracy (0-3).
+     * 0 = Stabilizing, 1 = Uncertain, 2 = Calibrating, 3 = Calibrated
+     */
+    uint8_t getIAQAccuracy() const { return _currentSample.iaqAccuracy; }
+
+    /**
+     * Get current pressure in hPa.
+     */
+    float getPressure() const { return _currentSample.pressure / 10.0f; }
+
+    /**
+     * Get current gas resistance in kOhms.
+     */
+    float getGasResistance() const { return _currentSample.gasResistance / 1000.0f; }
 
     /**
      * Get statistics for a metric.
@@ -234,6 +274,56 @@ private:
 
     SensorStateCallback _stateCallback;
     SensorDataCallback _dataCallback;
+
+    // -------------------------------------------------------------------------
+    // BME688 members (Adafruit library)
+    // -------------------------------------------------------------------------
+    Adafruit_BME680 _bme688;
+    bool _bme688Initialized;
+
+    // IAQ calculation baseline
+    float _gasBaseline;         // Calibrated gas resistance baseline (Ohms)
+    float _humBaseline;         // Humidity baseline (typically 40%)
+    bool _baselineSet;          // Whether baseline has been established
+    uint8_t _iaqAccuracyLevel;  // 0-3 accuracy level
+    uint32_t _baselineSamples;  // Number of samples for baseline
+
+    // Baseline persistence
+    unsigned long _lastBaselineSaveTime;
+    static const unsigned long BASELINE_SAVE_INTERVAL = 3600000;  // 1 hour
+
+    /**
+     * Initialize BME688 sensor.
+     * @return true if sensor found and initialized
+     */
+    bool initBME688();
+
+    /**
+     * Read BME688 sensor data.
+     * @return true if read was successful
+     */
+    bool readBME688();
+
+    /**
+     * Update gas baseline for IAQ calculation.
+     */
+    void updateBaseline(float gasResistance, float humidity);
+
+    /**
+     * Calculate IAQ from gas resistance and humidity.
+     * @return IAQ index (0-500, lower is better)
+     */
+    float calculateIAQ(float gasResistance, float humidity);
+
+    /**
+     * Save IAQ baseline to NVS.
+     */
+    void saveIAQBaseline();
+
+    /**
+     * Load IAQ baseline from NVS.
+     */
+    void loadIAQBaseline();
 
     /**
      * Read current values from sensor.

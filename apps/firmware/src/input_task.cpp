@@ -2,6 +2,7 @@
 #include "hue_manager.h"
 #include "tado_manager.h"
 #include "sensor_manager.h"
+#include <cmath>
 
 // =============================================================================
 // Static Member Initialization
@@ -421,14 +422,26 @@ void InputTaskManager::updateTadoRooms(const std::vector<TadoRoom>& rooms) {
 
 void InputTaskManager::updateSensorData(float co2, float temp, float humidity) {
     TaskManager::acquireStateLock();
-    TaskManager::sharedState.co2 = co2;
-    TaskManager::sharedState.temperature = temp;
-    TaskManager::sharedState.humidity = humidity;
-    TaskManager::sharedState.sensorDirty = true;
+
+    // Only send event if values actually changed (with small tolerance for floats)
+    bool changed = (fabs(TaskManager::sharedState.co2 - co2) > 0.5f) ||
+                   (fabs(TaskManager::sharedState.temperature - temp) > 0.05f) ||
+                   (fabs(TaskManager::sharedState.humidity - humidity) > 0.1f);
+
+    if (changed) {
+        TaskManager::sharedState.co2 = co2;
+        TaskManager::sharedState.temperature = temp;
+        TaskManager::sharedState.humidity = humidity;
+        TaskManager::sharedState.sensorDirty = true;
+    }
+
     TaskManager::releaseStateLock();
 
-    InputEvent event = InputEvent::simple(InputEventType::SENSOR_DATA_UPDATED);
-    TaskManager::sendEvent(event);
+    // Only send event if data actually changed
+    if (changed) {
+        InputEvent event = InputEvent::simple(InputEventType::SENSOR_DATA_UPDATED);
+        TaskManager::sendEvent(event);
+    }
 }
 
 void InputTaskManager::updateConnectionStatus(bool wifiConnected, const String& bridgeIP) {

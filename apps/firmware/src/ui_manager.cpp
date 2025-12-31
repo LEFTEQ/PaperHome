@@ -2,6 +2,7 @@
 #include "controller_manager.h"
 #include "mqtt_manager.h"
 #include "homekit_manager.h"
+#include "sensor_manager.h"
 #include <stdarg.h>
 #include <qrcode.h>
 #include <Preferences.h>
@@ -9,6 +10,7 @@
 // External manager instances
 extern MqttManager mqttManager;
 extern HomekitManager homekitManager;
+extern SensorManager sensorManager;
 
 // Global instance
 UIManager uiManager;
@@ -782,6 +784,38 @@ void UIManager::drawSettingsGeneralContent(const String& bridgeIP, bool wifiConn
     display.print(mqttStates[(int)mqttManager.getState()]);
     y += lineHeight;
 
+    // Sensors Section
+    display.setFont(&FreeSansBold9pt7b);
+    display.setCursor(labelX, y);
+    display.print("Sensors");
+    y += lineHeight - 4;
+
+    display.setFont(&FreeMono9pt7b);
+
+    // STCC4 sensor status
+    display.setCursor(labelX + 15, y);
+    display.print("STCC4 (CO2):");
+    display.setCursor(valueX, y);
+    if (sensorManager.isOperational()) {
+        display.printf("OK - %u ppm", (uint16_t)sensorManager.getCO2());
+    } else {
+        display.print("Not connected");
+    }
+    y += lineHeight - 8;
+
+    // BME688 sensor status
+    display.setCursor(labelX + 15, y);
+    display.print("BME688 (IAQ):");
+    display.setCursor(valueX, y);
+    if (sensorManager.isBME688Operational()) {
+        display.printf("OK - IAQ: %u (%u/3)",
+            sensorManager.getIAQ(),
+            sensorManager.getIAQAccuracy());
+    } else {
+        display.print("Not connected");
+    }
+    y += lineHeight;
+
     // Device Section
     display.setFont(&FreeSansBold9pt7b);
     display.setCursor(labelX, y);
@@ -1292,29 +1326,39 @@ void UIManager::renderSensorDetail(
 void UIManager::drawSensorDashboardContent(SensorMetric selectedMetric, float co2, float temp, float humidity) {
     DisplayType& display = displayManager.getDisplay();
 
-    int padding = 8;
+    int padding = 6;
     int contentY = UI_STATUS_BAR_HEIGHT + padding;
     int contentWidth = displayManager.width() - (padding * 2);
-    int availableHeight = displayManager.height() - UI_STATUS_BAR_HEIGHT - UI_NAV_BAR_HEIGHT - (padding * 3);
+    int availableHeight = displayManager.height() - UI_STATUS_BAR_HEIGHT - UI_NAV_BAR_HEIGHT - (padding * 2);
 
-    // Priority layout: CO2 takes ~60% height, Temp/Humidity share remaining 40%
-    int co2Height = (availableHeight * 60) / 100;
-    int secondaryHeight = availableHeight - co2Height - padding;
+    // Layout: 3 rows
+    // Row 1: CO2 (45% height)
+    // Row 2: Temperature, Humidity (27.5% height)
+    // Row 3: IAQ, Pressure (27.5% height)
+    int co2Height = (availableHeight * 45) / 100;
+    int secondaryHeight = (availableHeight - co2Height - (padding * 2)) / 2;
+    int panelWidth = (contentWidth - padding) / 2;
 
-    // === CO2 Panel (large, top) ===
+    // === Row 1: CO2 Panel (large, top) ===
     int co2Y = contentY;
     bool co2Selected = (selectedMetric == SensorMetric::CO2);
     drawPriorityPanel(padding, co2Y, contentWidth, co2Height, SensorMetric::CO2, co2Selected, true);
 
-    // === Temperature and Humidity panels (side by side, bottom) ===
-    int secondaryY = co2Y + co2Height + padding;
-    int panelWidth = (contentWidth - padding) / 2;
-
+    // === Row 2: Temperature and Humidity panels (side by side) ===
+    int row2Y = co2Y + co2Height + padding;
     bool tempSelected = (selectedMetric == SensorMetric::TEMPERATURE);
     bool humSelected = (selectedMetric == SensorMetric::HUMIDITY);
 
-    drawPriorityPanel(padding, secondaryY, panelWidth, secondaryHeight, SensorMetric::TEMPERATURE, tempSelected, false);
-    drawPriorityPanel(padding + panelWidth + padding, secondaryY, panelWidth, secondaryHeight, SensorMetric::HUMIDITY, humSelected, false);
+    drawPriorityPanel(padding, row2Y, panelWidth, secondaryHeight, SensorMetric::TEMPERATURE, tempSelected, false);
+    drawPriorityPanel(padding + panelWidth + padding, row2Y, panelWidth, secondaryHeight, SensorMetric::HUMIDITY, humSelected, false);
+
+    // === Row 3: IAQ and Pressure panels (side by side) ===
+    int row3Y = row2Y + secondaryHeight + padding;
+    bool iaqSelected = (selectedMetric == SensorMetric::IAQ);
+    bool pressureSelected = (selectedMetric == SensorMetric::PRESSURE);
+
+    drawPriorityPanel(padding, row3Y, panelWidth, secondaryHeight, SensorMetric::IAQ, iaqSelected, false);
+    drawPriorityPanel(padding + panelWidth + padding, row3Y, panelWidth, secondaryHeight, SensorMetric::PRESSURE, pressureSelected, false);
 
     // Navigation hints bar
     int navY = displayManager.height() - UI_NAV_BAR_HEIGHT + 16;
@@ -1346,10 +1390,20 @@ void UIManager::drawPriorityPanel(int x, int y, int width, int height, SensorMet
     display.setCursor(x + innerPadding, y + (isLarge ? 20 : 16));
     display.print(SensorManager::metricToString(metric));
 
-    if (!sensorManager.isOperational()) {
+    // Check if the appropriate sensor is operational
+    bool sensorOk = false;
+    if (metric == SensorMetric::IAQ || metric == SensorMetric::PRESSURE) {
+        sensorOk = sensorManager.isBME688Operational();
+    } else {
+        sensorOk = sensorManager.isOperational();
+    }
+
+    if (!sensorOk) {
         display.setFont(&FreeSans9pt7b);
         display.setCursor(x + innerPadding, y + height / 2 + 4);
-        if (sensorManager.getState() == SensorConnectionState::WARMING_UP) {
+        if (metric == SensorMetric::IAQ || metric == SensorMetric::PRESSURE) {
+            display.print("BME688 not connected");
+        } else if (sensorManager.getState() == SensorConnectionState::WARMING_UP) {
             int progress = (int)(sensorManager.getWarmupProgress() * 100);
             display.printf("Warming up... %d%%", progress);
         } else {
@@ -1371,6 +1425,12 @@ void UIManager::drawPriorityPanel(int x, int y, int width, int height, SensorMet
             break;
         case SensorMetric::HUMIDITY:
             snprintf(valueStr, sizeof(valueStr), "%.0f%%", stats.current);
+            break;
+        case SensorMetric::IAQ:
+            snprintf(valueStr, sizeof(valueStr), "%.0f", stats.current);
+            break;
+        case SensorMetric::PRESSURE:
+            snprintf(valueStr, sizeof(valueStr), "%.0f hPa", stats.current);
             break;
     }
 

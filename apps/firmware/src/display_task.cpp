@@ -332,9 +332,9 @@ void DisplayTaskManager::processEvent(const InputEvent& event) {
             int current = (int)TaskManager::sharedState.currentSensorMetric;
             current += direction;
 
-            // Wrap around (3 metrics: CO2, TEMP, HUMIDITY)
-            if (current < 0) current = 2;
-            if (current > 2) current = 0;
+            // Wrap around (5 metrics: CO2, TEMP, HUMIDITY, IAQ, PRESSURE)
+            if (current < 0) current = 4;
+            if (current > 4) current = 0;
 
             TaskManager::sharedState.currentSensorMetric = (SensorMetric)current;
             TaskManager::releaseStateLock();

@@ -25,18 +25,33 @@ export interface Telemetry {
   id: string;
   time: string;
   deviceId: string;
+  // STCC4 sensor data
   co2: number | null;
   temperature: number | null;
   humidity: number | null;
   battery: number | null;
+  // BME688/BSEC2 sensor data
+  iaq: number | null;
+  iaqAccuracy: number | null;
+  pressure: number | null;
+  gasResistance: number | null;
+  bme688Temperature: number | null;
+  bme688Humidity: number | null;
 }
 
 export interface LatestTelemetry {
   deviceId: string;
+  // STCC4 sensor data
   co2: number | null;
   temperature: number | null;
   humidity: number | null;
   battery: number | null;
+  // BME688/BSEC2 sensor data
+  iaq: number | null;
+  iaqAccuracy: number | null;
+  pressure: number | null;
+  bme688Temperature: number | null;
+  bme688Humidity: number | null;
   time: string;
 }
 
@@ -63,6 +78,7 @@ export interface TadoRoom {
 
 export interface TelemetryAggregate {
   time: string;
+  // STCC4 aggregates
   avgCo2: number | null;
   avgTemperature: number | null;
   avgHumidity: number | null;
@@ -71,6 +87,15 @@ export interface TelemetryAggregate {
   maxCo2?: number | null;
   minTemperature?: number | null;
   maxTemperature?: number | null;
+  // BME688 aggregates
+  avgIaq?: number | null;
+  minIaq?: number | null;
+  maxIaq?: number | null;
+  avgPressure?: number | null;
+  minPressure?: number | null;
+  maxPressure?: number | null;
+  avgBme688Temperature?: number | null;
+  avgBme688Humidity?: number | null;
 }
 
 export interface AuthResponse {

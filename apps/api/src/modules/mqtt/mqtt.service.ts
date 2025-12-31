@@ -136,10 +136,18 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
 
     await this.telemetryService.create({
       deviceId,
+      // STCC4 sensor data
       co2: data.co2,
       temperature: data.temperature,
       humidity: data.humidity,
       battery: data.battery,
+      // BME688/BSEC2 sensor data
+      iaq: data.iaq,
+      iaqAccuracy: data.iaqAccuracy,
+      pressure: data.pressure,
+      gasResistance: data.gasResistance,
+      bme688Temperature: data.bme688Temperature,
+      bme688Humidity: data.bme688Humidity,
     });
 
     // Update device online status
@@ -148,10 +156,17 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     // Broadcast to device owners via WebSocket
     const ownerIds = await this.devicesService.getOwnersByDeviceId(deviceId);
     this.realtimeGateway.broadcastTelemetry(deviceId, ownerIds, {
+      // STCC4 sensor data
       co2: data.co2,
       temperature: data.temperature,
       humidity: data.humidity,
       battery: data.battery,
+      // BME688/BSEC2 sensor data
+      iaq: data.iaq,
+      iaqAccuracy: data.iaqAccuracy,
+      pressure: data.pressure,
+      bme688Temperature: data.bme688Temperature,
+      bme688Humidity: data.bme688Humidity,
     });
 
     this.logger.debug(`Telemetry received from ${deviceId}`);

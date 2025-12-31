@@ -1,5 +1,6 @@
 #include "sensor_manager.h"
 #include <stdarg.h>
+#include <Preferences.h>
 
 // Global instance
 SensorManager sensorManager;
@@ -14,7 +15,14 @@ SensorManager::SensorManager()
     , _lastFrcCorrection(0)
     , _highCo2Count(0)
     , _stateCallback(nullptr)
-    , _dataCallback(nullptr) {
+    , _dataCallback(nullptr)
+    , _bme688Initialized(false)
+    , _gasBaseline(0.0f)
+    , _humBaseline(40.0f)
+    , _baselineSet(false)
+    , _iaqAccuracyLevel(0)
+    , _baselineSamples(0)
+    , _lastBaselineSaveTime(0) {
     memset(&_currentSample, 0, sizeof(_currentSample));
 }
 
@@ -91,6 +99,9 @@ bool SensorManager::init() {
     log("Sensor initialized, entering warmup period");
     log("NOTE: For accurate readings, perform FRC calibration in fresh outdoor air (420 ppm)");
 
+    // Initialize BME688 (optional - doesn't affect STCC4 operation)
+    initBME688();
+
     return true;
 }
 
@@ -116,6 +127,11 @@ void SensorManager::update() {
             _lastSampleTime = now;
             _errorCount = 0;
 
+            // Also read BME688 if available
+            if (_bme688Initialized) {
+                readBME688();
+            }
+
             // Store sample in ring buffer
             _sampleBuffer.push(_currentSample);
 
@@ -125,10 +141,12 @@ void SensorManager::update() {
             }
 
             if (DEBUG_SENSOR) {
-                logf("Sample: CO2=%u ppm, T=%.1fC, RH=%.1f%%",
+                logf("Sample: CO2=%u ppm, T=%.1fC, RH=%.1f%%, IAQ=%u (%u/3)",
                      _currentSample.co2,
                      _currentSample.temperature / 100.0f,
-                     _currentSample.humidity / 100.0f);
+                     _currentSample.humidity / 100.0f,
+                     _currentSample.iaq,
+                     _currentSample.iaqAccuracy);
             }
         } else {
             _errorCount++;
@@ -138,6 +156,13 @@ void SensorManager::update() {
                 setState(SensorConnectionState::ERROR, "Too many read errors");
             }
         }
+    }
+
+    // Periodically save IAQ baseline
+    if (_bme688Initialized && _baselineSet &&
+        (now - _lastBaselineSaveTime >= BASELINE_SAVE_INTERVAL)) {
+        saveIAQBaseline();
+        _lastBaselineSaveTime = now;
     }
 }
 
@@ -253,6 +278,10 @@ float SensorManager::extractMetric(const SensorSample& sample, SensorMetric metr
             return sample.temperature / 100.0f;
         case SensorMetric::HUMIDITY:
             return sample.humidity / 100.0f;
+        case SensorMetric::IAQ:
+            return (float)sample.iaq;
+        case SensorMetric::PRESSURE:
+            return sample.pressure / 10.0f;
         default:
             return 0;
     }
@@ -285,6 +314,8 @@ const char* SensorManager::metricToString(SensorMetric metric) {
         case SensorMetric::CO2:         return "CO2";
         case SensorMetric::TEMPERATURE: return "Temperature";
         case SensorMetric::HUMIDITY:    return "Humidity";
+        case SensorMetric::IAQ:         return "Air Quality";
+        case SensorMetric::PRESSURE:    return "Pressure";
         default:                        return "Unknown";
     }
 }
@@ -294,6 +325,8 @@ const char* SensorManager::metricToUnit(SensorMetric metric) {
         case SensorMetric::CO2:         return "ppm";
         case SensorMetric::TEMPERATURE: return "C";
         case SensorMetric::HUMIDITY:    return "%";
+        case SensorMetric::IAQ:         return "";
+        case SensorMetric::PRESSURE:    return "hPa";
         default:                        return "";
     }
 }
@@ -451,6 +484,220 @@ bool SensorManager::performFactoryReset() {
     }
 
     return true;
+}
+
+// =============================================================================
+// BME688 Methods (Adafruit Library)
+// =============================================================================
+
+bool SensorManager::initBME688() {
+    log("Initializing BME688 sensor...");
+
+    // Scan I2C bus first to verify device is present
+    log("Scanning I2C bus for devices...");
+    for (uint8_t addr = 1; addr < 127; addr++) {
+        Wire.beginTransmission(addr);
+        if (Wire.endTransmission() == 0) {
+            logf("  Found device at 0x%02X", addr);
+        }
+    }
+
+    // Try primary address (0x77) first, then secondary (0x76)
+    const uint8_t addresses[] = {0x77, 0x76};
+    for (uint8_t addr : addresses) {
+        logf("Trying BME688 at address 0x%02X...", addr);
+
+        if (_bme688.begin(addr, &Wire)) {
+            logf("BME688 found at 0x%02X!", addr);
+
+            // Configure oversampling and filter
+            _bme688.setTemperatureOversampling(BME680_OS_8X);
+            _bme688.setHumidityOversampling(BME680_OS_2X);
+            _bme688.setPressureOversampling(BME680_OS_4X);
+            _bme688.setIIRFilterSize(BME680_FILTER_SIZE_3);
+
+            // Gas heater settings for IAQ measurement
+            _bme688.setGasHeater(320, 150);  // 320C for 150ms
+
+            _bme688Initialized = true;
+
+            // Load baseline from NVS if available
+            loadIAQBaseline();
+
+            log("BME688 initialized successfully");
+            return true;
+        }
+    }
+
+    log("BME688 not found on I2C bus");
+    _bme688Initialized = false;
+    return false;
+}
+
+bool SensorManager::readBME688() {
+    if (!_bme688Initialized) {
+        return false;
+    }
+
+    // Perform measurement (blocking, takes ~150ms for gas heater)
+    if (!_bme688.performReading()) {
+        log("BME688 reading failed");
+        return false;
+    }
+
+    // Get raw values
+    float temperature = _bme688.temperature;
+    float humidity = _bme688.humidity;
+    float pressure = _bme688.pressure / 100.0f;  // Pa to hPa
+    float gasResistance = _bme688.gas_resistance;
+
+    // Update baseline with new reading
+    updateBaseline(gasResistance, humidity);
+
+    // Calculate IAQ
+    float iaq = calculateIAQ(gasResistance, humidity);
+
+    // Store in current sample
+    _currentSample.iaq = (uint16_t)iaq;
+    _currentSample.pressure = (uint16_t)(pressure * 10);  // Store as Pa/10
+    _currentSample.gasResistance = gasResistance;
+    _currentSample.iaqAccuracy = _iaqAccuracyLevel;
+
+    if (DEBUG_SENSOR) {
+        logf("BME688: T=%.1fC, RH=%.1f%%, P=%.1fhPa, Gas=%.0fOhm, IAQ=%u (%u/3)",
+             temperature, humidity, pressure, gasResistance,
+             _currentSample.iaq, _currentSample.iaqAccuracy);
+    }
+
+    return true;
+}
+
+void SensorManager::updateBaseline(float gasResistance, float humidity) {
+    // Skip invalid readings
+    if (gasResistance < 1000 || gasResistance > 10000000) {
+        return;
+    }
+
+    _baselineSamples++;
+
+    // Warmup period: collect samples to establish baseline
+    if (!_baselineSet) {
+        if (_baselineSamples < 50) {
+            // Accumulate initial baseline (first ~50 minutes)
+            if (_gasBaseline == 0.0f) {
+                _gasBaseline = gasResistance;
+            } else {
+                // Exponential moving average
+                _gasBaseline = _gasBaseline * 0.95f + gasResistance * 0.05f;
+            }
+            _iaqAccuracyLevel = 0;  // Stabilizing
+        } else if (_baselineSamples < 150) {
+            // Calibrating phase (~50-150 minutes)
+            _gasBaseline = _gasBaseline * 0.98f + gasResistance * 0.02f;
+            _iaqAccuracyLevel = 1;  // Uncertain
+        } else if (_baselineSamples < 300) {
+            // Extended calibration (~150-300 minutes)
+            _gasBaseline = _gasBaseline * 0.99f + gasResistance * 0.01f;
+            _iaqAccuracyLevel = 2;  // Calibrating
+        } else {
+            // Baseline established after ~5 hours
+            _baselineSet = true;
+            _iaqAccuracyLevel = 3;  // Calibrated
+            logf("IAQ baseline established: gas=%.0f Ohm", _gasBaseline);
+        }
+    } else {
+        // Slow adaptation during normal operation
+        // Only update baseline if this looks like a "clean air" reading
+        // (high gas resistance indicates good air quality)
+        if (gasResistance > _gasBaseline * 0.9f) {
+            _gasBaseline = _gasBaseline * 0.999f + gasResistance * 0.001f;
+        }
+    }
+}
+
+float SensorManager::calculateIAQ(float gasResistance, float humidity) {
+    // If no baseline yet, return a moderate value
+    if (_gasBaseline == 0.0f) {
+        return 100.0f;
+    }
+
+    // Gas contribution (75% weight)
+    // Higher gas resistance = better air quality
+    float gasScore;
+    float gasRatio = gasResistance / _gasBaseline;
+
+    if (gasRatio >= 1.0f) {
+        // At or above baseline = excellent (IAQ close to 0)
+        gasScore = 0;
+    } else if (gasRatio >= 0.5f) {
+        // 50-100% of baseline = good to moderate
+        gasScore = (1.0f - gasRatio) * 200.0f;
+    } else {
+        // Below 50% of baseline = poor to hazardous
+        gasScore = 100.0f + (0.5f - gasRatio) * 400.0f;
+    }
+
+    // Humidity contribution (25% weight)
+    // Optimal humidity is around 40%, deviation adds to IAQ score
+    float humScore = 0;
+    float humOffset = fabs(humidity - _humBaseline);
+    if (humOffset > 20.0f) {
+        // Significant deviation from optimal (>20% off)
+        humScore = (humOffset - 20.0f) * 2.0f;
+    }
+
+    // Combined IAQ (0-500 scale, lower is better)
+    float iaq = gasScore * 0.75f + humScore * 0.25f;
+
+    // Clamp to valid range
+    return constrain(iaq, 0.0f, 500.0f);
+}
+
+void SensorManager::saveIAQBaseline() {
+    if (!_baselineSet || _gasBaseline == 0.0f) {
+        return;
+    }
+
+    // Use ESP32 Preferences library for NVS
+    Preferences prefs;
+
+    if (prefs.begin("bme688", false)) {
+        prefs.putFloat("gasBase", _gasBaseline);
+        prefs.putFloat("humBase", _humBaseline);
+        prefs.putUInt("samples", _baselineSamples);
+        prefs.end();
+        logf("IAQ baseline saved: gas=%.0f", _gasBaseline);
+    }
+}
+
+void SensorManager::loadIAQBaseline() {
+    Preferences prefs;
+
+    if (prefs.begin("bme688", true)) {  // Read-only
+        float savedGas = prefs.getFloat("gasBase", 0.0f);
+        float savedHum = prefs.getFloat("humBase", 40.0f);
+        uint32_t savedSamples = prefs.getUInt("samples", 0);
+        prefs.end();
+
+        if (savedGas > 0.0f && savedSamples > 0) {
+            _gasBaseline = savedGas;
+            _humBaseline = savedHum;
+            _baselineSamples = savedSamples;
+
+            // Determine accuracy based on saved samples
+            if (savedSamples >= 300) {
+                _baselineSet = true;
+                _iaqAccuracyLevel = 3;
+            } else if (savedSamples >= 150) {
+                _iaqAccuracyLevel = 2;
+            } else if (savedSamples >= 50) {
+                _iaqAccuracyLevel = 1;
+            }
+
+            logf("IAQ baseline loaded: gas=%.0f, samples=%u, accuracy=%u",
+                 _gasBaseline, _baselineSamples, _iaqAccuracyLevel);
+        }
+    }
 }
 
 void SensorManager::log(const char* message) {
