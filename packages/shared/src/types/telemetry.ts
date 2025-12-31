@@ -9,10 +9,18 @@ export interface Telemetry {
 }
 
 export interface TelemetryPayload {
+  // STCC4 sensor data
   co2?: number;
   temperature?: number;
   humidity?: number;
   battery?: number;
+  // BME688/BSEC2 sensor data
+  iaq?: number;
+  iaqAccuracy?: number;
+  pressure?: number;
+  gasResistance?: number;
+  bme688Temperature?: number;
+  bme688Humidity?: number;
 }
 
 export interface TelemetryQuery {
@@ -37,8 +45,15 @@ export interface LatestTelemetry {
   deviceId: string;
   deviceName: string;
   time: Date;
+  // STCC4 sensor data
   co2: number | null;
   temperature: number | null;
   humidity: number | null;
   battery: number | null;
+  // BME688/BSEC2 sensor data
+  iaq: number | null;
+  iaqAccuracy: number | null;
+  pressure: number | null;
+  bme688Temperature: number | null;
+  bme688Humidity: number | null;
 }

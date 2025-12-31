@@ -50,6 +50,11 @@ export function useRealtimeUpdates() {
                 temperature: payload.temperature ?? t.temperature,
                 humidity: payload.humidity ?? t.humidity,
                 battery: payload.battery ?? t.battery,
+                iaq: payload.iaq ?? t.iaq,
+                iaqAccuracy: payload.iaqAccuracy ?? t.iaqAccuracy,
+                pressure: payload.pressure ?? t.pressure,
+                bme688Temperature: payload.bme688Temperature ?? t.bme688Temperature,
+                bme688Humidity: payload.bme688Humidity ?? t.bme688Humidity,
                 time: timestamp,
               }
             : t
@@ -63,6 +68,11 @@ export function useRealtimeUpdates() {
             temperature: payload.temperature ?? null,
             humidity: payload.humidity ?? null,
             battery: payload.battery ?? null,
+            iaq: payload.iaq ?? null,
+            iaqAccuracy: payload.iaqAccuracy ?? null,
+            pressure: payload.pressure ?? null,
+            bme688Temperature: payload.bme688Temperature ?? null,
+            bme688Humidity: payload.bme688Humidity ?? null,
             time: timestamp,
           },
         ];

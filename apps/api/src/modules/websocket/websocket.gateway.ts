@@ -9,10 +9,17 @@ import { JwtService } from '@nestjs/jwt';
 import { Logger } from '@nestjs/common';
 
 interface TelemetryPayload {
+  // STCC4 sensor data
   co2?: number;
   temperature?: number;
   humidity?: number;
   battery?: number;
+  // BME688/BSEC2 sensor data
+  iaq?: number;
+  iaqAccuracy?: number;
+  pressure?: number;
+  bme688Temperature?: number;
+  bme688Humidity?: number;
 }
 
 interface StatusPayload {

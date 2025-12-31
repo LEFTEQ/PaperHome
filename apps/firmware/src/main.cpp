@@ -1114,7 +1114,10 @@ void loop() {
                 sensorManager.getTemperature(),
                 sensorManager.getHumidity(),
                 powerManager.getBatteryPercent(),
-                powerManager.isCharging()
+                powerManager.isCharging(),
+                sensorManager.getIAQ(),
+                sensorManager.getIAQAccuracy(),
+                sensorManager.getPressure()
             );
         }
     }
@@ -1217,7 +1220,10 @@ void loop() {
                 sensorManager.getTemperature(),
                 sensorManager.getHumidity(),
                 powerManager.getBatteryPercent(),
-                powerManager.isCharging()
+                powerManager.isCharging(),
+                sensorManager.getIAQ(),
+                sensorManager.getIAQAccuracy(),
+                sensorManager.getPressure()
             );
         }
     }

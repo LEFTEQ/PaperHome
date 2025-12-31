@@ -131,7 +131,8 @@ bool MqttManager::isConnected() {
 }
 
 void MqttManager::publishTelemetry(float co2, float temperature, float humidity,
-                                    float batteryPercent, bool isCharging) {
+                                    float batteryPercent, bool isCharging,
+                                    uint16_t iaq, uint8_t iaqAccuracy, float pressure) {
     if (!isConnected()) return;
 
     JsonDocument doc;
@@ -140,14 +141,17 @@ void MqttManager::publishTelemetry(float co2, float temperature, float humidity,
     doc["humidity"] = humidity;
     doc["battery"] = batteryPercent;
     doc["charging"] = isCharging;
+    doc["iaq"] = iaq;
+    doc["iaqAccuracy"] = iaqAccuracy;
+    doc["pressure"] = pressure;
     doc["timestamp"] = millis();
 
     String payload;
     serializeJson(doc, payload);
 
     if (_mqttClient.publish(_topicTelemetry.c_str(), payload.c_str())) {
-        Serial.printf("[MQTT] Published telemetry: CO2=%.0f, T=%.1f, H=%.1f\n",
-                      co2, temperature, humidity);
+        Serial.printf("[MQTT] Published telemetry: CO2=%.0f, T=%.1f, H=%.1f, IAQ=%u, P=%.1f\n",
+                      co2, temperature, humidity, iaq, pressure);
     }
 }
 

@@ -53,7 +53,8 @@ public:
 
     // Publish telemetry data
     void publishTelemetry(float co2, float temperature, float humidity,
-                          float batteryPercent, bool isCharging);
+                          float batteryPercent, bool isCharging,
+                          uint16_t iaq = 0, uint8_t iaqAccuracy = 0, float pressure = 0);
 
     // Publish device status
     void publishStatus(bool online, const char* firmwareVersion);
