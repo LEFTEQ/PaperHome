@@ -309,8 +309,13 @@ void UIManager::updateRoomControlBrightness(const HueRoom& room) {
 void UIManager::renderSettings(
     int currentPage,
     SettingsAction selectedAction,
+    const TadoAuthInfo& tadoAuth,
     const String& bridgeIP,
-    bool wifiConnected
+    bool wifiConnected,
+    bool mqttConnected,
+    bool hueConnected,
+    bool tadoConnected,
+    bool tadoAuthenticating
 ) {
     logf("Rendering settings page %d", currentPage);
 
@@ -326,7 +331,7 @@ void UIManager::renderSettings(
         // Draw status bar
         drawStatusBar(wifiConnected, bridgeIP);
 
-        // Draw tab bar (always visible, showing all 3 tabs)
+        // Draw tab bar (always visible, showing all 4 tabs)
         drawSettingsTabBar(currentPage);
 
         // Draw content based on current page
@@ -479,6 +484,181 @@ void UIManager::drawActionItem(int y, SettingsAction action, bool isSelected) {
     display.setFont(&FreeMono9pt7b);
     display.setCursor(descX, y);
     display.print(getActionDescription(action));
+}
+
+void UIManager::drawSettingsTadoContent(
+    const TadoAuthInfo& tadoAuth,
+    bool tadoConnected,
+    bool tadoAuthenticating
+) {
+    DisplayType& display = displayManager.getDisplay();
+
+    // Draw tab bar at top
+    drawSettingsTabBar(3);
+
+    int centerX = displayManager.width() / 2;
+    int contentY = UI_STATUS_BAR_HEIGHT + 55;
+
+    display.setTextColor(GxEPD_BLACK);
+
+    // =========================================================================
+    // STATE 1: AUTHENTICATING - Show QR code and countdown
+    // =========================================================================
+    if (tadoAuthenticating && tadoAuth.verifyUrl.length() > 0) {
+        // Title
+        display.setFont(&FreeSansBold18pt7b);
+        drawCenteredText("Connect to Tado", contentY, &FreeSansBold18pt7b);
+
+        // QR Code (150x150px centered)
+        QRCode qrcode;
+        uint8_t qrcodeData[qrcode_getBufferSize(8)];
+        qrcode_initText(&qrcode, qrcodeData, 8, ECC_MEDIUM, tadoAuth.verifyUrl.c_str());
+
+        int qrSize = qrcode.size;
+        int scale = 3;  // 150px = ~50 modules * 3px
+        int qrPixelSize = qrSize * scale;
+        int qrX = centerX - qrPixelSize / 2;
+        int qrY = contentY + 20;
+
+        // White background with border for QR
+        display.fillRect(qrX - 8, qrY - 8, qrPixelSize + 16, qrPixelSize + 16, GxEPD_WHITE);
+        display.drawRect(qrX - 8, qrY - 8, qrPixelSize + 16, qrPixelSize + 16, GxEPD_BLACK);
+
+        // Draw QR code modules
+        for (int qy = 0; qy < qrSize; qy++) {
+            for (int qx = 0; qx < qrSize; qx++) {
+                if (qrcode_getModule(&qrcode, qx, qy)) {
+                    display.fillRect(qrX + qx * scale, qrY + qy * scale, scale, scale, GxEPD_BLACK);
+                }
+            }
+        }
+
+        // Instructions below QR
+        int textY = qrY + qrPixelSize + 25;
+
+        display.setFont(&FreeSans9pt7b);
+        drawCenteredText("Visit: login.tado.com/device", textY, &FreeSans9pt7b);
+
+        // User code (large, prominent)
+        textY += 35;
+        display.setFont(&FreeMonoBold18pt7b);
+        drawCenteredText(tadoAuth.userCode.c_str(), textY, &FreeMonoBold18pt7b);
+
+        // Countdown timer
+        textY += 40;
+        unsigned long now = millis();
+        int remaining = 0;
+        if (tadoAuth.expiresAt > now) {
+            remaining = (tadoAuth.expiresAt - now) / 1000;
+        }
+
+        display.setFont(&FreeSansBold12pt7b);
+        if (remaining > 0) {
+            char timerStr[32];
+            snprintf(timerStr, sizeof(timerStr), "Expires in %d:%02d", remaining / 60, remaining % 60);
+            drawCenteredText(timerStr, textY, &FreeSansBold12pt7b);
+        } else {
+            drawCenteredText("Code expired - Press A to retry", textY, &FreeSansBold12pt7b);
+        }
+
+        // Navigation bar
+        display.fillRect(0, displayManager.height() - UI_NAV_BAR_HEIGHT, displayManager.width(), UI_NAV_BAR_HEIGHT, GxEPD_WHITE);
+        display.drawFastHLine(0, displayManager.height() - UI_NAV_BAR_HEIGHT, displayManager.width(), GxEPD_BLACK);
+        display.setFont(&FreeSans9pt7b);
+        drawCenteredText("[A] Retry   [B] Cancel", displayManager.height() - 7, &FreeSans9pt7b);
+    }
+    // =========================================================================
+    // STATE 2: CONNECTED - Show status and disconnect option
+    // =========================================================================
+    else if (tadoConnected) {
+        // Large status indicator
+        int statusY = contentY + 20;
+
+        // Filled circle = connected
+        display.fillCircle(centerX - 80, statusY, 12, GxEPD_BLACK);
+
+        display.setFont(&FreeSansBold18pt7b);
+        display.setCursor(centerX - 55, statusY + 8);
+        display.print("Connected");
+
+        // Home name
+        int infoY = statusY + 60;
+        display.setFont(&FreeSansBold12pt7b);
+        display.setCursor(centerX - 150, infoY);
+        display.print("Home:");
+
+        display.setFont(&FreeSans9pt7b);
+        display.setCursor(centerX - 50, infoY);
+        String homeName = tadoManager.getHomeName();
+        if (homeName.length() > 0) {
+            display.print(homeName);
+        } else {
+            display.print("--");
+        }
+
+        // Room count
+        infoY += 35;
+        display.setFont(&FreeSansBold12pt7b);
+        display.setCursor(centerX - 150, infoY);
+        display.print("Rooms:");
+
+        display.setFont(&FreeSans9pt7b);
+        display.setCursor(centerX - 50, infoY);
+        display.printf("%d", tadoManager.getRoomCount());
+
+        // Disconnect instruction
+        infoY += 60;
+        display.setFont(&FreeSans9pt7b);
+        drawCenteredText("Press A to disconnect from Tado", infoY, &FreeSans9pt7b);
+
+        // Navigation bar
+        display.fillRect(0, displayManager.height() - UI_NAV_BAR_HEIGHT, displayManager.width(), UI_NAV_BAR_HEIGHT, GxEPD_WHITE);
+        display.drawFastHLine(0, displayManager.height() - UI_NAV_BAR_HEIGHT, displayManager.width(), GxEPD_BLACK);
+        display.setFont(&FreeSans9pt7b);
+        drawCenteredText("[< >] Tab   [A] Disconnect   [B] Back", displayManager.height() - 7, &FreeSans9pt7b);
+    }
+    // =========================================================================
+    // STATE 3: DISCONNECTED - Show connect option
+    // =========================================================================
+    else {
+        // Title
+        display.setFont(&FreeSansBold18pt7b);
+        drawCenteredText("Tado Connection", contentY, &FreeSansBold18pt7b);
+
+        // Status
+        int statusY = contentY + 60;
+
+        // Hollow circle = disconnected
+        display.drawCircle(centerX - 80, statusY, 12, GxEPD_BLACK);
+
+        display.setFont(&FreeSansBold12pt7b);
+        display.setCursor(centerX - 55, statusY + 5);
+        display.print("Not connected");
+
+        // Instructions
+        int instructY = statusY + 80;
+        display.setFont(&FreeSans9pt7b);
+        drawCenteredText("Connect to Tado to enable smart heating", instructY, &FreeSans9pt7b);
+        drawCenteredText("control through the web dashboard.", instructY + 25, &FreeSans9pt7b);
+
+        // Connect button area
+        int buttonY = instructY + 80;
+        int buttonW = 250;
+        int buttonH = 50;
+        int buttonX = centerX - buttonW / 2;
+
+        display.drawRect(buttonX, buttonY, buttonW, buttonH, GxEPD_BLACK);
+        display.drawRect(buttonX + 1, buttonY + 1, buttonW - 2, buttonH - 2, GxEPD_BLACK);
+
+        display.setFont(&FreeSansBold12pt7b);
+        drawCenteredText("Press A to Connect", buttonY + 32, &FreeSansBold12pt7b);
+
+        // Navigation bar
+        display.fillRect(0, displayManager.height() - UI_NAV_BAR_HEIGHT, displayManager.width(), UI_NAV_BAR_HEIGHT, GxEPD_WHITE);
+        display.drawFastHLine(0, displayManager.height() - UI_NAV_BAR_HEIGHT, displayManager.width(), GxEPD_BLACK);
+        display.setFont(&FreeSans9pt7b);
+        drawCenteredText("[< >] Tab   [A] Connect   [B] Back", displayManager.height() - 7, &FreeSans9pt7b);
+    }
 }
 
 bool UIManager::executeAction(SettingsAction action) {
@@ -651,7 +831,7 @@ void UIManager::drawSettingsTabBar(int activePage) {
 
     int tabY = UI_STATUS_BAR_HEIGHT + 8;
     int tabHeight = 26;
-    int tabWidth = 100;
+    int tabWidth = 140;       // Wider tabs for 3 tabs
     int tabSpacing = 8;
     int startX = 20;
 
@@ -1849,143 +2029,19 @@ void UIManager::drawMinMaxMarkers(int chartX, int chartY, int chartWidth, int ch
 // Tado Screen Methods
 // =============================================================================
 
-void UIManager::renderTadoAuth(
-    const TadoAuthInfo& authInfo,
-    const String& bridgeIP,
-    bool wifiConnected
-) {
-    log("Rendering Tado auth screen");
-
-    DisplayType& display = displayManager.getDisplay();
-    display.setRotation(DISPLAY_ROTATION);
-    display.setFullWindow();
-    display.firstPage();
-
-    do {
-        display.fillScreen(GxEPD_WHITE);
-        drawStatusBar(wifiConnected, bridgeIP);
-        drawTadoAuthContent(authInfo);
-    } while (display.nextPage());
-
-    _lastFullRefreshTime = millis();
-    _partialUpdateCount = 0;
-}
-
-void UIManager::drawTadoAuthContent(const TadoAuthInfo& authInfo) {
-    DisplayType& display = displayManager.getDisplay();
-
-    int centerX = displayManager.width() / 2;
-    int contentY = UI_STATUS_BAR_HEIGHT + 15;
-    display.setTextColor(GxEPD_BLACK);
-
-    // Title
-    display.setFont(&FreeSansBold12pt7b);
-    drawCenteredText("Tado Login", contentY + 25, &FreeSansBold12pt7b);
-
-    // Generate QR code from the full verification URL
-    QRCode qrcode;
-    uint8_t qrcodeData[qrcode_getBufferSize(8)];  // Version 8 for longer URLs (~200 chars)
-    qrcode_initText(&qrcode, qrcodeData, 8, ECC_MEDIUM, authInfo.verifyUrl.c_str());
-
-    // Draw QR code - centered
-    int qrSize = qrcode.size;  // Version 8 = 49 modules
-    int scale = 4;  // 49 × 4 = 196px (scannable size)
-    int qrPixelSize = qrSize * scale;
-    int qrX = centerX - qrPixelSize / 2;
-    int qrY = contentY + 50;
-
-    // White background with border
-    display.fillRect(qrX - 10, qrY - 10, qrPixelSize + 20, qrPixelSize + 20, GxEPD_WHITE);
-    display.drawRect(qrX - 10, qrY - 10, qrPixelSize + 20, qrPixelSize + 20, GxEPD_BLACK);
-
-    // Draw QR code modules
-    for (int qy = 0; qy < qrSize; qy++) {
-        for (int qx = 0; qx < qrSize; qx++) {
-            if (qrcode_getModule(&qrcode, qx, qy)) {
-                display.fillRect(qrX + qx * scale, qrY + qy * scale, scale, scale, GxEPD_BLACK);
-            }
-        }
-    }
-
-    // Show URL in two rows below QR
-    int urlY = qrY + qrPixelSize + 20;
-    display.setFont(&FreeSans9pt7b);
-    display.setTextColor(GxEPD_BLACK);
-
-    // Split URL at the query string
-    // Typical: https://login.tado.com/device?user_code=ABCD-1234
-    int splitPos = authInfo.verifyUrl.indexOf('?');
-    if (splitPos > 0) {
-        String line1 = authInfo.verifyUrl.substring(0, splitPos);
-        String line2 = authInfo.verifyUrl.substring(splitPos);
-        drawCenteredText(line1.c_str(), urlY, &FreeSans9pt7b);
-        drawCenteredText(line2.c_str(), urlY + 16, &FreeSans9pt7b);
-    } else {
-        // Fallback: just show full URL
-        drawCenteredText(authInfo.verifyUrl.c_str(), urlY, &FreeSans9pt7b);
-    }
-
-    // Instruction below URL
-    int textY = urlY + 42;
-    display.setFont(&FreeSansBold9pt7b);
-    drawCenteredText("Scan with your phone camera", textY, &FreeSansBold9pt7b);
-
-    // Divider line with "or"
-    textY += 30;
-    int lineWidth = 100;
-    display.drawFastHLine(centerX - lineWidth - 30, textY - 5, lineWidth, GxEPD_BLACK);
-    display.setFont(&FreeSans9pt7b);
-    int16_t x1, y1;
-    uint16_t w, h;
-    display.getTextBounds("or", 0, 0, &x1, &y1, &w, &h);
-    display.setCursor(centerX - w / 2, textY);
-    display.print("or");
-    display.drawFastHLine(centerX + 30, textY - 5, lineWidth, GxEPD_BLACK);
-
-    // Manual code instruction
-    textY += 25;
-    display.setFont(&FreeSans9pt7b);
-    drawCenteredText("Enter code at login.tado.com/device", textY, &FreeSans9pt7b);
-
-    // Large user code
-    textY += 40;
-    display.setFont(&FreeMonoBold18pt7b);
-    drawCenteredText(authInfo.userCode.c_str(), textY, &FreeMonoBold18pt7b);
-
-    // Status with countdown
-    textY += 50;
-    unsigned long now = millis();
-    int remaining = 0;
-    if (authInfo.expiresAt > now) {
-        remaining = (authInfo.expiresAt - now) / 1000;
-    }
-
-    char statusStr[64];
-    if (remaining > 0) {
-        snprintf(statusStr, sizeof(statusStr), "Expires in %d:%02d",
-                 remaining / 60, remaining % 60);
-    } else {
-        snprintf(statusStr, sizeof(statusStr), "Code expired - press A to retry");
-    }
-    display.setFont(&FreeSansBold9pt7b);
-    drawCenteredText(statusStr, textY, &FreeSansBold9pt7b);
-
-    // Navigation bar at bottom
-    display.fillRect(0, displayManager.height() - UI_NAV_BAR_HEIGHT, displayManager.width(), UI_NAV_BAR_HEIGHT, GxEPD_WHITE);
-    display.drawFastHLine(0, displayManager.height() - UI_NAV_BAR_HEIGHT, displayManager.width(), GxEPD_BLACK);
-    display.setFont(&FreeSans9pt7b);
-    drawCenteredText("[A] Retry   [B] Cancel", displayManager.height() - 7, &FreeSans9pt7b);
-}
-
 void UIManager::renderTadoDashboard(
     const std::vector<TadoRoom>& rooms,
-    int selectedRoom,
+    int selectedIndex,
+    const TadoAuthInfo& tadoAuth,
+    bool tadoConnected,
+    bool tadoAuthenticating,
     const String& bridgeIP,
     bool wifiConnected
 ) {
     log("Rendering Tado dashboard");
 
     DisplayType& display = displayManager.getDisplay();
+
     display.setRotation(DISPLAY_ROTATION);
     display.setFullWindow();
     display.firstPage();
@@ -1993,115 +2049,351 @@ void UIManager::renderTadoDashboard(
     do {
         display.fillScreen(GxEPD_WHITE);
         drawStatusBar(wifiConnected, bridgeIP);
-        drawTadoDashboardContent(rooms, selectedRoom);
+
+        if (tadoConnected && !rooms.empty()) {
+            // Show room list
+            drawTadoRoomsList(rooms, selectedIndex);
+        } else {
+            // Show auth screen (either authenticating or disconnected)
+            drawTadoAuthScreen(tadoAuth, tadoAuthenticating);
+        }
+
+        // Navigation hints bar at bottom
+        int navY = displayManager.height() - UI_NAV_BAR_HEIGHT + 16;
+        display.drawFastHLine(0, displayManager.height() - UI_NAV_BAR_HEIGHT, displayManager.width(), GxEPD_BLACK);
+        display.setFont(&FreeSans9pt7b);
+        display.setTextColor(GxEPD_BLACK);
+
+        if (tadoConnected && !rooms.empty()) {
+            drawCenteredText("[A] Select  [D-pad] Navigate  [LB/RB] Switch  [B] Back", navY, &FreeSans9pt7b);
+        } else if (tadoAuthenticating) {
+            drawCenteredText("[A] Retry  [B] Cancel  [LB/RB] Switch", navY, &FreeSans9pt7b);
+        } else {
+            drawCenteredText("[A] Connect  [LB/RB] Switch  [B] Back", navY, &FreeSans9pt7b);
+        }
+
     } while (display.nextPage());
 
     _lastFullRefreshTime = millis();
     _partialUpdateCount = 0;
 }
 
-void UIManager::drawTadoDashboardContent(const std::vector<TadoRoom>& rooms, int selectedRoom) {
+void UIManager::renderTadoRoomControl(
+    const TadoRoom& room,
+    const String& bridgeIP,
+    bool wifiConnected
+) {
+    logf("Rendering Tado room control: %s", room.name.c_str());
+
     DisplayType& display = displayManager.getDisplay();
 
-    // Calculate tile dimensions for 3x3 grid (same as Hue dashboard)
-    int contentStartY = UI_STATUS_BAR_HEIGHT;
-    int contentEndY = displayManager.height() - UI_NAV_BAR_HEIGHT;
-    int contentHeight = contentEndY - contentStartY;
-    int contentWidth = displayManager.width();
+    display.setRotation(DISPLAY_ROTATION);
+    display.setFullWindow();
+    display.firstPage();
 
-    int tileWidth = (contentWidth - (UI_TILE_COLS + 1) * UI_TILE_PADDING) / UI_TILE_COLS;
-    int tileHeight = (contentHeight - (UI_TILE_ROWS + 1) * UI_TILE_PADDING) / UI_TILE_ROWS;
+    do {
+        display.fillScreen(GxEPD_WHITE);
+        drawStatusBar(wifiConnected, bridgeIP);
+        drawTadoRoomControlContent(room);
+    } while (display.nextPage());
 
-    if (rooms.empty()) {
-        display.setFont(&FreeSansBold12pt7b);
-        drawCenteredText("No rooms found", displayManager.height() / 2, &FreeSansBold12pt7b);
-        display.setFont(&FreeSans9pt7b);
-        drawCenteredText("Connect to Tado first", displayManager.height() / 2 + 30, &FreeSans9pt7b);
-    } else {
-        // Draw room tiles in 3x3 grid
-        for (size_t i = 0; i < rooms.size() && i < (UI_TILE_COLS * UI_TILE_ROWS); i++) {
-            int col = i % UI_TILE_COLS;
-            int row = i / UI_TILE_COLS;
-            bool isSelected = ((int)i == selectedRoom);
-
-            int tileX = UI_TILE_PADDING + col * (tileWidth + UI_TILE_PADDING);
-            int tileY = contentStartY + UI_TILE_PADDING + row * (tileHeight + UI_TILE_PADDING);
-
-            drawTadoRoomTile(tileX, tileY, tileWidth, tileHeight, rooms[i], isSelected);
-        }
-    }
-
-    // Navigation bar at bottom
-    display.fillRect(0, displayManager.height() - UI_NAV_BAR_HEIGHT, displayManager.width(), UI_NAV_BAR_HEIGHT, GxEPD_WHITE);
-    display.drawFastHLine(0, displayManager.height() - UI_NAV_BAR_HEIGHT, displayManager.width(), GxEPD_BLACK);
-    display.setFont(&FreeSans9pt7b);
-    drawCenteredText("[D-pad] Select   [LT/RT] Temp   [A] Toggle   [B] Back", displayManager.height() - 7, &FreeSans9pt7b);
+    _lastFullRefreshTime = millis();
+    _partialUpdateCount = 0;
 }
 
-void UIManager::drawTadoRoomTile(int x, int y, int width, int height,
-                                  const TadoRoom& room, bool isSelected) {
+void UIManager::drawTadoAuthScreen(const TadoAuthInfo& tadoAuth, bool tadoAuthenticating) {
     DisplayType& display = displayManager.getDisplay();
 
-    // Tile border - thicker for selected
+    int centerX = displayManager.width() / 2;
+    int contentY = UI_STATUS_BAR_HEIGHT + 40;
+
+    display.setTextColor(GxEPD_BLACK);
+
+    // =========================================================================
+    // STATE 1: AUTHENTICATING - Show QR code and countdown
+    // =========================================================================
+    if (tadoAuthenticating && tadoAuth.verifyUrl.length() > 0) {
+        // Title
+        display.setFont(&FreeSansBold18pt7b);
+        drawCenteredText("Connect to Tado", contentY, &FreeSansBold18pt7b);
+
+        // QR Code (180x180px centered)
+        QRCode qrcode;
+        uint8_t qrcodeData[qrcode_getBufferSize(8)];
+        qrcode_initText(&qrcode, qrcodeData, 8, ECC_MEDIUM, tadoAuth.verifyUrl.c_str());
+
+        int qrSize = qrcode.size;
+        int scale = 4;  // Larger QR code for main screen
+        int qrPixelSize = qrSize * scale;
+        int qrX = centerX - qrPixelSize / 2;
+        int qrY = contentY + 25;
+
+        // White background with border for QR
+        display.fillRect(qrX - 10, qrY - 10, qrPixelSize + 20, qrPixelSize + 20, GxEPD_WHITE);
+        display.drawRect(qrX - 10, qrY - 10, qrPixelSize + 20, qrPixelSize + 20, GxEPD_BLACK);
+
+        // Draw QR code modules
+        for (int qy = 0; qy < qrSize; qy++) {
+            for (int qx = 0; qx < qrSize; qx++) {
+                if (qrcode_getModule(&qrcode, qx, qy)) {
+                    display.fillRect(qrX + qx * scale, qrY + qy * scale, scale, scale, GxEPD_BLACK);
+                }
+            }
+        }
+
+        // Instructions below QR
+        int textY = qrY + qrPixelSize + 30;
+
+        display.setFont(&FreeSans9pt7b);
+        drawCenteredText("Scan QR or visit:", textY, &FreeSans9pt7b);
+
+        textY += 25;
+        display.setFont(&FreeMonoBold12pt7b);
+        drawCenteredText("login.tado.com/device", textY, &FreeMonoBold12pt7b);
+
+        // User code (large, prominent)
+        textY += 45;
+        display.setFont(&FreeMonoBold24pt7b);
+        drawCenteredText(tadoAuth.userCode.c_str(), textY, &FreeMonoBold24pt7b);
+
+        // Countdown timer
+        textY += 45;
+        unsigned long now = millis();
+        int remaining = 0;
+        if (tadoAuth.expiresAt > now) {
+            remaining = (tadoAuth.expiresAt - now) / 1000;
+        }
+
+        display.setFont(&FreeSansBold12pt7b);
+        if (remaining > 0) {
+            char timerStr[32];
+            snprintf(timerStr, sizeof(timerStr), "Expires in %d:%02d", remaining / 60, remaining % 60);
+            drawCenteredText(timerStr, textY, &FreeSansBold12pt7b);
+        } else {
+            drawCenteredText("Code expired - Press A to retry", textY, &FreeSansBold12pt7b);
+        }
+    }
+    // =========================================================================
+    // STATE 2: DISCONNECTED - Show connect option
+    // =========================================================================
+    else {
+        // Large Tado logo placeholder / title
+        display.setFont(&FreeMonoBold24pt7b);
+        drawCenteredText("Tado", contentY + 40, &FreeMonoBold24pt7b);
+
+        // Status icon (hollow circle = disconnected)
+        int statusY = contentY + 100;
+        display.drawCircle(centerX, statusY, 30, GxEPD_BLACK);
+        display.drawCircle(centerX, statusY, 28, GxEPD_BLACK);
+
+        // Status text
+        display.setFont(&FreeSansBold12pt7b);
+        drawCenteredText("Not Connected", statusY + 55, &FreeSansBold12pt7b);
+
+        // Instructions
+        int instructY = statusY + 100;
+        display.setFont(&FreeSans9pt7b);
+        drawCenteredText("Connect to Tado to control your", instructY, &FreeSans9pt7b);
+        drawCenteredText("smart heating from this device.", instructY + 25, &FreeSans9pt7b);
+
+        // Connect button area
+        int buttonY = instructY + 70;
+        int buttonW = 280;
+        int buttonH = 55;
+        int buttonX = centerX - buttonW / 2;
+
+        display.drawRect(buttonX, buttonY, buttonW, buttonH, GxEPD_BLACK);
+        display.drawRect(buttonX + 1, buttonY + 1, buttonW - 2, buttonH - 2, GxEPD_BLACK);
+
+        display.setFont(&FreeSansBold12pt7b);
+        drawCenteredText("Press A to Connect", buttonY + 36, &FreeSansBold12pt7b);
+    }
+}
+
+void UIManager::drawTadoRoomsList(const std::vector<TadoRoom>& rooms, int selectedIndex) {
+    DisplayType& display = displayManager.getDisplay();
+
+    int contentY = UI_STATUS_BAR_HEIGHT + 10;
+    int availableHeight = displayManager.height() - UI_STATUS_BAR_HEIGHT - UI_NAV_BAR_HEIGHT - 20;
+
+    // Title bar
+    display.setFont(&FreeSansBold12pt7b);
+    display.setTextColor(GxEPD_BLACK);
+    display.setCursor(20, contentY + 20);
+    display.print("Tado Heating");
+
+    // Home name on right
+    display.setFont(&FreeSans9pt7b);
+    String homeName = tadoManager.getHomeName();
+    if (homeName.length() > 0) {
+        int16_t x1, y1;
+        uint16_t w, h;
+        display.getTextBounds(homeName.c_str(), 0, 0, &x1, &y1, &w, &h);
+        display.setCursor(displayManager.width() - w - 20, contentY + 20);
+        display.print(homeName);
+    }
+
+    // Calculate tile layout (2x2 grid for up to 4 rooms, or list for more)
+    int tileStartY = contentY + 40;
+    int tileHeight = (availableHeight - 50) / 2;
+    int tileWidth = (displayManager.width() - 40) / 2;
+    int padding = 8;
+
+    for (size_t i = 0; i < rooms.size() && i < 4; i++) {
+        int col = i % 2;
+        int row = i / 2;
+
+        int tileX = 15 + col * (tileWidth + padding);
+        int tileY = tileStartY + row * (tileHeight + padding);
+
+        drawTadoRoomTile(tileX, tileY, tileWidth, tileHeight, rooms[i], (int)i == selectedIndex);
+    }
+
+    // If more than 4 rooms, show indicator
+    if (rooms.size() > 4) {
+        display.setFont(&FreeSans9pt7b);
+        char moreStr[32];
+        snprintf(moreStr, sizeof(moreStr), "+%d more rooms", (int)(rooms.size() - 4));
+        drawCenteredText(moreStr, displayManager.height() - UI_NAV_BAR_HEIGHT - 10, &FreeSans9pt7b);
+    }
+}
+
+void UIManager::drawTadoRoomTile(int x, int y, int width, int height, const TadoRoom& room, bool isSelected) {
+    DisplayType& display = displayManager.getDisplay();
+
+    // Tile border
     if (isSelected) {
-        // 2px border for selection
-        display.drawRect(x, y, width, height, GxEPD_BLACK);
-        display.drawRect(x + 1, y + 1, width - 2, height - 2, GxEPD_BLACK);
+        for (int i = 0; i < UI_SELECTION_BORDER; i++) {
+            display.drawRect(x + i, y + i, width - 2*i, height - 2*i, GxEPD_BLACK);
+        }
     } else {
-        // 1px border
         display.drawRect(x, y, width, height, GxEPD_BLACK);
     }
 
-    int contentX = x + 8;
-    int contentWidth = width - 16;
-
-    // Room name at top
-    display.setFont(&FreeSansBold9pt7b);
     display.setTextColor(GxEPD_BLACK);
-    display.setCursor(contentX, y + 22);
 
-    // Truncate name if too long
-    char truncName[16];
-    strncpy(truncName, room.name.c_str(), 15);
-    truncName[15] = '\0';
-    display.print(truncName);
+    int padding = 12;
 
-    // Current temperature - large, centered
+    // Room name
+    display.setFont(&FreeSansBold9pt7b);
+    display.setCursor(x + padding, y + 22);
+    display.print(room.name);
+
+    // Heating indicator
+    if (room.heating) {
+        // Draw flame icon (simple filled triangle)
+        int flameX = x + width - 30;
+        int flameY = y + 15;
+        display.fillTriangle(flameX, flameY + 12, flameX + 8, flameY + 12, flameX + 4, flameY, GxEPD_BLACK);
+    }
+
+    // Current temperature (large)
     display.setFont(&FreeMonoBold18pt7b);
     char tempStr[16];
-    snprintf(tempStr, sizeof(tempStr), "%.1f" "\xB0", room.currentTemp);
-    int16_t tx1, ty1;
-    uint16_t tw, th;
-    display.getTextBounds(tempStr, 0, 0, &tx1, &ty1, &tw, &th);
-    display.setCursor(x + (width - tw) / 2, y + height / 2 + 5);
+    snprintf(tempStr, sizeof(tempStr), "%.1f\xB0", room.currentTemp);
+    display.setCursor(x + padding, y + height / 2 + 8);
     display.print(tempStr);
 
-    // Target temperature and status at bottom
-    display.setFont(&FreeMono9pt7b);
-    char statusStr[24];
-    if (room.heating && room.targetTemp > 0) {
-        snprintf(statusStr, sizeof(statusStr), "-> %.1f" "\xB0", room.targetTemp);
+    // Target temperature (right side)
+    display.setFont(&FreeSansBold9pt7b);
+    int targetY = y + height / 2 + 5;
+    display.setCursor(x + width - 80, targetY);
+    display.print("Target:");
+
+    display.setFont(&FreeMonoBold12pt7b);
+    if (room.targetTemp > 0) {
+        snprintf(tempStr, sizeof(tempStr), "%.1f\xB0", room.targetTemp);
     } else {
-        snprintf(statusStr, sizeof(statusStr), "OFF");
+        snprintf(tempStr, sizeof(tempStr), "OFF");
     }
-    display.getTextBounds(statusStr, 0, 0, &tx1, &ty1, &tw, &th);
-    display.setCursor(x + (width - tw) / 2, y + height - 20);
-    display.print(statusStr);
+    display.setCursor(x + width - 80, targetY + 22);
+    display.print(tempStr);
 
-    // Heating indicator - small flame in corner
-    if (room.heating) {
-        int flameX = x + width - 18;
-        int flameY = y + 10;
-        // Simple flame triangle
-        display.fillTriangle(flameX, flameY + 10, flameX + 8, flameY + 10,
-                            flameX + 4, flameY, GxEPD_BLACK);
-    }
-
-    // Manual override indicator in opposite corner
+    // Manual override indicator
     if (room.manualOverride) {
-        display.setFont(&FreeMono9pt7b);
-        display.setCursor(x + 6, y + height - 8);
-        display.print("M");
+        display.setFont(&FreeSans9pt7b);
+        display.setCursor(x + padding, y + height - 12);
+        display.print("Manual");
+    }
+}
+
+void UIManager::drawTadoRoomControlContent(const TadoRoom& room) {
+    DisplayType& display = displayManager.getDisplay();
+
+    int centerX = displayManager.width() / 2;
+    int contentY = _contentStartY + 20;
+
+    display.setTextColor(GxEPD_BLACK);
+
+    // Room name (large)
+    display.setFont(&FreeMonoBold24pt7b);
+    drawCenteredText(room.name.c_str(), contentY + 40, &FreeMonoBold24pt7b);
+
+    // Heating status
+    display.setFont(&FreeMonoBold12pt7b);
+    const char* statusText = room.heating ? "HEATING" : "IDLE";
+    drawCenteredText(statusText, contentY + 80, &FreeMonoBold12pt7b);
+
+    // Temperature gauge
+    int gaugeY = contentY + 180;
+    int gaugeRadius = 80;
+    drawTemperatureGauge(centerX, gaugeY, gaugeRadius, room.currentTemp, room.targetTemp, room.heating);
+
+    // Current temp below gauge
+    display.setFont(&FreeMonoBold24pt7b);
+    char tempStr[16];
+    snprintf(tempStr, sizeof(tempStr), "%.1f\xB0" "C", room.currentTemp);
+    drawCenteredText(tempStr, gaugeY + gaugeRadius + 45, &FreeMonoBold24pt7b);
+
+    // Target temp
+    display.setFont(&FreeSansBold12pt7b);
+    snprintf(tempStr, sizeof(tempStr), "Target: %.1f\xB0" "C", room.targetTemp);
+    drawCenteredText(tempStr, gaugeY + gaugeRadius + 80, &FreeSansBold12pt7b);
+
+    // Instructions at bottom
+    display.setFont(&FreeMonoBold9pt7b);
+    int instructionY = displayManager.height() - 70;
+    drawCenteredText("LT/RT: Adjust Temperature    A: Toggle    B: Back", instructionY, &FreeMonoBold9pt7b);
+}
+
+void UIManager::drawTemperatureGauge(int centerX, int centerY, int radius, float currentTemp, float targetTemp, bool isHeating) {
+    DisplayType& display = displayManager.getDisplay();
+
+    // Draw outer arc (simplified as circle)
+    display.drawCircle(centerX, centerY, radius, GxEPD_BLACK);
+    display.drawCircle(centerX, centerY, radius - 1, GxEPD_BLACK);
+
+    // Draw temperature range marks (5°C to 30°C, 180° arc)
+    for (int temp = 5; temp <= 30; temp += 5) {
+        float angle = ((temp - 5.0f) / 25.0f) * PI + PI / 2;  // 90° to 270°
+        int outerX = centerX + (int)((radius - 5) * cos(angle));
+        int outerY = centerY + (int)((radius - 5) * sin(angle));
+        int innerX = centerX + (int)((radius - 15) * cos(angle));
+        int innerY = centerY + (int)((radius - 15) * sin(angle));
+        display.drawLine(innerX, innerY, outerX, outerY, GxEPD_BLACK);
+    }
+
+    // Draw current temperature needle
+    float currentAngle = ((constrain(currentTemp, 5.0f, 30.0f) - 5.0f) / 25.0f) * PI + PI / 2;
+    int needleLen = radius - 25;
+    int needleX = centerX + (int)(needleLen * cos(currentAngle));
+    int needleY = centerY + (int)(needleLen * sin(currentAngle));
+    display.drawLine(centerX, centerY, needleX, needleY, GxEPD_BLACK);
+    display.drawLine(centerX - 1, centerY, needleX - 1, needleY, GxEPD_BLACK);
+    display.drawLine(centerX + 1, centerY, needleX + 1, needleY, GxEPD_BLACK);
+
+    // Draw target marker
+    if (targetTemp >= 5 && targetTemp <= 30) {
+        float targetAngle = ((targetTemp - 5.0f) / 25.0f) * PI + PI / 2;
+        int markerX = centerX + (int)((radius - 10) * cos(targetAngle));
+        int markerY = centerY + (int)((radius - 10) * sin(targetAngle));
+        display.fillCircle(markerX, markerY, 5, GxEPD_BLACK);
+    }
+
+    // Heating indicator in center
+    if (isHeating) {
+        // Draw small flame icon in center
+        display.fillTriangle(centerX - 8, centerY + 10, centerX + 8, centerY + 10, centerX, centerY - 10, GxEPD_BLACK);
     }
 }
 

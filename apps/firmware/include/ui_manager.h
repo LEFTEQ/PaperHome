@@ -18,15 +18,15 @@ enum class UIScreen {
     STARTUP,
     DISCOVERING,
     WAITING_FOR_BUTTON,
-    DASHBOARD,          // Room grid view
-    ROOM_CONTROL,       // Single room control view (after pressing A on a room)
-    SETTINGS,           // Settings page 1: General stats
-    SETTINGS_HOMEKIT,   // Settings page 2: HomeKit pairing QR code
-    SETTINGS_ACTIONS,   // Settings page 3: Actions (calibration, reset, etc.)
-    SENSOR_DASHBOARD,   // Sensor overview with 5 panels
-    SENSOR_DETAIL,      // Full chart for single metric
-    TADO_AUTH,          // Tado OAuth login screen
-    TADO_DASHBOARD,     // Tado rooms/thermostats view
+    DASHBOARD,              // Hue room grid view
+    ROOM_CONTROL,           // Single Hue room control view (after pressing A on a room)
+    SETTINGS,               // Settings page 0: General stats
+    SETTINGS_HOMEKIT,       // Settings page 1: HomeKit pairing QR code
+    SETTINGS_ACTIONS,       // Settings page 2: Actions (calibration, reset, etc.)
+    SENSOR_DASHBOARD,       // Sensor overview with 5 panels
+    SENSOR_DETAIL,          // Full chart for single metric
+    TADO_DASHBOARD,         // Tado main screen (auth or rooms)
+    TADO_ROOM_CONTROL,      // Single Tado room temperature control
     ERROR
 };
 
@@ -122,16 +122,26 @@ public:
 
     /**
      * Render settings screen with tab bar
-     * @param currentPage Current page index (0=General, 1=HomeKit, 2=Actions)
+     * @param currentPage Current page index (0=General, 1=HomeKit, 2=Actions, 3=Tado)
      * @param selectedAction Currently selected action (for Actions page)
+     * @param tadoAuth Tado auth info (for Tado page)
      * @param bridgeIP Hue Bridge IP address
      * @param wifiConnected WiFi connection status
+     * @param mqttConnected MQTT connection status
+     * @param hueConnected Hue connection status
+     * @param tadoConnected Tado connection status
+     * @param tadoAuthenticating Tado is in auth flow
      */
     void renderSettings(
         int currentPage,
         SettingsAction selectedAction,
+        const TadoAuthInfo& tadoAuth,
         const String& bridgeIP,
-        bool wifiConnected
+        bool wifiConnected,
+        bool mqttConnected,
+        bool hueConnected,
+        bool tadoConnected,
+        bool tadoAuthenticating
     );
 
     /**
@@ -165,36 +175,42 @@ public:
     );
 
     /**
-     * Render Tado auth screen with login URL and code
-     * @param authInfo Auth info with URL, code, expiry
-     * @param bridgeIP Hue Bridge IP address
-     * @param wifiConnected WiFi connection status
+     * Render error screen
+     * @param message Error message to display
      */
-    void renderTadoAuth(
-        const TadoAuthInfo& authInfo,
-        const String& bridgeIP,
-        bool wifiConnected
-    );
+    void renderError(const char* message);
 
     /**
-     * Render Tado dashboard with rooms and temperatures
-     * @param rooms Vector of Tado room data
-     * @param selectedRoom Currently selected room index
+     * Render Tado dashboard - shows auth screen or room list
+     * @param rooms Vector of Tado rooms (empty if not authenticated)
+     * @param selectedIndex Currently selected room index
+     * @param tadoAuth Auth info for pairing screen
+     * @param tadoConnected Whether Tado is authenticated
+     * @param tadoAuthenticating Whether auth flow is in progress
      * @param bridgeIP Hue Bridge IP address
      * @param wifiConnected WiFi connection status
      */
     void renderTadoDashboard(
         const std::vector<TadoRoom>& rooms,
-        int selectedRoom,
+        int selectedIndex,
+        const TadoAuthInfo& tadoAuth,
+        bool tadoConnected,
+        bool tadoAuthenticating,
         const String& bridgeIP,
         bool wifiConnected
     );
 
     /**
-     * Render error screen
-     * @param message Error message to display
+     * Render Tado room control for a specific room
+     * @param room The Tado room to control
+     * @param bridgeIP Hue Bridge IP address
+     * @param wifiConnected WiFi connection status
      */
-    void renderError(const char* message);
+    void renderTadoRoomControl(
+        const TadoRoom& room,
+        const String& bridgeIP,
+        bool wifiConnected
+    );
 
     // =========================================================================
     // Partial Refresh Methods
@@ -266,6 +282,11 @@ private:
     void drawSettingsGeneralContent(const String& bridgeIP, bool wifiConnected);
     void drawSettingsHomeKitContent();
     void drawSettingsActionsContent(SettingsAction selectedAction);
+    void drawSettingsTadoContent(
+        const TadoAuthInfo& tadoAuth,
+        bool tadoConnected,
+        bool tadoAuthenticating
+    );
     void drawActionItem(int y, SettingsAction action, bool isSelected);
     const char* getActionName(SettingsAction action);
     const char* getActionDescription(SettingsAction action);
@@ -291,10 +312,11 @@ private:
                            size_t minIdx, size_t maxIdx, size_t totalSamples);
 
     // Tado screen helpers
-    void drawTadoAuthContent(const TadoAuthInfo& authInfo);
-    void drawTadoDashboardContent(const std::vector<TadoRoom>& rooms, int selectedRoom);
-    void drawTadoRoomTile(int x, int y, int width, int height,
-                          const TadoRoom& room, bool isSelected);
+    void drawTadoAuthScreen(const TadoAuthInfo& tadoAuth, bool tadoAuthenticating);
+    void drawTadoRoomsList(const std::vector<TadoRoom>& rooms, int selectedIndex);
+    void drawTadoRoomTile(int x, int y, int width, int height, const TadoRoom& room, bool isSelected);
+    void drawTadoRoomControlContent(const TadoRoom& room);
+    void drawTemperatureGauge(int centerX, int centerY, int radius, float currentTemp, float targetTemp, bool isHeating);
 
     void log(const char* message);
     void logf(const char* format, ...);
