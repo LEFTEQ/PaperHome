@@ -20,12 +20,14 @@ import { GlassCard } from '@/components/ui/glass-card';
 import { HueWidget, HueRoom } from '@/components/widgets/hue-widget';
 import { TadoWidget, TadoRoom } from '@/components/widgets/tado-widget';
 import { SensorWidget, SensorStats } from '@/components/widgets/sensor-widget';
+import { EditableText } from '@/components/ui/editable-text';
 import { Button } from '@/components/ui/button';
 import { staggerContainer, fadeInUp } from '@/lib/animations';
 import { cn } from '@/lib/utils';
 import {
   useDevices,
   useClaimDevice,
+  useUpdateDevice,
   useHueRooms,
   useHueToggle,
   useHueBrightness,
@@ -34,6 +36,7 @@ import {
   useTelemetryAggregates,
   useLatestTelemetry,
   useRealtimeUpdates,
+  useDebouncedCallback,
 } from '@/hooks';
 
 // Transform API Hue data to widget format
@@ -131,6 +134,7 @@ export function DashboardPage() {
 
   // Mutations
   const claimMutation = useClaimDevice();
+  const updateDeviceMutation = useUpdateDevice();
   const hueToggleMutation = useHueToggle();
   const hueBrightnessMutation = useHueBrightness();
   const tadoTempMutation = useTadoSetTemperature();
@@ -263,15 +267,19 @@ export function DashboardPage() {
     });
   };
 
-  const handleBrightnessChange = (roomId: string, brightness: number) => {
-    if (!activeDevice?.deviceId) return;
-    hueBrightnessMutation.mutate({
-      deviceId: activeDevice.deviceId,
-      roomId,
-      brightness,
-      isOn: true, // Turn on when adjusting brightness
-    });
-  };
+  // Debounced brightness handler to avoid 503 errors from too many requests
+  const handleBrightnessChange = useDebouncedCallback(
+    (roomId: string, brightness: number) => {
+      if (!activeDevice?.deviceId) return;
+      hueBrightnessMutation.mutate({
+        deviceId: activeDevice.deviceId,
+        roomId,
+        brightness,
+        isOn: true, // Turn on when adjusting brightness
+      });
+    },
+    200
+  );
 
   const handleTadoTargetChange = (roomId: string, target: number) => {
     if (!activeDevice?.deviceId) return;
@@ -340,7 +348,7 @@ export function DashboardPage() {
       className="min-h-[calc(100vh-4rem)] py-8"
     >
       {/* Centered container */}
-      <div className="max-w-6xl mx-auto px-4 space-y-6">
+      <div className="max-w-6xl mx-auto space-y-6">
         {/* Device Tab Bar */}
         <motion.div variants={fadeInUp}>
           <DeviceTabBar
@@ -384,7 +392,21 @@ export function DashboardPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-white">
-                {activeDevice?.name || 'Device'}
+                {activeDeviceId ? (
+                  <EditableText
+                    value={activeDevice?.name || 'Device'}
+                    onSave={async (name) => {
+                      await updateDeviceMutation.mutateAsync({
+                        id: activeDeviceId,
+                        data: { name },
+                      });
+                    }}
+                    maxLength={100}
+                    placeholder="Device name"
+                  />
+                ) : (
+                  'Device'
+                )}
               </h1>
               <p className="text-sm text-text-muted font-mono">
                 {activeDevice?.deviceId || ''}

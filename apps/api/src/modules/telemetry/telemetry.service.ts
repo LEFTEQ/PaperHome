@@ -106,10 +106,13 @@ export class TelemetryService {
         AVG(co2) AS avg_co2,
         AVG(temperature) AS avg_temperature,
         AVG(humidity) AS avg_humidity,
+        AVG(battery) AS avg_battery,
         MIN(co2) AS min_co2,
         MAX(co2) AS max_co2,
         MIN(temperature) AS min_temperature,
         MAX(temperature) AS max_temperature,
+        MIN(battery) AS min_battery,
+        MAX(battery) AS max_battery,
         AVG(iaq) AS avg_iaq,
         MIN(iaq) AS min_iaq,
         MAX(iaq) AS max_iaq,
@@ -134,6 +137,7 @@ export class TelemetryService {
         ? parseFloat(row.avg_temperature)
         : null,
       avgHumidity: row.avg_humidity ? parseFloat(row.avg_humidity) : null,
+      avgBattery: row.avg_battery ? parseFloat(row.avg_battery) : null,
       minCo2: row.min_co2 ? parseFloat(row.min_co2) : null,
       maxCo2: row.max_co2 ? parseFloat(row.max_co2) : null,
       minTemperature: row.min_temperature
@@ -142,6 +146,8 @@ export class TelemetryService {
       maxTemperature: row.max_temperature
         ? parseFloat(row.max_temperature)
         : null,
+      minBattery: row.min_battery ? parseFloat(row.min_battery) : null,
+      maxBattery: row.max_battery ? parseFloat(row.max_battery) : null,
       // BME688 aggregates
       avgIaq: row.avg_iaq ? parseFloat(row.avg_iaq) : null,
       minIaq: row.min_iaq ? parseFloat(row.min_iaq) : null,

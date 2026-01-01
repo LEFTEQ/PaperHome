@@ -161,8 +161,29 @@ export function useHueToggle() {
       roomId: string;
       isOn: boolean;
     }) => hueApi.toggleRoom(deviceId, roomId, isOn),
-    onSuccess: (_, { deviceId }) => {
-      // Optimistic update will come via WebSocket, but invalidate to be safe
+    onMutate: async ({ deviceId, roomId, isOn }) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: queryKeys.hueRooms(deviceId) });
+
+      // Snapshot previous value
+      const previous = queryClient.getQueryData<HueRoom[]>(queryKeys.hueRooms(deviceId));
+
+      // Optimistic update
+      queryClient.setQueryData<HueRoom[]>(queryKeys.hueRooms(deviceId), (old) =>
+        old?.map((room) =>
+          room.roomId === roomId ? { ...room, isOn } : room
+        )
+      );
+
+      return { previous, deviceId };
+    },
+    onError: (_, __, context) => {
+      // Silent rollback
+      if (context?.previous) {
+        queryClient.setQueryData(queryKeys.hueRooms(context.deviceId), context.previous);
+      }
+    },
+    onSettled: (_, __, { deviceId }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.hueRooms(deviceId) });
     },
   });
@@ -183,7 +204,31 @@ export function useHueBrightness() {
       brightness: number;
       isOn?: boolean;
     }) => hueApi.setBrightness(deviceId, roomId, brightness, isOn),
-    onSuccess: (_, { deviceId }) => {
+    onMutate: async ({ deviceId, roomId, brightness, isOn }) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: queryKeys.hueRooms(deviceId) });
+
+      // Snapshot previous value
+      const previous = queryClient.getQueryData<HueRoom[]>(queryKeys.hueRooms(deviceId));
+
+      // Optimistic update
+      queryClient.setQueryData<HueRoom[]>(queryKeys.hueRooms(deviceId), (old) =>
+        old?.map((room) =>
+          room.roomId === roomId
+            ? { ...room, brightness, isOn: isOn ?? room.isOn }
+            : room
+        )
+      );
+
+      return { previous, deviceId };
+    },
+    onError: (_, __, context) => {
+      // Silent rollback
+      if (context?.previous) {
+        queryClient.setQueryData(queryKeys.hueRooms(context.deviceId), context.previous);
+      }
+    },
+    onSettled: (_, __, { deviceId }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.hueRooms(deviceId) });
     },
   });

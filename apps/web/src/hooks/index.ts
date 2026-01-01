@@ -46,3 +46,6 @@ export {
 
 // Real-time updates (WebSocket + React Query integration)
 export { useRealtimeUpdates, useDeviceSubscription as useDeviceRealtimeSubscription } from './use-realtime-updates';
+
+// Utility hooks
+export { useDebouncedCallback } from './use-debounce';
