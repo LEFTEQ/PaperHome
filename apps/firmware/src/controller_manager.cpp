@@ -1,39 +1,23 @@
 #include "controller_manager.h"
 #include "config.h"
-#include "power_manager.h"
 #include <stdarg.h>
 #include <XboxSeriesXHIDReportBuilder_asukiaaa.hpp>
-
-#if USE_FREERTOS_TASKS
-#include "freertos_tasks.h"
-#include "input_task.h"
-#endif
 
 // Global instance
 ControllerManager controllerManager;
 
+// =============================================================================
+// Constructor
+// =============================================================================
+
 ControllerManager::ControllerManager()
     : _state(ControllerState::DISCONNECTED)
-    , _lastButtonA(false)
-    , _lastButtonB(false)
-    , _lastButtonX(false)
-    , _lastButtonY(false)
-    , _lastButtonMenu(false)
-    , _lastBumperL(false)
-    , _lastBumperR(false)
-    , _lastDpadLeft(false)
-    , _lastDpadRight(false)
-    , _lastDpadUp(false)
-    , _lastDpadDown(false)
-    , _lastAxisX(0)
-    , _lastAxisY(0)
-    , _lastTriggerL(0)
-    , _lastTriggerR(0)
-    , _lastNavTime(0)
-    , _lastTriggerTime(0)
-    , _inputCallback(nullptr)
     , _stateCallback(nullptr) {
 }
+
+// =============================================================================
+// Initialization
+// =============================================================================
 
 void ControllerManager::init() {
     log("Initializing Controller Manager...");
@@ -42,9 +26,15 @@ void ControllerManager::init() {
     log("BLE scanning started - press Xbox button on controller to pair");
 }
 
-void ControllerManager::update() {
-    _controller.onLoop();  // Maintain BLE connection
+// =============================================================================
+// Main Update Loop
+// =============================================================================
 
+void ControllerManager::update() {
+    // Maintain BLE connection
+    _controller.onLoop();
+
+    // Update connection state
     if (_controller.isConnected()) {
         if (_state != ControllerState::ACTIVE &&
             !_controller.isWaitingForFirstNotification()) {
@@ -53,10 +43,6 @@ void ControllerManager::update() {
                    _state == ControllerState::SCANNING) {
             setState(ControllerState::CONNECTED);
         }
-
-        if (_state == ControllerState::ACTIVE) {
-            processInput();
-        }
     } else {
         if (_state != ControllerState::DISCONNECTED &&
             _state != ControllerState::SCANNING) {
@@ -64,239 +50,17 @@ void ControllerManager::update() {
             log("Controller disconnected, scanning...");
         }
     }
+
+    // Note: Input processing is now handled by InputHandler
+    // This update() only maintains BLE connection and state
 }
+
+// =============================================================================
+// Connection Status
+// =============================================================================
 
 bool ControllerManager::isConnected() const {
     return _state == ControllerState::CONNECTED || _state == ControllerState::ACTIVE;
-}
-
-void ControllerManager::processInput() {
-    // Wake from idle before processing any input (boost CPU if needed)
-    powerManager.wakeFromIdle();
-
-    unsigned long now = millis();
-
-    // Read analog stick values
-    // Library returns uint16_t (0-65535), center is ~32768
-    int16_t axisX = (int16_t)_controller.xboxNotif.joyLHori - 32768;
-    int16_t axisY = (int16_t)_controller.xboxNotif.joyLVert - 32768;
-
-    // Read triggers (0-1023)
-    uint16_t triggerL = _controller.xboxNotif.trigLT;
-    uint16_t triggerR = _controller.xboxNotif.trigRT;
-
-    // Read D-pad
-    bool dpadLeft = _controller.xboxNotif.btnDirLeft;
-    bool dpadRight = _controller.xboxNotif.btnDirRight;
-    bool dpadUp = _controller.xboxNotif.btnDirUp;
-    bool dpadDown = _controller.xboxNotif.btnDirDown;
-
-    // Button A - Accept (edge detection)
-    bool buttonA = _controller.xboxNotif.btnA;
-    if (buttonA && !_lastButtonA) {
-        log("Button A pressed (Accept)");
-        vibrateShort();
-#if USE_FREERTOS_TASKS
-        InputTaskManager::handleButtonA();
-#else
-        if (_inputCallback) {
-            _inputCallback(ControllerInput::BUTTON_A, 0);
-        }
-#endif
-    }
-    _lastButtonA = buttonA;
-
-    // Button B - Back (edge detection)
-    bool buttonB = _controller.xboxNotif.btnB;
-    if (buttonB && !_lastButtonB) {
-        log("Button B pressed (Back)");
-        vibrateShort();
-#if USE_FREERTOS_TASKS
-        InputTaskManager::handleButtonB();
-#else
-        if (_inputCallback) {
-            _inputCallback(ControllerInput::BUTTON_B, 0);
-        }
-#endif
-    }
-    _lastButtonB = buttonB;
-
-    // Button X - Tado screen (edge detection)
-    bool buttonX = _controller.xboxNotif.btnX;
-    if (buttonX && !_lastButtonX) {
-        log("Button X pressed (Tado)");
-        vibrateShort();
-#if USE_FREERTOS_TASKS
-        InputTaskManager::handleButtonX();
-#else
-        if (_inputCallback) {
-            _inputCallback(ControllerInput::BUTTON_X, 0);
-        }
-#endif
-    }
-    _lastButtonX = buttonX;
-
-    // Button Y - Sensor screen (edge detection)
-    bool buttonY = _controller.xboxNotif.btnY;
-    if (buttonY && !_lastButtonY) {
-        log("Button Y pressed (Sensor)");
-        vibrateShort();
-#if USE_FREERTOS_TASKS
-        InputTaskManager::handleButtonY();
-#else
-        if (_inputCallback) {
-            _inputCallback(ControllerInput::BUTTON_Y, 0);
-        }
-#endif
-    }
-    _lastButtonY = buttonY;
-
-    // Menu button - Settings (edge detection)
-    bool buttonMenu = _controller.xboxNotif.btnStart;
-    if (buttonMenu && !_lastButtonMenu) {
-        log("Menu button pressed (Settings)");
-        vibrateShort();
-#if USE_FREERTOS_TASKS
-        InputTaskManager::handleButtonMenu();
-#else
-        if (_inputCallback) {
-            _inputCallback(ControllerInput::BUTTON_MENU, 0);
-        }
-#endif
-    }
-    _lastButtonMenu = buttonMenu;
-
-    // Left bumper - Previous screen (edge detection)
-    bool bumperL = _controller.xboxNotif.btnLB;
-    if (bumperL && !_lastBumperL) {
-        log("Left bumper pressed (Previous screen)");
-        vibrateShort();
-#if USE_FREERTOS_TASKS
-        InputTaskManager::handleBumper(ControllerInput::BUMPER_LEFT);
-#else
-        if (_inputCallback) {
-            _inputCallback(ControllerInput::BUMPER_LEFT, 0);
-        }
-#endif
-    }
-    _lastBumperL = bumperL;
-
-    // Right bumper - Next screen (edge detection)
-    bool bumperR = _controller.xboxNotif.btnRB;
-    if (bumperR && !_lastBumperR) {
-        log("Right bumper pressed (Next screen)");
-        vibrateShort();
-#if USE_FREERTOS_TASKS
-        InputTaskManager::handleBumper(ControllerInput::BUMPER_RIGHT);
-#else
-        if (_inputCallback) {
-            _inputCallback(ControllerInput::BUMPER_RIGHT, 0);
-        }
-#endif
-    }
-    _lastBumperR = bumperR;
-
-    // Navigation with debouncing (left stick + D-pad)
-    if (now - _lastNavTime > NAV_DEBOUNCE_MS) {
-        // Left navigation (stick or D-pad)
-        bool navLeft = (axisX < -STICK_NAV_THRESHOLD) || dpadLeft;
-        bool wasNavLeft = (_lastAxisX < -STICK_NAV_THRESHOLD) || _lastDpadLeft;
-        if (navLeft && !wasNavLeft) {
-            log("Navigation: LEFT");
-            vibrateTick();
-#if USE_FREERTOS_TASKS
-            InputTaskManager::handleNavigation(ControllerInput::NAV_LEFT);
-#else
-            if (_inputCallback) {
-                _inputCallback(ControllerInput::NAV_LEFT, 0);
-            }
-#endif
-            _lastNavTime = now;
-        }
-
-        // Right navigation (stick or D-pad)
-        bool navRight = (axisX > STICK_NAV_THRESHOLD) || dpadRight;
-        bool wasNavRight = (_lastAxisX > STICK_NAV_THRESHOLD) || _lastDpadRight;
-        if (navRight && !wasNavRight) {
-            log("Navigation: RIGHT");
-            vibrateTick();
-#if USE_FREERTOS_TASKS
-            InputTaskManager::handleNavigation(ControllerInput::NAV_RIGHT);
-#else
-            if (_inputCallback) {
-                _inputCallback(ControllerInput::NAV_RIGHT, 0);
-            }
-#endif
-            _lastNavTime = now;
-        }
-
-        // Up navigation (stick or D-pad)
-        bool navUp = (axisY < -STICK_NAV_THRESHOLD) || dpadUp;
-        bool wasNavUp = (_lastAxisY < -STICK_NAV_THRESHOLD) || _lastDpadUp;
-        if (navUp && !wasNavUp) {
-            log("Navigation: UP");
-            vibrateTick();
-#if USE_FREERTOS_TASKS
-            InputTaskManager::handleNavigation(ControllerInput::NAV_UP);
-#else
-            if (_inputCallback) {
-                _inputCallback(ControllerInput::NAV_UP, 0);
-            }
-#endif
-            _lastNavTime = now;
-        }
-
-        // Down navigation (stick or D-pad)
-        bool navDown = (axisY > STICK_NAV_THRESHOLD) || dpadDown;
-        bool wasNavDown = (_lastAxisY > STICK_NAV_THRESHOLD) || _lastDpadDown;
-        if (navDown && !wasNavDown) {
-            log("Navigation: DOWN");
-            vibrateTick();
-#if USE_FREERTOS_TASKS
-            InputTaskManager::handleNavigation(ControllerInput::NAV_DOWN);
-#else
-            if (_inputCallback) {
-                _inputCallback(ControllerInput::NAV_DOWN, 0);
-            }
-#endif
-            _lastNavTime = now;
-        }
-    }
-
-    // Update last values for stick and D-pad
-    _lastAxisX = axisX;
-    _lastAxisY = axisY;
-    _lastDpadLeft = dpadLeft;
-    _lastDpadRight = dpadRight;
-    _lastDpadUp = dpadUp;
-    _lastDpadDown = dpadDown;
-
-    // Triggers for brightness control (continuous while held)
-    if (now - _lastTriggerTime > TRIGGER_DEBOUNCE_MS) {
-        // Right trigger - increase brightness
-        if (triggerR > TRIGGER_THRESHOLD) {
-            // Map trigger value to intensity (0-1023 -> 5-30)
-            int16_t intensity = map(triggerR, TRIGGER_THRESHOLD, 1023, 5, 30);
-            logf("Trigger R (brightness +%d)", intensity);
-            if (_inputCallback) {
-                _inputCallback(ControllerInput::TRIGGER_RIGHT, intensity);
-            }
-            _lastTriggerTime = now;
-        }
-
-        // Left trigger - decrease brightness
-        if (triggerL > TRIGGER_THRESHOLD) {
-            int16_t intensity = map(triggerL, TRIGGER_THRESHOLD, 1023, 5, 30);
-            logf("Trigger L (brightness -%d)", intensity);
-            if (_inputCallback) {
-                _inputCallback(ControllerInput::TRIGGER_LEFT, intensity);
-            }
-            _lastTriggerTime = now;
-        }
-    }
-
-    _lastTriggerL = triggerL;
-    _lastTriggerR = triggerR;
 }
 
 void ControllerManager::setState(ControllerState state) {
@@ -307,12 +71,16 @@ void ControllerManager::setState(ControllerState state) {
     const char* stateNames[] = {
         "DISCONNECTED", "SCANNING", "CONNECTED", "ACTIVE"
     };
-    logf("State: %s", stateNames[(int)state]);
+    logf("State: %s", stateNames[static_cast<int>(state)]);
 
     if (_stateCallback) {
         _stateCallback(state);
     }
 }
+
+// =============================================================================
+// Haptic Feedback
+// =============================================================================
 
 void ControllerManager::vibrateTick() {
     if (_state != ControllerState::ACTIVE) return;
@@ -364,6 +132,10 @@ void ControllerManager::vibrateLong() {
     _controller.writeHIDReport(report);
     log("Vibrate: long rumble");
 }
+
+// =============================================================================
+// Logging
+// =============================================================================
 
 void ControllerManager::log(const char* message) {
 #if DEBUG_CONTROLLER

@@ -147,20 +147,37 @@ void TadoManager::logout() {
 }
 
 bool TadoManager::requestDeviceCode() {
+    log("=== Starting OAuth device code request ===");
+    logf("WiFi status: %d (3=connected)", WiFi.status());
+    logf("WiFi IP: %s", WiFi.localIP().toString().c_str());
+
     String body = "client_id=" + String(TADO_CLIENT_ID) + "&scope=offline_access";
+    logf("Request body: %s", body.c_str());
+    logf("Target URL: %s", TADO_AUTH_URL);
+
     String response;
-
-    logf("Requesting device code from %s", TADO_AUTH_URL);
-
     if (!httpsPost(TADO_AUTH_URL, body, response)) {
-        log("Failed to request device code");
+        log("Failed to request device code - HTTPS POST failed");
+        if (response.length() > 0) {
+            logf("Response was: %s", response.substring(0, 300).c_str());
+        }
         return false;
     }
+
+    logf("Response received (%d bytes): %s", response.length(), response.substring(0, 300).c_str());
 
     JsonDocument doc;
     DeserializationError error = deserializeJson(doc, response);
     if (error) {
         logf("JSON parse error: %s", error.c_str());
+        return false;
+    }
+
+    // Check if response contains an error
+    if (doc.containsKey("error")) {
+        logf("OAuth error: %s - %s",
+             doc["error"].as<const char*>(),
+             doc["error_description"] | "no description");
         return false;
     }
 
@@ -175,13 +192,24 @@ bool TadoManager::requestDeviceCode() {
         _authPollInterval = TADO_AUTH_POLL_MS;
     }
 
-    logf("Device code received. User code: %s", _authInfo.userCode.c_str());
+    // Validate we got the required fields
+    if (_deviceCode.isEmpty() || _authInfo.userCode.isEmpty()) {
+        log("Missing device_code or user_code in response");
+        return false;
+    }
+
+    log("=== Device code received successfully ===");
+    logf("User code: %s", _authInfo.userCode.c_str());
     logf("Verify URL: %s", _authInfo.verifyUrl.c_str());
     logf("Expires in %d seconds", _authInfo.expiresIn);
+    logf("Poll interval: %lu ms", _authPollInterval);
 
     // Notify UI to show auth screen
     if (_authCallback) {
+        log("Calling auth callback to update UI");
         _authCallback(_authInfo);
+    } else {
+        log("WARNING: No auth callback registered!");
     }
 
     return true;
@@ -294,7 +322,8 @@ bool TadoManager::fetchHomeId() {
     JsonArray homes = doc["homes"].as<JsonArray>();
     if (homes.size() > 0) {
         _homeId = homes[0]["id"].as<int>();
-        logf("Home ID: %d", _homeId);
+        _homeName = homes[0]["name"].as<String>();
+        logf("Home ID: %d, Name: %s", _homeId, _homeName.c_str());
 
         // Save home ID
         _prefs.begin(TADO_NVS_NAMESPACE, false);
@@ -536,11 +565,25 @@ bool TadoManager::httpsGet(const String& url, String& response) {
 }
 
 bool TadoManager::httpsPost(const String& url, const String& body, String& response, const char* contentType) {
+    // Check WiFi connection first
+    if (WiFi.status() != WL_CONNECTED) {
+        log("WiFi not connected - cannot make HTTPS request");
+        return false;
+    }
+
+    logf("POST request to: %s", url.c_str());
+    logf("Free heap: %d, largest block: %d", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+
     WiFiClientSecure client;
     client.setInsecure();
+    client.setTimeout(10);  // 10 second connection timeout
 
     HTTPClient https;
-    https.begin(client, url);
+    if (!https.begin(client, url)) {
+        log("Failed to begin HTTPS connection");
+        return false;
+    }
+
     https.setTimeout(TADO_REQUEST_TIMEOUT_MS);
     https.addHeader("Content-Type", contentType);
 
@@ -550,20 +593,30 @@ bool TadoManager::httpsPost(const String& url, const String& body, String& respo
 
     int httpCode = https.POST(body);
 
+    // Handle connection errors (negative codes)
+    if (httpCode < 0) {
+        logf("Connection failed: %d (%s)", httpCode, https.errorToString(httpCode).c_str());
+        https.end();
+        return false;
+    }
+
     response = https.getString();
     https.end();
 
-    if (httpCode == HTTP_CODE_OK || httpCode == 201) {
+    // Success codes
+    if (httpCode >= 200 && httpCode < 300) {
+        logf("POST success: HTTP %d", httpCode);
         return true;
     }
 
-    // For token endpoint, 400 might contain useful error info
+    // 400 may contain valid OAuth error responses (authorization_pending, etc.)
     if (httpCode == 400) {
-        // Parse error from response
+        logf("POST returned 400 (may contain OAuth error): %s", response.substring(0, 200).c_str());
         return true;  // Let caller handle the error in response
     }
 
-    logf("HTTPS POST failed: %d", httpCode);
+    logf("HTTPS POST failed: HTTP %d", httpCode);
+    logf("Response: %s", response.substring(0, 200).c_str());
     return false;
 }
 

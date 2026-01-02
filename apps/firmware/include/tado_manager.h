@@ -93,6 +93,16 @@ public:
     const std::vector<TadoRoom>& getRooms() const { return _rooms; }
 
     /**
+     * Get home name.
+     */
+    const String& getHomeName() const { return _homeName; }
+
+    /**
+     * Get number of rooms.
+     */
+    size_t getRoomCount() const { return _rooms.size(); }
+
+    /**
      * Set room temperature (manual override).
      * @param roomId Room ID
      * @param temp Target temperature in Celsius
@@ -134,6 +144,7 @@ private:
     String _refreshToken;
     String _deviceCode;
     int _homeId;
+    String _homeName;
 
     // Timing
     unsigned long _lastPollTime;
