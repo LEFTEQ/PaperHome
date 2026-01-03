@@ -1,0 +1,425 @@
+#include "ui/navigation.h"
+#include "core/config.h"
+#include <stdarg.h>
+
+namespace paperhome {
+
+const char* getScreenName(Screen screen) {
+    switch (screen) {
+        case Screen::MAIN:          return "MAIN";
+        case Screen::SETTINGS:      return "SETTINGS";
+        case Screen::HUE_DISCOVERY: return "HUE_DISCOVERY";
+        case Screen::HUE_PAIRING:   return "HUE_PAIRING";
+        case Screen::TADO_AUTH:     return "TADO_AUTH";
+        case Screen::ERROR:         return "ERROR";
+        default:                    return "UNKNOWN";
+    }
+}
+
+Navigation::Navigation() {
+    // Initialize handlers to nullptr
+    for (auto& h : _pageHandlers) h = nullptr;
+    for (auto& h : _screenHandlers) h = nullptr;
+}
+
+void Navigation::init() {
+    log("Initializing navigation");
+    _state.mainPage = MainPage::HUE;
+    _state.screen = Screen::MAIN;
+    _state.selectionIndex = 0;
+    _state.selectionRow = 0;
+    _state.selectionCol = 0;
+    _pageDirty = true;
+}
+
+InputResult Navigation::handleInput(const InputAction& action) {
+    if (action.event == InputEvent::NONE) {
+        return InputResult::NONE;
+    }
+
+    // Global navigation (works in main view)
+    if (_state.screen == Screen::MAIN) {
+        // LB - Previous page
+        if (action.event == InputEvent::BUMPER_LEFT) {
+            prevPage();
+            return InputResult::PAGE_CHANGED;
+        }
+
+        // RB - Next page
+        if (action.event == InputEvent::BUMPER_RIGHT) {
+            nextPage();
+            return InputResult::PAGE_CHANGED;
+        }
+
+        // Menu - Open settings
+        if (action.event == InputEvent::BUTTON_MENU) {
+            openSettings();
+            return InputResult::NAVIGATE;
+        }
+
+        // Route to page handler
+        auto pageIndex = static_cast<size_t>(_state.mainPage);
+        if (_pageHandlers[pageIndex]) {
+            return _pageHandlers[pageIndex](action, _state);
+        }
+
+        // Default page handling
+        switch (_state.mainPage) {
+            case MainPage::HUE:
+                return handleHuePage(action, _state);
+            case MainPage::TADO:
+                return handleTadoPage(action, _state);
+            case MainPage::SENSORS:
+                return handleSensorsPage(action, _state);
+            default:
+                break;
+        }
+    } else {
+        // In overlay screen
+        // B - Close overlay (go back)
+        if (action.event == InputEvent::BUTTON_B) {
+            closeOverlay();
+            return InputResult::NAVIGATE;
+        }
+
+        // Route to screen handler
+        auto screenIndex = static_cast<size_t>(_state.screen);
+        if (screenIndex < _screenHandlers.size() && _screenHandlers[screenIndex]) {
+            return _screenHandlers[screenIndex](action, _state);
+        }
+
+        // Default settings handling
+        if (_state.screen == Screen::SETTINGS) {
+            return handleSettings(action, _state);
+        }
+    }
+
+    return InputResult::NONE;
+}
+
+void Navigation::goToPage(MainPage page) {
+    if (_state.mainPage != page) {
+        logf("Page: %s -> %s", getMainPageName(_state.mainPage), getMainPageName(page));
+        _state.mainPage = page;
+        _state.selectionIndex = 0;
+        _state.selectionRow = 0;
+        _state.selectionCol = 0;
+        _pageDirty = true;
+    }
+}
+
+void Navigation::nextPage() {
+    int next = (static_cast<int>(_state.mainPage) + 1) % static_cast<int>(MainPage::COUNT);
+    goToPage(static_cast<MainPage>(next));
+}
+
+void Navigation::prevPage() {
+    int prev = static_cast<int>(_state.mainPage) - 1;
+    if (prev < 0) prev = static_cast<int>(MainPage::COUNT) - 1;
+    goToPage(static_cast<MainPage>(prev));
+}
+
+void Navigation::openSettings() {
+    log("Opening settings");
+    _state.screen = Screen::SETTINGS;
+    _state.data.settings.page = 0;
+    _state.data.settings.itemIndex = 0;
+    _screenDirty = true;
+}
+
+void Navigation::closeOverlay() {
+    log("Closing overlay");
+    _state.screen = Screen::MAIN;
+    _screenDirty = true;
+}
+
+void Navigation::openHueDiscovery() {
+    log("Opening Hue discovery");
+    _state.screen = Screen::HUE_DISCOVERY;
+    _screenDirty = true;
+}
+
+void Navigation::openHuePairing() {
+    log("Opening Hue pairing");
+    _state.screen = Screen::HUE_PAIRING;
+    _screenDirty = true;
+}
+
+void Navigation::openTadoAuth() {
+    log("Opening Tado auth");
+    _state.screen = Screen::TADO_AUTH;
+    _screenDirty = true;
+}
+
+void Navigation::showError(const char* message) {
+    logf("Showing error: %s", message);
+    _state.screen = Screen::ERROR;
+    _screenDirty = true;
+}
+
+bool Navigation::hasPageChanged() {
+    bool changed = _pageDirty;
+    _pageDirty = false;
+    return changed;
+}
+
+bool Navigation::hasSelectionChanged() {
+    bool changed = _selectionDirty;
+    _selectionDirty = false;
+    return changed;
+}
+
+bool Navigation::hasScreenChanged() {
+    bool changed = _screenDirty;
+    _screenDirty = false;
+    return changed;
+}
+
+void Navigation::setPageHandler(MainPage page, PageInputHandler handler) {
+    auto index = static_cast<size_t>(page);
+    if (index < _pageHandlers.size()) {
+        _pageHandlers[index] = handler;
+    }
+}
+
+void Navigation::setScreenHandler(Screen screen, PageInputHandler handler) {
+    auto index = static_cast<size_t>(screen);
+    if (index < _screenHandlers.size()) {
+        _screenHandlers[index] = handler;
+    }
+}
+
+// Default Hue page handler
+InputResult Navigation::handleHuePage(const InputAction& action, NavState& state) {
+    const uint8_t cols = 3;  // 3 columns of rooms
+    const uint8_t rows = 2;  // 2 rows
+
+    switch (action.event) {
+        case InputEvent::NAV_UP:
+            if (state.selectionRow > 0) {
+                state.selectionRow--;
+                state.selectionIndex = state.selectionRow * cols + state.selectionCol;
+                _selectionDirty = true;
+                return InputResult::HANDLED;
+            }
+            break;
+
+        case InputEvent::NAV_DOWN:
+            if (state.selectionRow < rows - 1) {
+                // Check if there's a room at the new position
+                int newIndex = (state.selectionRow + 1) * cols + state.selectionCol;
+                if (newIndex < _hueRoomCount || _hueRoomCount == 0) {
+                    state.selectionRow++;
+                    state.selectionIndex = newIndex;
+                    _selectionDirty = true;
+                    return InputResult::HANDLED;
+                }
+            }
+            break;
+
+        case InputEvent::NAV_LEFT:
+            if (state.selectionCol > 0) {
+                state.selectionCol--;
+                state.selectionIndex = state.selectionRow * cols + state.selectionCol;
+                _selectionDirty = true;
+                return InputResult::HANDLED;
+            }
+            break;
+
+        case InputEvent::NAV_RIGHT:
+            if (state.selectionCol < cols - 1) {
+                int newIndex = state.selectionRow * cols + state.selectionCol + 1;
+                if (newIndex < _hueRoomCount || _hueRoomCount == 0) {
+                    state.selectionCol++;
+                    state.selectionIndex = newIndex;
+                    _selectionDirty = true;
+                    return InputResult::HANDLED;
+                }
+            }
+            break;
+
+        case InputEvent::BUTTON_A:
+            // Toggle room - action will be handled by caller
+            return InputResult::ACTION;
+
+        case InputEvent::TRIGGER_LEFT:
+        case InputEvent::TRIGGER_RIGHT:
+            // Brightness adjustment - action will be handled by caller
+            return InputResult::ACTION;
+
+        default:
+            break;
+    }
+
+    return InputResult::NONE;
+}
+
+// Default Tado page handler
+InputResult Navigation::handleTadoPage(const InputAction& action, NavState& state) {
+    const uint8_t cols = 2;  // 2 columns of zones
+    const uint8_t rows = 2;  // 2 rows
+
+    switch (action.event) {
+        case InputEvent::NAV_UP:
+            if (state.selectionRow > 0) {
+                state.selectionRow--;
+                state.selectionIndex = state.selectionRow * cols + state.selectionCol;
+                _selectionDirty = true;
+                return InputResult::HANDLED;
+            }
+            break;
+
+        case InputEvent::NAV_DOWN:
+            if (state.selectionRow < rows - 1) {
+                int newIndex = (state.selectionRow + 1) * cols + state.selectionCol;
+                if (newIndex < _tadoZoneCount || _tadoZoneCount == 0) {
+                    state.selectionRow++;
+                    state.selectionIndex = newIndex;
+                    _selectionDirty = true;
+                    return InputResult::HANDLED;
+                }
+            }
+            break;
+
+        case InputEvent::NAV_LEFT:
+            if (state.selectionCol > 0) {
+                state.selectionCol--;
+                state.selectionIndex = state.selectionRow * cols + state.selectionCol;
+                _selectionDirty = true;
+                return InputResult::HANDLED;
+            }
+            break;
+
+        case InputEvent::NAV_RIGHT:
+            if (state.selectionCol < cols - 1) {
+                int newIndex = state.selectionRow * cols + state.selectionCol + 1;
+                if (newIndex < _tadoZoneCount || _tadoZoneCount == 0) {
+                    state.selectionCol++;
+                    state.selectionIndex = newIndex;
+                    _selectionDirty = true;
+                    return InputResult::HANDLED;
+                }
+            }
+            break;
+
+        case InputEvent::BUTTON_A:
+            // Toggle zone - action will be handled by caller
+            return InputResult::ACTION;
+
+        case InputEvent::TRIGGER_LEFT:
+        case InputEvent::TRIGGER_RIGHT:
+            // Temperature adjustment - action will be handled by caller
+            return InputResult::ACTION;
+
+        default:
+            break;
+    }
+
+    return InputResult::NONE;
+}
+
+// Default Sensors page handler
+InputResult Navigation::handleSensorsPage(const InputAction& action, NavState& state) {
+    const uint8_t numMetrics = 5;  // CO2, Temp, Humidity, IAQ, Pressure
+
+    switch (action.event) {
+        case InputEvent::NAV_LEFT:
+        case InputEvent::NAV_UP:
+            if (state.data.sensors.selectedMetric > 0) {
+                state.data.sensors.selectedMetric--;
+                _selectionDirty = true;
+                return InputResult::HANDLED;
+            }
+            break;
+
+        case InputEvent::NAV_RIGHT:
+        case InputEvent::NAV_DOWN:
+            if (state.data.sensors.selectedMetric < numMetrics - 1) {
+                state.data.sensors.selectedMetric++;
+                _selectionDirty = true;
+                return InputResult::HANDLED;
+            }
+            break;
+
+        case InputEvent::BUTTON_A:
+            // Toggle chart view
+            state.data.sensors.showChart = !state.data.sensors.showChart;
+            _selectionDirty = true;
+            return InputResult::HANDLED;
+
+        default:
+            break;
+    }
+
+    return InputResult::NONE;
+}
+
+// Default Settings handler
+InputResult Navigation::handleSettings(const InputAction& action, NavState& state) {
+    const uint8_t numPages = 4;     // General, HomeKit, Actions, Connections
+    const uint8_t itemsPerPage = 4; // Max items per settings page
+
+    switch (action.event) {
+        case InputEvent::NAV_LEFT:
+            if (state.data.settings.page > 0) {
+                state.data.settings.page--;
+                state.data.settings.itemIndex = 0;
+                _selectionDirty = true;
+                return InputResult::HANDLED;
+            }
+            break;
+
+        case InputEvent::NAV_RIGHT:
+            if (state.data.settings.page < numPages - 1) {
+                state.data.settings.page++;
+                state.data.settings.itemIndex = 0;
+                _selectionDirty = true;
+                return InputResult::HANDLED;
+            }
+            break;
+
+        case InputEvent::NAV_UP:
+            if (state.data.settings.itemIndex > 0) {
+                state.data.settings.itemIndex--;
+                _selectionDirty = true;
+                return InputResult::HANDLED;
+            }
+            break;
+
+        case InputEvent::NAV_DOWN:
+            if (state.data.settings.itemIndex < itemsPerPage - 1) {
+                state.data.settings.itemIndex++;
+                _selectionDirty = true;
+                return InputResult::HANDLED;
+            }
+            break;
+
+        case InputEvent::BUTTON_A:
+            // Execute settings action
+            return InputResult::ACTION;
+
+        default:
+            break;
+    }
+
+    return InputResult::NONE;
+}
+
+void Navigation::log(const char* msg) {
+    if (config::debug::UI_DBG) {
+        Serial.printf("[Nav] %s\n", msg);
+    }
+}
+
+void Navigation::logf(const char* fmt, ...) {
+    if (config::debug::UI_DBG) {
+        char buffer[128];
+        va_list args;
+        va_start(args, fmt);
+        vsnprintf(buffer, sizeof(buffer), fmt, args);
+        va_end(args);
+        Serial.printf("[Nav] %s\n", buffer);
+    }
+}
+
+} // namespace paperhome
