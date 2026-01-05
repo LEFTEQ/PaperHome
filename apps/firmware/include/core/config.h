@@ -54,10 +54,11 @@ namespace display {
     constexpr uint8_t PIN_BUSY = 38;
     constexpr uint8_t PIN_POWER = 47;
 
-    // Display dimensions
-    constexpr uint16_t WIDTH = 800;
-    constexpr uint16_t HEIGHT = 480;
-    constexpr uint8_t ROTATION = 1;  // Landscape
+    // Display dimensions (portrait orientation)
+    // Native panel: 800x480 landscape, rotated 90° CW for portrait
+    constexpr uint16_t WIDTH = 480;
+    constexpr uint16_t HEIGHT = 800;
+    constexpr uint8_t ROTATION = 1;  // 90° CW for portrait
 
     // Refresh configuration
     constexpr uint32_t FULL_REFRESH_INTERVAL_MS = 120000;  // Force full refresh every 2 min

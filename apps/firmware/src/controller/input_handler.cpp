@@ -3,25 +3,7 @@
 
 namespace paperhome {
 
-const char* getInputEventName(InputEvent event) {
-    switch (event) {
-        case InputEvent::NONE:          return "NONE";
-        case InputEvent::NAV_LEFT:      return "NAV_LEFT";
-        case InputEvent::NAV_RIGHT:     return "NAV_RIGHT";
-        case InputEvent::NAV_UP:        return "NAV_UP";
-        case InputEvent::NAV_DOWN:      return "NAV_DOWN";
-        case InputEvent::BUTTON_A:      return "BUTTON_A";
-        case InputEvent::BUTTON_B:      return "BUTTON_B";
-        case InputEvent::BUTTON_X:      return "BUTTON_X";
-        case InputEvent::BUTTON_Y:      return "BUTTON_Y";
-        case InputEvent::BUTTON_MENU:   return "BUTTON_MENU";
-        case InputEvent::BUMPER_LEFT:   return "BUMPER_LEFT";
-        case InputEvent::BUMPER_RIGHT:  return "BUMPER_RIGHT";
-        case InputEvent::TRIGGER_LEFT:  return "TRIGGER_LEFT";
-        case InputEvent::TRIGGER_RIGHT: return "TRIGGER_RIGHT";
-        default:                        return "UNKNOWN";
-    }
-}
+// getInputEventName() is provided inline by input/input_types.h
 
 InputHandler::InputHandler(XboxDriver& driver)
     : _driver(driver)
@@ -34,7 +16,7 @@ InputHandler::InputHandler(XboxDriver& driver)
 
 InputAction InputHandler::poll() {
     if (!_driver.isActive()) {
-        return {InputEvent::NONE, 0};
+        return InputAction::none();
     }
 
     ControllerSnapshot current = _driver.getSnapshot();
@@ -45,7 +27,7 @@ InputAction InputHandler::poll() {
 
     // 1. Check face buttons and system buttons (edge detection)
     action = processButtons(current);
-    if (action.event != InputEvent::NONE) {
+    if (!action.isNone()) {
         _lastSnap = current;
         _lastInputTime = millis();
         return action;
@@ -53,7 +35,7 @@ InputAction InputHandler::poll() {
 
     // 2. Check navigation (D-pad + left stick with debounce)
     action = processNavigation(current);
-    if (action.event != InputEvent::NONE) {
+    if (!action.isNone()) {
         _lastSnap = current;
         _lastInputTime = millis();
         return action;
@@ -61,69 +43,77 @@ InputAction InputHandler::poll() {
 
     // 3. Check triggers (continuous with rate limiting)
     action = processTriggers(current);
-    if (action.event != InputEvent::NONE) {
+    if (!action.isNone()) {
         _lastSnap = current;
         _lastInputTime = millis();
         return action;
     }
 
     _lastSnap = current;
-    return {InputEvent::NONE, 0};
+    return InputAction::none();
 }
 
 InputAction InputHandler::processButtons(const ControllerSnapshot& current) {
     // Edge detection: only trigger on press (was false, now true)
+    uint32_t ts = millis();
 
     // Face button A - Accept/Toggle
     if (current.btnA && !_lastSnap.btnA) {
         vibrateShort();
         log("Button A pressed");
-        return {InputEvent::BUTTON_A, 0};
+        return InputAction::button(InputEvent::BUTTON_A, ts);
     }
 
     // Face button B - Back
     if (current.btnB && !_lastSnap.btnB) {
         vibrateShort();
         log("Button B pressed");
-        return {InputEvent::BUTTON_B, 0};
+        return InputAction::button(InputEvent::BUTTON_B, ts);
     }
 
     // Face button X - Unused (reserved)
     if (current.btnX && !_lastSnap.btnX) {
         vibrateTick();
         log("Button X pressed");
-        return {InputEvent::BUTTON_X, 0};
+        return InputAction::button(InputEvent::BUTTON_X, ts);
     }
 
     // Face button Y - Quick action: Sensors
     if (current.btnY && !_lastSnap.btnY) {
         vibrateShort();
         log("Button Y pressed");
-        return {InputEvent::BUTTON_Y, 0};
+        return InputAction::button(InputEvent::BUTTON_Y, ts);
     }
 
-    // Menu button - Quick action: Settings
+    // Menu button - Open Settings stack
     if (current.btnMenu && !_lastSnap.btnMenu) {
         vibrateShort();
         log("Menu button pressed");
-        return {InputEvent::BUTTON_MENU, 0};
+        return InputAction::button(InputEvent::BUTTON_MENU, ts);
     }
 
-    // Left bumper - Cycle selection area left
+    // View button - Force full refresh (anti-ghosting)
+    if (current.btnView && !_lastSnap.btnView) {
+        vibrateTick();
+        log("View button pressed");
+        return InputAction::button(InputEvent::BUTTON_VIEW, ts);
+    }
+
+    // Left bumper - Cycle pages left
     if (current.btnLB && !_lastSnap.btnLB) {
         vibrateTick();
         log("Left bumper pressed");
-        return {InputEvent::BUMPER_LEFT, 0};
+        return InputAction::button(InputEvent::BUMPER_LEFT, ts);
     }
 
-    // Right bumper - Cycle selection area right
+    // Right bumper - Cycle pages right
     if (current.btnRB && !_lastSnap.btnRB) {
         vibrateTick();
         log("Right bumper pressed");
-        return {InputEvent::BUMPER_RIGHT, 0};
+        return InputAction::button(InputEvent::BUMPER_RIGHT, ts);
     }
 
-    return {InputEvent::NONE, 0};
+    return InputAction::none();
 }
 
 InputAction InputHandler::processNavigation(const ControllerSnapshot& current) {
@@ -131,7 +121,7 @@ InputAction InputHandler::processNavigation(const ControllerSnapshot& current) {
 
     // Debounce: only allow navigation every NAV_DEBOUNCE_MS
     if (now - _lastNavTime < config::controller::NAV_DEBOUNCE_MS) {
-        return {InputEvent::NONE, 0};
+        return InputAction::none();
     }
 
     // Combine D-pad and left stick for navigation
@@ -168,10 +158,10 @@ InputAction InputHandler::processNavigation(const ControllerSnapshot& current) {
         vibrateTick();
         _lastNavTime = now;
         logf("Navigation: %s", getInputEventName(event));
-        return {event, 0};
+        return InputAction::nav(event, now);
     }
 
-    return {InputEvent::NONE, 0};
+    return InputAction::none();
 }
 
 InputAction InputHandler::processTriggers(const ControllerSnapshot& current) {
@@ -179,7 +169,7 @@ InputAction InputHandler::processTriggers(const ControllerSnapshot& current) {
 
     // Rate limit trigger events
     if (now - _lastTriggerTime < config::controller::TRIGGER_RATE_MS) {
-        return {InputEvent::NONE, 0};
+        return InputAction::none();
     }
 
     // Left trigger - Decrease value
@@ -189,7 +179,7 @@ InputAction InputHandler::processTriggers(const ControllerSnapshot& current) {
         int16_t intensity = map(current.triggerL, TRIGGER_THRESHOLD, 1023, 5, 30);
         _lastTriggerTime = now;
         logf("Trigger L: %d (intensity: %d)", current.triggerL, intensity);
-        return {InputEvent::TRIGGER_LEFT, intensity};
+        return InputAction::trigger(InputEvent::TRIGGER_LEFT, intensity, now);
     }
 
     // Right trigger - Increase value
@@ -197,10 +187,10 @@ InputAction InputHandler::processTriggers(const ControllerSnapshot& current) {
         int16_t intensity = map(current.triggerR, TRIGGER_THRESHOLD, 1023, 5, 30);
         _lastTriggerTime = now;
         logf("Trigger R: %d (intensity: %d)", current.triggerR, intensity);
-        return {InputEvent::TRIGGER_RIGHT, intensity};
+        return InputAction::trigger(InputEvent::TRIGGER_RIGHT, intensity, now);
     }
 
-    return {InputEvent::NONE, 0};
+    return InputAction::none();
 }
 
 void InputHandler::vibrateTick() {

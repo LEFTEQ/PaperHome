@@ -189,10 +189,15 @@ void Navigation::setScreenHandler(Screen screen, PageInputHandler handler) {
     }
 }
 
-// Default Hue page handler
+// Default Hue page handler (Portrait: 2 columns)
 InputResult Navigation::handleHuePage(const InputAction& action, NavState& state) {
-    const uint8_t cols = 3;  // 3 columns of rooms
-    const uint8_t rows = 2;  // 2 rows
+    const uint8_t cols = 2;  // 2 columns for portrait
+    const uint8_t maxRows = 8;  // Up to 8 rows in 734px with 80px cards
+
+    // Calculate current row count based on room count
+    uint8_t rows = (_hueRoomCount + cols - 1) / cols;
+    if (rows == 0) rows = 1;
+    if (rows > maxRows) rows = maxRows;
 
     switch (action.event) {
         case InputEvent::NAV_UP:
@@ -254,10 +259,15 @@ InputResult Navigation::handleHuePage(const InputAction& action, NavState& state
     return InputResult::NONE;
 }
 
-// Default Tado page handler
+// Default Tado page handler (Portrait: 2 columns, dynamic rows)
 InputResult Navigation::handleTadoPage(const InputAction& action, NavState& state) {
-    const uint8_t cols = 2;  // 2 columns of zones
-    const uint8_t rows = 2;  // 2 rows
+    const uint8_t cols = 2;  // 2 columns for portrait
+    const uint8_t maxRows = 6;  // Up to 6 rows in 734px with 100px cards
+
+    // Calculate current row count based on zone count
+    uint8_t rows = (_tadoZoneCount + cols - 1) / cols;
+    if (rows == 0) rows = 1;
+    if (rows > maxRows) rows = maxRows;
 
     switch (action.event) {
         case InputEvent::NAV_UP:
@@ -303,7 +313,7 @@ InputResult Navigation::handleTadoPage(const InputAction& action, NavState& stat
             break;
 
         case InputEvent::BUTTON_A:
-            // Toggle zone - action will be handled by caller
+            // Resume schedule - action will be handled by caller
             return InputResult::ACTION;
 
         case InputEvent::TRIGGER_LEFT:
@@ -318,26 +328,62 @@ InputResult Navigation::handleTadoPage(const InputAction& action, NavState& stat
     return InputResult::NONE;
 }
 
-// Default Sensors page handler
+// Default Sensors page handler (Portrait: 2 columns × 3 rows grid)
 InputResult Navigation::handleSensorsPage(const InputAction& action, NavState& state) {
-    const uint8_t numMetrics = 5;  // CO2, Temp, Humidity, IAQ, Pressure
+    // Grid layout: 5 sensors in 2x3 grid (one slot empty)
+    // [0:CO2]     [1:Temp]
+    // [2:Humidity][3:IAQ]
+    // [4:Pressure][empty]
+    const uint8_t cols = 2;
+    const uint8_t numMetrics = 5;
+
+    // Calculate current row/col from selectedMetric
+    uint8_t currentIdx = state.data.sensors.selectedMetric;
+    uint8_t row = currentIdx / cols;
+    uint8_t col = currentIdx % cols;
 
     switch (action.event) {
-        case InputEvent::NAV_LEFT:
         case InputEvent::NAV_UP:
-            if (state.data.sensors.selectedMetric > 0) {
-                state.data.sensors.selectedMetric--;
-                _selectionDirty = true;
-                return InputResult::HANDLED;
+            if (row > 0) {
+                uint8_t newIdx = (row - 1) * cols + col;
+                if (newIdx < numMetrics) {
+                    state.data.sensors.selectedMetric = newIdx;
+                    _selectionDirty = true;
+                    return InputResult::HANDLED;
+                }
+            }
+            break;
+
+        case InputEvent::NAV_DOWN:
+            if (row < 2) {  // 3 rows max
+                uint8_t newIdx = (row + 1) * cols + col;
+                if (newIdx < numMetrics) {
+                    state.data.sensors.selectedMetric = newIdx;
+                    _selectionDirty = true;
+                    return InputResult::HANDLED;
+                }
+            }
+            break;
+
+        case InputEvent::NAV_LEFT:
+            if (col > 0) {
+                uint8_t newIdx = row * cols + col - 1;
+                if (newIdx < numMetrics) {
+                    state.data.sensors.selectedMetric = newIdx;
+                    _selectionDirty = true;
+                    return InputResult::HANDLED;
+                }
             }
             break;
 
         case InputEvent::NAV_RIGHT:
-        case InputEvent::NAV_DOWN:
-            if (state.data.sensors.selectedMetric < numMetrics - 1) {
-                state.data.sensors.selectedMetric++;
-                _selectionDirty = true;
-                return InputResult::HANDLED;
+            if (col < cols - 1) {
+                uint8_t newIdx = row * cols + col + 1;
+                if (newIdx < numMetrics) {
+                    state.data.sensors.selectedMetric = newIdx;
+                    _selectionDirty = true;
+                    return InputResult::HANDLED;
+                }
             }
             break;
 

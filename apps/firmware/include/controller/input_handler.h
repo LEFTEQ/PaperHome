@@ -5,46 +5,9 @@
 #include <functional>
 #include "controller/xbox_driver.h"
 #include "core/config.h"
+#include "input/input_types.h"  // Use shared InputEvent and InputAction types
 
 namespace paperhome {
-
-/**
- * @brief Input event types for navigation
- */
-enum class InputEvent : uint8_t {
-    NONE,
-
-    // Navigation (D-pad + left stick combined)
-    NAV_LEFT,
-    NAV_RIGHT,
-    NAV_UP,
-    NAV_DOWN,
-
-    // Face buttons
-    BUTTON_A,       // Accept/Select/Toggle
-    BUTTON_B,       // Back/Cancel
-    BUTTON_X,       // Unused
-    BUTTON_Y,       // Quick action: Sensors
-
-    // System buttons
-    BUTTON_MENU,    // Quick action: Settings
-
-    // Shoulder buttons
-    BUMPER_LEFT,    // Cycle selection area left (Tado -> Hue)
-    BUMPER_RIGHT,   // Cycle selection area right (Hue -> Tado)
-
-    // Triggers (continuous, value in intensity field)
-    TRIGGER_LEFT,   // Decrease (brightness/temp)
-    TRIGGER_RIGHT   // Increase (brightness/temp)
-};
-
-/**
- * @brief Input event with optional intensity value
- */
-struct InputAction {
-    InputEvent event = InputEvent::NONE;
-    int16_t intensity = 0;  // For triggers: mapped value (5-30)
-};
 
 /**
  * @brief Input handler with edge detection and debouncing
@@ -119,10 +82,7 @@ private:
     void logf(const char* fmt, ...);
 };
 
-/**
- * @brief Get event name for debugging
- */
-const char* getInputEventName(InputEvent event);
+// getInputEventName() is provided by input/input_types.h
 
 } // namespace paperhome
 
