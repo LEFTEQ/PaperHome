@@ -80,7 +80,7 @@ public:
     /**
      * @brief Handle trigger input for brightness
      */
-    void handleTrigger(int16_t leftValue, int16_t rightValue);
+    bool handleTrigger(int16_t leftIntensity, int16_t rightIntensity) override;
 
 protected:
     bool onConfirm() override;
@@ -96,20 +96,20 @@ private:
     static constexpr int16_t COLS = 3;
     static constexpr int16_t ROWS = 3;
     static constexpr int16_t MARGIN_X = 10;
-    static constexpr int16_t MARGIN_Y = config::zones::STATUS_H + 10;
+    static constexpr int16_t MARGIN_Y = 80;  // Below title
     static constexpr int16_t SPACING = 8;
 
     // Calculate tile dimensions based on available space
+    // Reserve: 80px top (title), 40px bottom (page indicator)
     static constexpr int16_t CONTENT_WIDTH = config::display::WIDTH - 2 * MARGIN_X;
-    static constexpr int16_t CONTENT_HEIGHT = config::display::HEIGHT -
-                                               config::zones::STATUS_H - 30 -  // Status + page indicator
-                                               20;  // Margins
+    static constexpr int16_t CONTENT_HEIGHT = config::display::HEIGHT - MARGIN_Y - 50;
     static constexpr int16_t TILE_WIDTH = (CONTENT_WIDTH - (COLS - 1) * SPACING) / COLS;
     static constexpr int16_t TILE_HEIGHT = (CONTENT_HEIGHT - (ROWS - 1) * SPACING) / ROWS;
 
     void renderTile(Compositor& compositor, int16_t index, int16_t x, int16_t y);
     void renderBrightnessBar(Compositor& compositor, int16_t x, int16_t y, int16_t width,
-                             uint8_t brightness, bool isOn);
+                             uint8_t brightness, bool isOn, bool inverted);
+    void renderPageIndicator(Compositor& compositor, int currentPage, int totalPages);
 };
 
 } // namespace paperhome

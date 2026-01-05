@@ -34,6 +34,7 @@
 #include "ui/screens/settings_info.h"
 #include "ui/screens/settings_homekit.h"
 #include "ui/screens/settings_actions.h"
+#include "ui/status_bar.h"
 
 using namespace paperhome;
 using namespace paperhome::config;
@@ -54,6 +55,9 @@ DisplayDriver displayDriver;
 Compositor* compositor = nullptr;
 NavigationController navController;
 InputBatcher* inputBatcher = nullptr;
+
+// Status bar
+StatusBar statusBar;
 
 // Screens
 HueDashboard* hueDashboard = nullptr;
@@ -120,29 +124,44 @@ void renderCurrentScreen() {
 
     uint32_t startTime = millis();
 
-    // Get previous selection rect for clearing
+    // Get selection rects BEFORE rendering (for refresh region calculation)
     Rect prevSelection = currentScreen->getPreviousSelectionRect();
     Rect currSelection = currentScreen->getSelectionRect();
 
-    // Begin frame
+    // Begin frame - resets dirty tracking
     compositor->beginFrame();
 
-    // Clear screen and render content
+    // Render full screen content (screens handle their own selection highlighting)
     compositor->fillScreen(true);  // White background
+
+    // Render status bar at top (32px)
+    statusBar.render(*compositor);
+
+    // Render current screen content (below status bar)
     currentScreen->render(*compositor);
 
-    // Handle selection highlight
-    if (!currSelection.isEmpty()) {
-        compositor->updateSelection(prevSelection, currSelection);
-    }
-
-    // End frame with appropriate refresh type
-    bool refreshed;
+    // Determine refresh strategy
+    bool refreshed = false;
     if (needsFullRefresh) {
+        // Full refresh for screen changes - guaranteed clean
         refreshed = compositor->endFrameFull();
         needsFullRefresh = false;
+        Serial.printf("[Render] Full refresh\n");
     } else {
-        refreshed = compositor->endFrame();
+        // Partial refresh - use UNION of old and new selection for clean transitions
+        Rect refreshRegion = prevSelection.unionWith(currSelection);
+
+        if (!refreshRegion.isEmpty()) {
+            // Expand slightly for clean edges (GxEPD2 alignment)
+            refreshRegion.x = (refreshRegion.x / 8) * 8;
+            refreshRegion.width = ((refreshRegion.width + 15) / 8) * 8;
+
+            displayDriver.partialRefresh(refreshRegion);
+            refreshed = true;
+            Serial.printf("[Render] Partial: %dx%d @ (%d,%d)\n",
+                          refreshRegion.width, refreshRegion.height,
+                          refreshRegion.x, refreshRegion.y);
+        }
     }
 
     currentScreen->clearDirty();
@@ -152,9 +171,7 @@ void renderCurrentScreen() {
     frameCount++;
 
     if (refreshed) {
-        Serial.printf("[Render] Frame %lu: %lu ms (%s)\n",
-                      frameCount, elapsed,
-                      needsFullRefresh ? "partial" : "full");
+        Serial.printf("[Render] Frame %lu: %lu ms\n", frameCount, elapsed);
     }
 }
 
@@ -163,6 +180,19 @@ void renderCurrentScreen() {
 // =============================================================================
 
 void populateTestData() {
+    // Status bar test data
+    StatusBarData statusData;
+    statusData.wifiConnected = true;
+    statusData.wifiRSSI = -55;
+    statusData.mqttConnected = true;
+    statusData.hueConnected = true;
+    statusData.tadoConnected = true;
+    statusData.temperature = 23.5f;
+    statusData.co2 = 650;
+    statusData.batteryPercent = 85;
+    statusData.usbPowered = false;
+    statusBar.setData(statusData);
+
     // Hue rooms
     std::vector<HueRoom> rooms = {
         {"r1", "Living Room", true, 80, 4, true},
@@ -299,6 +329,17 @@ void uiTask(void* parameter) {
         // Poll batcher for ready actions (immediate events + batched navigation)
         InputAction batchedAction;
         while ((batchedAction = inputBatcher->poll()).event != InputEvent::NONE) {
+            // Triggers route directly to screen (bypass navigation controller)
+            if (batchedAction.isTrigger() && currentScreen) {
+                int16_t leftIntensity = (batchedAction.event == InputEvent::TRIGGER_LEFT) ? batchedAction.intensity : 0;
+                int16_t rightIntensity = (batchedAction.event == InputEvent::TRIGGER_RIGHT) ? batchedAction.intensity : 0;
+                if (currentScreen->handleTrigger(leftIntensity, rightIntensity)) {
+                    // Screen handled trigger and needs redraw
+                    Serial.printf("[Input] Trigger: L=%d R=%d\n", leftIntensity, rightIntensity);
+                }
+                continue;  // Don't send triggers to nav controller
+            }
+
             // Route to navigation controller
             navController.handleInput(batchedAction);
 

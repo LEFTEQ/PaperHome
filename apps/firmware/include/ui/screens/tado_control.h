@@ -77,7 +77,7 @@ public:
     /**
      * @brief Handle trigger input for temperature
      */
-    void handleTrigger(int16_t leftValue, int16_t rightValue);
+    bool handleTrigger(int16_t leftIntensity, int16_t rightIntensity) override;
 
 protected:
     bool onConfirm() override;
@@ -88,13 +88,18 @@ private:
     std::vector<TadoZone> _zones;
     TempCallback _onTempChange;
 
-    static constexpr int16_t ZONE_HEIGHT = 120;
-    static constexpr int16_t START_Y = config::zones::STATUS_H + 20;
-    static constexpr int16_t MARGIN_X = 20;
+    // Layout constants (accounting for 32px status bar + title)
+    static constexpr int16_t STATUS_BAR_H = 32;
+    static constexpr int16_t TITLE_Y = 60;
+    static constexpr int16_t ZONE_HEIGHT = 130;
+    static constexpr int16_t START_Y = 80;  // Below title
+    static constexpr int16_t MARGIN_X = 15;
+    static constexpr int16_t ZONE_SPACING = 10;
 
     void renderZone(Compositor& compositor, int16_t index, int16_t y);
-    void renderTemperatureBar(Compositor& compositor, int16_t x, int16_t y, int16_t width,
-                              uint8_t heatingPower);
+    void renderHeatingBar(Compositor& compositor, int16_t x, int16_t y, int16_t width,
+                          uint8_t heatingPower, bool inverted);
+    void renderPageIndicator(Compositor& compositor, int currentPage, int totalPages);
 };
 
 } // namespace paperhome

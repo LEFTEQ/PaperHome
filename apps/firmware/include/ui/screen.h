@@ -50,6 +50,23 @@ public:
     virtual bool handleEvent(NavEvent event) = 0;
 
     /**
+     * @brief Handle trigger input (LT/RT)
+     *
+     * Process continuous trigger input for value adjustment.
+     * Only one of leftIntensity or rightIntensity will be non-zero.
+     * Intensity ranges from 5-30 based on trigger pressure.
+     *
+     * @param leftIntensity LT intensity (0 if not pressed, 5-30 if pressed)
+     * @param rightIntensity RT intensity (0 if not pressed, 5-30 if pressed)
+     * @return true if screen state changed and needs redraw
+     */
+    virtual bool handleTrigger(int16_t leftIntensity, int16_t rightIntensity) {
+        (void)leftIntensity;
+        (void)rightIntensity;
+        return false;
+    }
+
+    /**
      * @brief Called when screen becomes active
      *
      * Use this to reset selection, start animations, etc.

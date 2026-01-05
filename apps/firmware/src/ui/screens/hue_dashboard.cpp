@@ -39,33 +39,36 @@ bool HueDashboard::onConfirm() {
 }
 
 void HueDashboard::onSelectionChanged() {
-    // Haptic feedback handled by main loop
+    // Haptic feedback handled by input handler
 }
 
-void HueDashboard::handleTrigger(int16_t leftValue, int16_t rightValue) {
+bool HueDashboard::handleTrigger(int16_t leftIntensity, int16_t rightIntensity) {
     const HueRoom* room = getSelectedRoom();
-    if (!room || !_onBrightnessChange) return;
+    if (!room || !_onBrightnessChange) return false;
 
-    // Convert trigger values to brightness delta
-    // Triggers range 0-255, map to brightness step
+    // Continuous brightness adjustment based on trigger intensity (5-30)
     int8_t delta = 0;
-    if (rightValue > 128) {
-        delta = (rightValue - 128) / 32 + 1;  // +1 to +4
-    } else if (leftValue > 128) {
-        delta = -((leftValue - 128) / 32 + 1);  // -1 to -4
+    if (rightIntensity > 0) {
+        // Right trigger = increase brightness
+        delta = static_cast<int8_t>(rightIntensity / 5);  // Map 5-30 to ~1-6
+        if (delta < 1) delta = 1;
+    } else if (leftIntensity > 0) {
+        // Left trigger = decrease brightness
+        delta = -static_cast<int8_t>(leftIntensity / 5);  // Map 5-30 to ~-1 to -6
+        if (delta > -1) delta = -1;
     }
 
     if (delta != 0) {
         _onBrightnessChange(room->id, delta);
+        markDirty();  // Brightness changed, need redraw
+        return true;
     }
+    return false;
 }
 
 void HueDashboard::render(Compositor& compositor) {
-    // Background
-    compositor.submit(DrawCommand::fillScreen(true));  // White
-
-    // Title
-    compositor.submitText("Hue Rooms", 20, 60, &FreeSansBold12pt7b, true);
+    // Title area (below status bar which will be at top)
+    compositor.drawText("Hue", 20, 60, &FreeSansBold18pt7b, true);
 
     // Render room tiles
     for (int16_t i = 0; i < static_cast<int16_t>(_rooms.size()); i++) {
@@ -77,81 +80,94 @@ void HueDashboard::render(Compositor& compositor) {
         renderTile(compositor, i, x, y);
     }
 
-    // Empty tile placeholders
+    // Empty state
     if (_rooms.empty()) {
-        compositor.submitText("No rooms found", config::display::WIDTH / 2 - 60,
-                             config::display::HEIGHT / 2, &FreeSans12pt7b, true);
+        compositor.drawTextCentered("No rooms found", 0,
+                             config::display::HEIGHT / 2, config::display::WIDTH,
+                             &FreeSans12pt7b, true);
+        compositor.drawTextCentered("Check Hue Bridge connection", 0,
+                             config::display::HEIGHT / 2 + 30, config::display::WIDTH,
+                             &FreeSans9pt7b, true);
     }
 
-    // Page indicator dots at bottom (shows position in main stack)
-    int16_t indicatorY = config::display::HEIGHT - 20;
-    int16_t dotSpacing = 20;
-    int16_t startX = config::display::WIDTH / 2 - dotSpacing;
-
-    for (int i = 0; i < 3; i++) {
-        int16_t dotX = startX + i * dotSpacing;
-        if (i == 0) {
-            // Current page - filled circle
-            compositor.submit(DrawCommand::fillCircle(dotX, indicatorY, 5, false));
-        } else {
-            // Other pages - outline circle
-            compositor.submit(DrawCommand::drawCircle(dotX, indicatorY, 5, false));
-        }
-    }
+    // Page indicator dots at bottom (shows position in main stack: Hue=0, Sensors=1, Tado=2)
+    renderPageIndicator(compositor, 0, 3);
 }
 
 void HueDashboard::renderTile(Compositor& compositor, int16_t index, int16_t x, int16_t y) {
     const HueRoom& room = _rooms[index];
     bool isSelected = (index == getSelectedIndex());
 
-    // Tile border
-    compositor.submit(DrawCommand::drawRect(x, y, TILE_WIDTH, TILE_HEIGHT, false));
-
-    // Room name (truncated if needed)
-    std::string displayName = room.name;
-    if (displayName.length() > 12) {
-        displayName = displayName.substr(0, 11) + "...";
+    // INVERTED SELECTION: Black background with white content when selected
+    if (isSelected) {
+        // Fill tile with black for selection
+        compositor.fillRect(x, y, TILE_WIDTH, TILE_HEIGHT, true);
+    } else {
+        // Normal: white background with black border
+        compositor.drawRect(x, y, TILE_WIDTH, TILE_HEIGHT, true);
     }
-    compositor.submitText(displayName.c_str(), x + 8, y + 25, &FreeSans9pt7b, true);
 
-    // Light count
-    char lightText[16];
-    snprintf(lightText, sizeof(lightText), "%d lights", room.lightCount);
-    compositor.submitText(lightText, x + 8, y + 45, &FreeSans9pt7b, true);
+    // Text color: inverted when selected
+    bool textBlack = !isSelected;
 
-    // Status indicator
+    // Room name (truncated to fit)
+    std::string displayName = room.name;
+    if (displayName.length() > 10) {
+        displayName = displayName.substr(0, 9) + "..";
+    }
+    compositor.drawText(displayName.c_str(), x + 8, y + 28, &FreeSansBold9pt7b, textBlack);
+
+    // Status indicator (ON/OFF)
     const char* status = room.isOn ? "ON" : "OFF";
     if (!room.reachable) status = "N/A";
-    compositor.submitText(status, x + TILE_WIDTH - 35, y + 25, &FreeSansBold9pt7b, true);
+    compositor.drawText(status, x + TILE_WIDTH - 32, y + 28, &FreeSans9pt7b, textBlack);
 
     // Brightness bar
-    int16_t barY = y + TILE_HEIGHT - 25;
+    int16_t barY = y + TILE_HEIGHT - 28;
     int16_t barWidth = TILE_WIDTH - 16;
-    renderBrightnessBar(compositor, x + 8, barY, barWidth, room.brightness, room.isOn);
-
-    // Selection highlight (XOR inversion) is handled by the compositor
-    // based on getSelectionRect()
+    renderBrightnessBar(compositor, x + 8, barY, barWidth, room.brightness, room.isOn, isSelected);
 }
 
 void HueDashboard::renderBrightnessBar(Compositor& compositor, int16_t x, int16_t y,
-                                        int16_t width, uint8_t brightness, bool isOn) {
-    constexpr int16_t BAR_HEIGHT = 12;
+                                        int16_t width, uint8_t brightness, bool isOn, bool inverted) {
+    constexpr int16_t BAR_HEIGHT = 14;
+
+    // Colors swap when inverted (selected)
+    bool borderColor = !inverted;  // Black border normally, white when selected
+    bool fillColor = !inverted;    // Black fill normally, white when selected
 
     // Bar outline
-    compositor.submit(DrawCommand::drawRect(x, y, width, BAR_HEIGHT, false));
+    compositor.drawRect(x, y, width, BAR_HEIGHT, borderColor);
 
     if (isOn && brightness > 0) {
         // Fill proportional to brightness
         int16_t fillWidth = (width - 4) * brightness / 100;
         if (fillWidth > 0) {
-            compositor.submit(DrawCommand::fillRect(x + 2, y + 2, fillWidth, BAR_HEIGHT - 4, false));
+            compositor.fillRect(x + 2, y + 2, fillWidth, BAR_HEIGHT - 4, fillColor);
         }
     }
 
     // Brightness percentage text
     char brightnessText[8];
     snprintf(brightnessText, sizeof(brightnessText), "%d%%", brightness);
-    compositor.submitText(brightnessText, x + width + 5, y + 10, &FreeSans9pt7b, true);
+    compositor.drawText(brightnessText, x + width - 35, y + 11, &FreeSans9pt7b, borderColor);
+}
+
+void HueDashboard::renderPageIndicator(Compositor& compositor, int currentPage, int totalPages) {
+    int16_t indicatorY = config::display::HEIGHT - 20;
+    int16_t dotSpacing = 20;
+    int16_t startX = config::display::WIDTH / 2 - (totalPages - 1) * dotSpacing / 2;
+
+    for (int i = 0; i < totalPages; i++) {
+        int16_t dotX = startX + i * dotSpacing;
+        if (i == currentPage) {
+            // Current page - filled circle (black)
+            compositor.fillCircle(dotX, indicatorY, 5, true);
+        } else {
+            // Other pages - outline circle (black)
+            compositor.drawCircle(dotX, indicatorY, 5, true);
+        }
+    }
 }
 
 } // namespace paperhome
