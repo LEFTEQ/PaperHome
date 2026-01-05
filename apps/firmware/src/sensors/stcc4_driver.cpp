@@ -61,22 +61,28 @@ void STCC4Driver::update() {
             if (millis() - _initTime >= config::sensors::stcc4::WARMUP_TIME_MS) {
                 _stateMachine.setState(SensorState::ACTIVE, "Warmup complete");
             }
-            // Still read during warmup (readings may be less accurate)
-            if (readMeasurement()) {
-                _lastReadTime = millis();
-                _errorCount = 0;
+            // Rate-limited reads during warmup (readings may be less accurate)
+            if (millis() - _lastMeasureTime >= config::sensors::stcc4::READ_INTERVAL_MS) {
+                _lastMeasureTime = millis();
+                if (readMeasurement()) {
+                    _lastReadTime = millis();
+                    _errorCount = 0;
+                }
             }
             break;
 
         case SensorState::ACTIVE:
-            // Read measurement
-            if (readMeasurement()) {
-                _lastReadTime = millis();
-                _errorCount = 0;
-            } else {
-                _errorCount++;
-                if (_errorCount >= config::sensors::stcc4::ERROR_THRESHOLD) {
-                    _stateMachine.setState(SensorState::ERROR, "Too many read errors");
+            // Rate-limited reads at configured interval
+            if (millis() - _lastMeasureTime >= config::sensors::stcc4::READ_INTERVAL_MS) {
+                _lastMeasureTime = millis();
+                if (readMeasurement()) {
+                    _lastReadTime = millis();
+                    _errorCount = 0;
+                } else {
+                    _errorCount++;
+                    if (_errorCount >= config::sensors::stcc4::ERROR_THRESHOLD) {
+                        _stateMachine.setState(SensorState::ERROR, "Too many read errors");
+                    }
                 }
             }
             break;

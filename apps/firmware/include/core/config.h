@@ -214,7 +214,8 @@ namespace sensors {
     // STCC4 (CO2, Temperature, Humidity)
     namespace stcc4 {
         constexpr uint8_t I2C_ADDRESS = 0x64;
-        constexpr uint32_t SAMPLE_INTERVAL_MS = 60000;   // 1 minute
+        constexpr uint32_t READ_INTERVAL_MS = 30000;     // Read from sensor every 30s
+        constexpr uint32_t SAMPLE_INTERVAL_MS = 60000;   // Store to history every 1 minute
         constexpr uint16_t BUFFER_SIZE = 2880;           // 48 hours
         constexpr uint32_t WARMUP_TIME_MS = 7200000;     // 2 hours
         constexpr uint8_t ERROR_THRESHOLD = 5;
@@ -223,6 +224,7 @@ namespace sensors {
     // BME688 (IAQ, Pressure)
     namespace bme688 {
         constexpr uint8_t I2C_ADDRESS = 0x77;
+        constexpr uint32_t READ_INTERVAL_MS = 30000;          // Read from sensor every 30s
         constexpr uint32_t BSEC_SAVE_INTERVAL_MS = 14400000;  // 4 hours
         constexpr const char* NVS_NAMESPACE = "bsec";
         constexpr const char* NVS_KEY_STATE = "state";

@@ -77,31 +77,34 @@ void BME688Driver::update() {
 
         case SensorState::WARMING_UP:
         case SensorState::ACTIVE:
-            if (performReading()) {
-                _lastReadTime = millis();
-                _errorCount = 0;
+            // Rate-limited reads at configured interval
+            if (millis() - _lastReadTime >= config::sensors::bme688::READ_INTERVAL_MS) {
+                if (performReading()) {
+                    _lastReadTime = millis();
+                    _errorCount = 0;
 
-                // Update calibration
-                updateCalibration();
+                    // Update calibration
+                    updateCalibration();
 
-                // Calculate IAQ
-                _iaq = calculateIAQ();
+                    // Calculate IAQ
+                    _iaq = calculateIAQ();
 
-                // Transition to active after calibration
-                if (state == SensorState::WARMING_UP &&
-                    _calibrationSamples >= CALIBRATION_SAMPLES) {
-                    _stateMachine.setState(SensorState::ACTIVE, "Calibration complete");
-                }
+                    // Transition to active after calibration
+                    if (state == SensorState::WARMING_UP &&
+                        _calibrationSamples >= CALIBRATION_SAMPLES) {
+                        _stateMachine.setState(SensorState::ACTIVE, "Calibration complete");
+                    }
 
-                // Periodically save baseline
-                if (millis() - _lastSaveTime > config::sensors::bme688::BSEC_SAVE_INTERVAL_MS) {
-                    saveBaseline();
-                    _lastSaveTime = millis();
-                }
-            } else {
-                _errorCount++;
-                if (_errorCount >= 5) {
-                    _stateMachine.setState(SensorState::ERROR, "Too many read errors");
+                    // Periodically save baseline
+                    if (millis() - _lastSaveTime > config::sensors::bme688::BSEC_SAVE_INTERVAL_MS) {
+                        saveBaseline();
+                        _lastSaveTime = millis();
+                    }
+                } else {
+                    _errorCount++;
+                    if (_errorCount >= 5) {
+                        _stateMachine.setState(SensorState::ERROR, "Too many read errors");
+                    }
                 }
             }
             break;
