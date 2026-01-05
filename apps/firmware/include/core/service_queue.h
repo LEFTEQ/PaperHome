@@ -8,6 +8,8 @@
 #include "ui/screens/hue_dashboard.h"
 #include "ui/screens/sensor_dashboard.h"
 #include "ui/screens/tado_control.h"
+#include "hue/hue_types.h"
+#include "tado/tado_types.h"
 #include <vector>
 #include <memory>
 
@@ -19,7 +21,9 @@ namespace paperhome {
 enum class ServiceDataType : uint8_t {
     STATUS_UPDATE,      // StatusBarData for status bar
     HUE_ROOMS,          // std::vector<HueRoom> update
+    HUE_STATE,          // HueState update
     TADO_ZONES,         // std::vector<TadoZone> update
+    TADO_STATE,         // TadoState update (with auth info if applicable)
     SENSOR_DATA,        // SensorData update
 };
 
@@ -117,6 +121,7 @@ enum class TadoCommandType : uint8_t {
     SET_TEMPERATURE,    // Set absolute temperature
     ADJUST_TEMPERATURE, // Adjust temperature relatively
     RESUME_SCHEDULE,    // Cancel manual override
+    START_AUTH,         // Start OAuth device flow
 };
 
 /**
@@ -147,6 +152,14 @@ struct TadoCommand {
         TadoCommand cmd;
         cmd.type = TadoCommandType::RESUME_SCHEDULE;
         cmd.zoneId = zoneId;
+        cmd.value = 0;
+        return cmd;
+    }
+
+    static TadoCommand startAuth() {
+        TadoCommand cmd;
+        cmd.type = TadoCommandType::START_AUTH;
+        cmd.zoneId = 0;
         cmd.value = 0;
         return cmd;
     }
@@ -187,6 +200,24 @@ private:
 };
 
 /**
+ * @brief Hue state update data
+ */
+struct HueStateData {
+    HueState state;
+    char bridgeIP[32];
+    uint8_t roomCount;
+};
+
+/**
+ * @brief Tado state update data
+ */
+struct TadoStateData {
+    TadoState state;
+    uint8_t zoneCount;
+    TadoAuthInfo authInfo;  // Only valid during AWAITING_AUTH
+};
+
+/**
  * @brief Service data update message
  *
  * Uses shared_ptr for variable-size data (rooms, zones).
@@ -199,6 +230,8 @@ struct ServiceUpdate {
     // Data payloads (only one is valid based on type)
     StatusBarData statusData;
     SensorData sensorData;
+    HueStateData hueStateData;
+    TadoStateData tadoStateData;
 
     // For variable-size data, we use indices into a shared buffer
     // managed by the ServiceDataQueue
@@ -230,11 +263,27 @@ struct ServiceUpdate {
         return update;
     }
 
+    static ServiceUpdate hueState(const HueStateData& data) {
+        ServiceUpdate update;
+        update.type = ServiceDataType::HUE_STATE;
+        update.timestamp = millis();
+        update.hueStateData = data;
+        return update;
+    }
+
     static ServiceUpdate tadoZones(uint8_t count) {
         ServiceUpdate update;
         update.type = ServiceDataType::TADO_ZONES;
         update.timestamp = millis();
         update.zoneCount = count;
+        return update;
+    }
+
+    static ServiceUpdate tadoState(const TadoStateData& data) {
+        ServiceUpdate update;
+        update.type = ServiceDataType::TADO_STATE;
+        update.timestamp = millis();
+        update.tadoStateData = data;
         return update;
     }
 };
@@ -340,6 +389,45 @@ public:
         _zoneCount = count;
 
         ServiceUpdate update = ServiceUpdate::tadoZones(count);
+        return xQueueSend(_queue, &update, 0) == pdTRUE;
+    }
+
+    /**
+     * @brief Send Hue connection state update
+     */
+    bool sendHueState(HueState state, const char* bridgeIP = nullptr, uint8_t roomCount = 0) {
+        if (!_queue) return false;
+
+        HueStateData data;
+        data.state = state;
+        data.roomCount = roomCount;
+        if (bridgeIP) {
+            strncpy(data.bridgeIP, bridgeIP, sizeof(data.bridgeIP) - 1);
+            data.bridgeIP[sizeof(data.bridgeIP) - 1] = '\0';
+        } else {
+            data.bridgeIP[0] = '\0';
+        }
+
+        ServiceUpdate update = ServiceUpdate::hueState(data);
+        return xQueueSend(_queue, &update, 0) == pdTRUE;
+    }
+
+    /**
+     * @brief Send Tado connection state update
+     */
+    bool sendTadoState(TadoState state, uint8_t zoneCount = 0, const TadoAuthInfo* authInfo = nullptr) {
+        if (!_queue) return false;
+
+        TadoStateData data;
+        data.state = state;
+        data.zoneCount = zoneCount;
+        if (authInfo) {
+            data.authInfo = *authInfo;
+        } else {
+            memset(&data.authInfo, 0, sizeof(data.authInfo));
+        }
+
+        ServiceUpdate update = ServiceUpdate::tadoState(data);
         return xQueueSend(_queue, &update, 0) == pdTRUE;
     }
 

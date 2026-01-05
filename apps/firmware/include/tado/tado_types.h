@@ -57,7 +57,7 @@ struct TadoZoneData {
  * @brief Auth info for display during OAuth device flow
  */
 struct TadoAuthInfo {
-    char verifyUrl[128];        // URL user needs to open
+    char verifyUrl[256];        // URL user needs to open (can be long)
     char userCode[16];          // Code to enter manually
     uint32_t expiresAt;         // millis() when code expires
     int expiresInSeconds;       // Seconds until code expires

@@ -20,10 +20,12 @@ enum class MainPage : uint8_t {
  */
 enum class SettingsPage : uint8_t {
     DEVICE_INFO = 0,        // Comprehensive device status
-    HOMEKIT = 1,            // HomeKit pairing QR
-    ACTIONS = 2,            // Device actions (calibrate, reset, etc)
+    TADO = 1,               // Tado connection and auth
+    HUE = 2,                // Hue connection
+    HOMEKIT = 3,            // HomeKit pairing QR
+    ACTIONS = 4,            // Device actions (calibrate, reset, etc)
 
-    COUNT = 3
+    COUNT = 5
 };
 
 /**
@@ -45,6 +47,8 @@ enum class ScreenId : uint8_t {
 
     // Settings stack screens
     SETTINGS_INFO,
+    SETTINGS_TADO,
+    SETTINGS_HUE,
     SETTINGS_HOMEKIT,
     SETTINGS_ACTIONS,
 
@@ -102,10 +106,12 @@ inline ScreenId mainPageToScreenId(MainPage page) {
  */
 inline ScreenId settingsPageToScreenId(SettingsPage page) {
     switch (page) {
-        case SettingsPage::DEVICE_INFO: return ScreenId::SETTINGS_INFO;
-        case SettingsPage::HOMEKIT:     return ScreenId::SETTINGS_HOMEKIT;
-        case SettingsPage::ACTIONS:     return ScreenId::SETTINGS_ACTIONS;
-        default:                        return ScreenId::SETTINGS_INFO;
+        case SettingsPage::DEVICE_INFO:  return ScreenId::SETTINGS_INFO;
+        case SettingsPage::TADO:         return ScreenId::SETTINGS_TADO;
+        case SettingsPage::HUE:          return ScreenId::SETTINGS_HUE;
+        case SettingsPage::HOMEKIT:      return ScreenId::SETTINGS_HOMEKIT;
+        case SettingsPage::ACTIONS:      return ScreenId::SETTINGS_ACTIONS;
+        default:                         return ScreenId::SETTINGS_INFO;
     }
 }
 
@@ -114,15 +120,17 @@ inline ScreenId settingsPageToScreenId(SettingsPage page) {
  */
 inline const char* getScreenName(ScreenId id) {
     switch (id) {
-        case ScreenId::HUE_DASHBOARD:     return "HueDashboard";
-        case ScreenId::SENSOR_DASHBOARD:  return "SensorDashboard";
-        case ScreenId::TADO_CONTROL:      return "TadoControl";
-        case ScreenId::SETTINGS_INFO:     return "SettingsInfo";
-        case ScreenId::SETTINGS_HOMEKIT:  return "SettingsHomeKit";
-        case ScreenId::SETTINGS_ACTIONS:  return "SettingsActions";
-        case ScreenId::STARTUP:           return "Startup";
-        case ScreenId::ERROR:             return "Error";
-        default:                          return "Unknown";
+        case ScreenId::HUE_DASHBOARD:        return "HueDashboard";
+        case ScreenId::SENSOR_DASHBOARD:     return "SensorDashboard";
+        case ScreenId::TADO_CONTROL:         return "TadoControl";
+        case ScreenId::SETTINGS_INFO:        return "SettingsInfo";
+        case ScreenId::SETTINGS_TADO:        return "SettingsTado";
+        case ScreenId::SETTINGS_HUE:         return "SettingsHue";
+        case ScreenId::SETTINGS_HOMEKIT:     return "SettingsHomeKit";
+        case ScreenId::SETTINGS_ACTIONS:     return "SettingsActions";
+        case ScreenId::STARTUP:              return "Startup";
+        case ScreenId::ERROR:                return "Error";
+        default:                             return "Unknown";
     }
 }
 
@@ -140,10 +148,12 @@ inline const char* getMainPageName(MainPage page) {
 
 inline const char* getSettingsPageName(SettingsPage page) {
     switch (page) {
-        case SettingsPage::DEVICE_INFO: return "DeviceInfo";
-        case SettingsPage::HOMEKIT:     return "HomeKit";
-        case SettingsPage::ACTIONS:     return "Actions";
-        default:                        return "Unknown";
+        case SettingsPage::DEVICE_INFO:  return "DeviceInfo";
+        case SettingsPage::TADO:         return "Tado";
+        case SettingsPage::HUE:          return "Hue";
+        case SettingsPage::HOMEKIT:      return "HomeKit";
+        case SettingsPage::ACTIONS:      return "Actions";
+        default:                         return "Unknown";
     }
 }
 

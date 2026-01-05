@@ -41,6 +41,8 @@
 #include "ui/screens/sensor_dashboard.h"
 #include "ui/screens/tado_control.h"
 #include "ui/screens/settings_info.h"
+#include "ui/screens/settings_tado.h"
+#include "ui/screens/settings_hue.h"
 #include "ui/screens/settings_homekit.h"
 #include "ui/screens/settings_actions.h"
 #include "ui/status_bar.h"
@@ -79,6 +81,8 @@ HueDashboard* hueDashboard = nullptr;
 SensorDashboard* sensorDashboard = nullptr;
 TadoControl* tadoControl = nullptr;
 SettingsInfo* settingsInfo = nullptr;
+SettingsTado* settingsTado = nullptr;
+SettingsHue* settingsHue = nullptr;
 SettingsHomeKit* settingsHomeKit = nullptr;
 SettingsActions* settingsActions = nullptr;
 
@@ -100,13 +104,15 @@ TaskHandle_t uiTaskHandle = nullptr;
 
 Screen* getScreenById(ScreenId id) {
     switch (id) {
-        case ScreenId::HUE_DASHBOARD:    return hueDashboard;
-        case ScreenId::SENSOR_DASHBOARD: return sensorDashboard;
-        case ScreenId::TADO_CONTROL:     return tadoControl;
-        case ScreenId::SETTINGS_INFO:    return settingsInfo;
-        case ScreenId::SETTINGS_HOMEKIT: return settingsHomeKit;
-        case ScreenId::SETTINGS_ACTIONS: return settingsActions;
-        default:                         return hueDashboard;
+        case ScreenId::HUE_DASHBOARD:        return hueDashboard;
+        case ScreenId::SENSOR_DASHBOARD:     return sensorDashboard;
+        case ScreenId::TADO_CONTROL:         return tadoControl;
+        case ScreenId::SETTINGS_INFO:        return settingsInfo;
+        case ScreenId::SETTINGS_TADO:        return settingsTado;
+        case ScreenId::SETTINGS_HUE:         return settingsHue;
+        case ScreenId::SETTINGS_HOMEKIT:     return settingsHomeKit;
+        case ScreenId::SETTINGS_ACTIONS:     return settingsActions;
+        default:                             return hueDashboard;
     }
 }
 
@@ -282,11 +288,47 @@ void sendSensorDataToUI() {
     data.iaq = sensorManager->getIAQ();
     data.iaqAccuracy = sensorManager->getIAQAccuracy();
     data.pressure = sensorManager->getPressure();
-    data.stcc4Connected = sensorManager->isSTCC4Ready();
-    data.bme688Connected = sensorManager->isBME688Ready();
+    // Consider sensor "connected" if it's active OR warming up (still providing readings)
+    SensorState stcc4State = sensorManager->getSTCC4State();
+    SensorState bme688State = sensorManager->getBME688State();
+    data.stcc4Connected = (stcc4State == SensorState::ACTIVE || stcc4State == SensorState::WARMING_UP);
+    data.bme688Connected = (bme688State == SensorState::ACTIVE || bme688State == SensorState::WARMING_UP);
     data.historyCount = static_cast<uint8_t>(std::min(sensorManager->getHistoryCount(), (size_t)60));
 
     serviceQueue.sendSensorData(data);
+}
+
+/**
+ * @brief Send Hue state update to UI via ServiceQueue
+ */
+void sendHueStateToUI() {
+    if (!hueService) return;
+
+    HueState state = hueService->getState();
+    const char* bridgeIP = hueService->isConnected() ? hueService->getBridgeIP() : nullptr;
+    uint8_t roomCount = hueService->getRoomCount();
+
+    serviceQueue.sendHueState(state, bridgeIP, roomCount);
+    Serial.printf("[Hue] State update sent: %s\n", getHueStateName(state));
+}
+
+/**
+ * @brief Send Tado state update to UI via ServiceQueue
+ */
+void sendTadoStateToUI() {
+    if (!tadoService) return;
+
+    TadoState state = tadoService->getState();
+    uint8_t zoneCount = tadoService->getZoneCount();
+    const TadoAuthInfo* authInfo = nullptr;
+
+    // Include auth info if awaiting authorization
+    if (state == TadoState::AWAITING_AUTH) {
+        authInfo = &tadoService->getAuthInfo();
+    }
+
+    serviceQueue.sendTadoState(state, zoneCount, authInfo);
+    Serial.printf("[Tado] State update sent: %s\n", getTadoStateName(state));
 }
 
 // =============================================================================
@@ -430,6 +472,8 @@ void ioTask(void* parameter) {
         hueService->setStateCallback([](HueState oldState, HueState newState) {
             Serial.printf("[Hue] State: %s -> %s\n",
                           getHueStateName(oldState), getHueStateName(newState));
+            // Send state update to UI for connections screen
+            sendHueStateToUI();
         });
 
         hueService->setRoomsCallback([]() {
@@ -439,29 +483,51 @@ void ioTask(void* parameter) {
 
         hueService->init();
         Serial.println("[I/O Task] Hue service initialized");
+
+        // Send initial state
+        sendHueStateToUI();
     } else {
         Serial.println("[I/O Task] Hue service skipped (no WiFi)");
     }
 
-    // Initialize Tado service (only if WiFi connected)
+    // Initialize Tado service (always, WiFi only needed for API calls)
     tadoService = new TadoService();
 
-    if (WiFi.isConnected()) {
-        // Set up Tado callbacks
-        tadoService->setStateCallback([](TadoState oldState, TadoState newState) {
-            Serial.printf("[Tado] State: %s -> %s\n",
-                          getTadoStateName(oldState), getTadoStateName(newState));
-        });
+    // Set up Tado callbacks (always, so UI gets state updates)
+    tadoService->setStateCallback([](TadoState oldState, TadoState newState) {
+        Serial.printf("[Tado] State: %s -> %s\n",
+                      getTadoStateName(oldState), getTadoStateName(newState));
+        // Send state update to UI for connections screen
+        sendTadoStateToUI();
 
-        tadoService->setZonesCallback([]() {
-            // Zones changed, send to UI
+        // When just connected, also send zones to UI immediately
+        // This ensures zones are displayed even if user navigates back from settings
+        if (newState == TadoState::CONNECTED && oldState != TadoState::CONNECTED) {
             sendTadoZonesToUI();
-        });
+        }
+    });
 
-        tadoService->init();
-        Serial.println("[I/O Task] Tado service initialized");
-    } else {
-        Serial.println("[I/O Task] Tado service skipped (no WiFi)");
+    tadoService->setZonesCallback([]() {
+        // Zones changed, send to UI
+        sendTadoZonesToUI();
+    });
+
+    // Set up auth info callback for OAuth device flow
+    tadoService->setAuthInfoCallback([](const TadoAuthInfo& info) {
+        Serial.printf("[Tado] Auth info ready: %s (code: %s)\n",
+                      info.verifyUrl, info.userCode);
+        // Send updated state with auth info
+        sendTadoStateToUI();
+    });
+
+    tadoService->init();
+    Serial.println("[I/O Task] Tado service initialized");
+
+    // Send initial state
+    sendTadoStateToUI();
+
+    if (!WiFi.isConnected()) {
+        Serial.println("[I/O Task] Note: WiFi not connected, Tado auth will require WiFi");
     }
 
     // Initialize sensor manager
@@ -521,28 +587,43 @@ void ioTask(void* parameter) {
         }
 
         // Update Tado service (handles auth, token refresh, zone polling)
-        if (WiFi.isConnected() && tadoService) {
-            tadoService->update();
-
-            // Process Tado commands from UI
+        if (tadoService) {
+            // Process Tado commands from UI (always, even without WiFi for START_AUTH feedback)
             TadoCommand tadoCmd;
             while (tadoCommandQueue.receive(tadoCmd)) {
                 switch (tadoCmd.type) {
+                    case TadoCommandType::START_AUTH:
+                        // Allow START_AUTH even without WiFi - service will show error
+                        Serial.println("[Tado] CMD: Start OAuth device flow");
+                        tadoService->startAuth();
+                        break;
+
                     case TadoCommandType::SET_TEMPERATURE:
-                        Serial.printf("[Tado] CMD: Set temp zone %ld = %.1f\n", tadoCmd.zoneId, tadoCmd.value);
-                        tadoService->setZoneTemperature(tadoCmd.zoneId, tadoCmd.value);
+                        if (WiFi.isConnected()) {
+                            Serial.printf("[Tado] CMD: Set temp zone %ld = %.1f\n", tadoCmd.zoneId, tadoCmd.value);
+                            tadoService->setZoneTemperature(tadoCmd.zoneId, tadoCmd.value);
+                        }
                         break;
 
                     case TadoCommandType::ADJUST_TEMPERATURE:
-                        Serial.printf("[Tado] CMD: Adjust temp zone %ld %+.1f\n", tadoCmd.zoneId, tadoCmd.value);
-                        tadoService->adjustZoneTemperature(tadoCmd.zoneId, tadoCmd.value);
+                        if (WiFi.isConnected()) {
+                            Serial.printf("[Tado] CMD: Adjust temp zone %ld %+.1f\n", tadoCmd.zoneId, tadoCmd.value);
+                            tadoService->adjustZoneTemperature(tadoCmd.zoneId, tadoCmd.value);
+                        }
                         break;
 
                     case TadoCommandType::RESUME_SCHEDULE:
-                        Serial.printf("[Tado] CMD: Resume schedule zone %ld\n", tadoCmd.zoneId);
-                        tadoService->resumeSchedule(tadoCmd.zoneId);
+                        if (WiFi.isConnected()) {
+                            Serial.printf("[Tado] CMD: Resume schedule zone %ld\n", tadoCmd.zoneId);
+                            tadoService->resumeSchedule(tadoCmd.zoneId);
+                        }
                         break;
                 }
+            }
+
+            // Update service (requires WiFi for API calls)
+            if (WiFi.isConnected()) {
+                tadoService->update();
             }
         }
 
@@ -648,10 +729,27 @@ void uiTask(void* parameter) {
                     break;
                 }
 
+                case ServiceDataType::HUE_STATE: {
+                    const auto& hueState = serviceUpdate.hueStateData;
+                    settingsHue->setState(hueState.state, hueState.bridgeIP, hueState.roomCount);
+                    Serial.printf("[Service] Hue state updated: %s\n", getHueStateName(hueState.state));
+                    break;
+                }
+
                 case ServiceDataType::TADO_ZONES: {
                     auto zones = serviceQueue.getTadoZones();
                     tadoControl->setZones(zones);
                     Serial.printf("[Service] Tado zones updated: %d zones\n", zones.size());
+                    break;
+                }
+
+                case ServiceDataType::TADO_STATE: {
+                    const auto& tadoState = serviceUpdate.tadoStateData;
+                    settingsTado->setState(tadoState.state, tadoState.zoneCount);
+                    if (tadoState.state == TadoState::AWAITING_AUTH) {
+                        settingsTado->setAuthInfo(tadoState.authInfo);
+                    }
+                    Serial.printf("[Service] Tado state updated: %s\n", getTadoStateName(tadoState.state));
                     break;
                 }
 
@@ -734,6 +832,8 @@ void setup() {
     sensorDashboard = new SensorDashboard();
     tadoControl = new TadoControl();
     settingsInfo = new SettingsInfo();
+    settingsTado = new SettingsTado();
+    settingsHue = new SettingsHue();
     settingsHomeKit = new SettingsHomeKit();
     settingsActions = new SettingsActions();
 
@@ -781,6 +881,19 @@ void setup() {
         // Convert zone ID from string to int32_t
         int32_t zoneIdInt = std::stol(zoneId);
         tadoCommandQueue.send(TadoCommand::adjustTemp(zoneIdInt, delta));
+    });
+
+    // Set up Tado settings screen callback
+    settingsTado->onAuth([]() {
+        Serial.println("[SettingsTado] Tado auth requested");
+        tadoCommandQueue.send(TadoCommand::startAuth());
+    });
+
+    // Set up Hue settings screen callback
+    settingsHue->onReconnect([]() {
+        Serial.println("[SettingsHue] Hue reconnect requested");
+        // Hue reconnect is handled by resetting the service
+        // For now, just log - could add a HueCommand for this
     });
 
     // Populate initial test data (empty/disconnected state)

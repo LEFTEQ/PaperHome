@@ -9,6 +9,7 @@ TadoControl::TadoControl()
 }
 
 void TadoControl::onEnter() {
+    Serial.printf("[TadoControl] onEnter: %d zones stored\n", (int)_zones.size());
     markDirty();
 }
 

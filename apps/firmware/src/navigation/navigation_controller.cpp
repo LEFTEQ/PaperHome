@@ -88,6 +88,14 @@ void NavigationController::navigateTo(ScreenId screen) {
             _currentStack = NavStack::SETTINGS;
             _settingsPage = SettingsPage::DEVICE_INFO;
             break;
+        case ScreenId::SETTINGS_TADO:
+            _currentStack = NavStack::SETTINGS;
+            _settingsPage = SettingsPage::TADO;
+            break;
+        case ScreenId::SETTINGS_HUE:
+            _currentStack = NavStack::SETTINGS;
+            _settingsPage = SettingsPage::HUE;
+            break;
         case ScreenId::SETTINGS_HOMEKIT:
             _currentStack = NavStack::SETTINGS;
             _settingsPage = SettingsPage::HOMEKIT;

@@ -196,6 +196,11 @@ bool TadoService::requestDeviceCode() {
         return false;
     }
 
+    // Debug: print raw response
+    logf("Raw response length: %d", response.length());
+    Serial.println("[Tado] Raw response:");
+    Serial.println(response);
+
     JsonDocument doc;
     DeserializationError error = deserializeJson(doc, response);
     if (error) {
@@ -203,7 +208,7 @@ bool TadoService::requestDeviceCode() {
         return false;
     }
 
-    if (doc.containsKey("error")) {
+    if (doc["error"].is<const char*>()) {
         logf("OAuth error: %s", doc["error"].as<const char*>());
         return false;
     }
@@ -211,21 +216,36 @@ bool TadoService::requestDeviceCode() {
     _deviceCode = doc["device_code"].as<String>();
 
     String userCode = doc["user_code"].as<String>();
-    String verifyUrl = doc["verification_uri_complete"].as<String>();
     int expiresIn = doc["expires_in"].as<int>();
     _authPollInterval = doc["interval"].as<int>() * 1000;
+
+    // Try verification_uri_complete first, fall back to verification_uri
+    String verifyUrl;
+    if (doc["verification_uri_complete"].is<const char*>()) {
+        verifyUrl = doc["verification_uri_complete"].as<String>();
+        logf("Using verification_uri_complete: %s", verifyUrl.c_str());
+    } else if (doc["verification_uri"].is<const char*>()) {
+        verifyUrl = doc["verification_uri"].as<String>();
+        logf("Using verification_uri (manual code entry): %s", verifyUrl.c_str());
+    } else {
+        log("ERROR: No verification URL in response!");
+        return false;
+    }
 
     if (_authPollInterval < 1000) {
         _authPollInterval = AUTH_POLL_MS;
     }
 
     strncpy(_authInfo.userCode, userCode.c_str(), sizeof(_authInfo.userCode) - 1);
+    _authInfo.userCode[sizeof(_authInfo.userCode) - 1] = '\0';
     strncpy(_authInfo.verifyUrl, verifyUrl.c_str(), sizeof(_authInfo.verifyUrl) - 1);
+    _authInfo.verifyUrl[sizeof(_authInfo.verifyUrl) - 1] = '\0';
     _authInfo.expiresInSeconds = expiresIn;
     _authInfo.expiresAt = millis() + (expiresIn * 1000UL);
 
     logf("User code: %s", _authInfo.userCode);
     logf("Verify URL: %s", _authInfo.verifyUrl);
+    logf("URL length: %d", strlen(_authInfo.verifyUrl));
     logf("Expires in %d seconds", expiresIn);
 
     // Notify callback
