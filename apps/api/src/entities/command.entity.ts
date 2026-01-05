@@ -9,6 +9,8 @@ import {
 export enum CommandType {
   HUE_SET_ROOM = 'hue_set_room',
   TADO_SET_TEMP = 'tado_set_temp',
+  TADO_SET_AUTO_ADJUST = 'tado_set_auto_adjust',
+  TADO_SYNC_MAPPING = 'tado_sync_mapping',
   DEVICE_REBOOT = 'device_reboot',
   DEVICE_OTA_UPDATE = 'device_ota_update',
 }

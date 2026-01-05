@@ -18,7 +18,7 @@ import { ClaimDeviceBanner } from '@/components/ui/claim-device-banner';
 import { MetricDetailModal, MetricType } from '@/components/ui/metric-detail-modal';
 import { GlassCard } from '@/components/ui/glass-card';
 import { HueWidget, HueRoom } from '@/components/widgets/hue-widget';
-import { TadoWidget, TadoRoom } from '@/components/widgets/tado-widget';
+import { TadoWidget, TadoRoom, TadoZoneMappingData } from '@/components/widgets/tado-widget';
 import { SensorWidget, SensorStats } from '@/components/widgets/sensor-widget';
 import { EditableText } from '@/components/ui/editable-text';
 import { Button } from '@/components/ui/button';
@@ -38,6 +38,11 @@ import {
   useRealtimeUpdates,
   useDebouncedCallback,
 } from '@/hooks';
+import {
+  useZoneMappings,
+  useToggleAutoAdjust,
+  useSetTargetTemperature,
+} from '@/hooks/use-zone-mappings';
 
 // Transform API Hue data to widget format
 function transformHueRooms(
@@ -178,6 +183,11 @@ export function DashboardPage() {
   const { data: hueRoomsData } = useHueRooms(activeDevice?.deviceId);
   const { data: tadoRoomsData } = useTadoRooms(activeDevice?.deviceId);
 
+  // Fetch zone mappings for auto-adjust feature
+  const { data: zoneMappings = [] } = useZoneMappings(activeDevice?.deviceId);
+  const toggleAutoAdjust = useToggleAutoAdjust();
+  const setTargetTemperature = useSetTargetTemperature();
+
   // Fetch telemetry aggregates (last 24 hours, hourly)
   const fromDate = useMemo(() => {
     const d = new Date();
@@ -288,6 +298,55 @@ export function DashboardPage() {
       roomId,
       temperature: target,
     });
+  };
+
+  // Get zone mapping for a Tado room
+  const getZoneMappingForRoom = (roomId: string): TadoZoneMappingData | undefined => {
+    const zoneId = parseInt(roomId, 10);
+    const mapping = zoneMappings.find((m) => m.tadoZoneId === zoneId);
+    if (!mapping) return undefined;
+    return {
+      id: mapping.id,
+      tadoZoneId: mapping.tadoZoneId,
+      tadoZoneName: mapping.tadoZoneName,
+      targetTemperature: mapping.targetTemperature,
+      autoAdjustEnabled: mapping.autoAdjustEnabled,
+      hysteresis: mapping.hysteresis,
+    };
+  };
+
+  // Handle auto-adjust toggle via zone mapping
+  const handleAutoAdjustToggle = (roomId: string, enabled: boolean) => {
+    if (!activeDevice?.deviceId) return;
+    const zoneId = parseInt(roomId, 10);
+    const mapping = zoneMappings.find((m) => m.tadoZoneId === zoneId);
+    if (!mapping) return;
+
+    toggleAutoAdjust.mutate({
+      deviceId: activeDevice.deviceId,
+      mappingId: mapping.id,
+      enabled,
+      targetTemperature: mapping.targetTemperature,
+    });
+  };
+
+  // Handle target temperature change via zone mapping (for auto-adjust)
+  const handleZoneMappingTargetChange = (roomId: string, target: number) => {
+    if (!activeDevice?.deviceId) return;
+    const zoneId = parseInt(roomId, 10);
+    const mapping = zoneMappings.find((m) => m.tadoZoneId === zoneId);
+
+    if (mapping) {
+      // Update via zone mapping (for auto-adjust mode)
+      setTargetTemperature.mutate({
+        deviceId: activeDevice.deviceId,
+        mappingId: mapping.id,
+        targetTemperature: target,
+      });
+    } else {
+      // Direct Tado control (no zone mapping)
+      handleTadoTargetChange(roomId, target);
+    }
   };
 
   // Loading state
@@ -579,6 +638,34 @@ export function DashboardPage() {
           )}
         </motion.div>
 
+        {/* Climate Control Section - Interactive Tado widgets */}
+        {tadoRooms.length > 0 && (
+          <motion.div variants={fadeInUp}>
+            <h2 className="text-lg font-semibold text-white mb-4">Climate Control</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {tadoRooms.map((room) => {
+                const zoneMapping = getZoneMappingForRoom(room.id);
+                return (
+                  <TadoWidget
+                    key={room.id}
+                    room={room}
+                    zoneMapping={zoneMapping}
+                    esp32Temp={temperature ?? undefined}
+                    isDeviceOnline={activeDevice?.isOnline}
+                    onTargetChange={(target) => handleZoneMappingTargetChange(room.id, target)}
+                    onAutoAdjustToggle={
+                      zoneMapping
+                        ? (enabled) => handleAutoAdjustToggle(room.id, enabled)
+                        : undefined
+                    }
+                    variant={zoneMapping ? 'interactive' : 'compact'}
+                  />
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+
         {/* Lights Section */}
         {hueRooms.length > 0 && (
           <motion.div variants={fadeInUp}>
@@ -590,23 +677,6 @@ export function DashboardPage() {
                   room={room}
                   onToggle={(isOn) => handleHueToggle(room.id, isOn)}
                   onBrightnessChange={(b) => handleBrightnessChange(room.id, b)}
-                />
-              ))}
-            </div>
-          </motion.div>
-        )}
-
-        {/* Additional Tado Rooms */}
-        {tadoRooms.length > 1 && (
-          <motion.div variants={fadeInUp}>
-            <h2 className="text-lg font-semibold text-white mb-4">More Rooms</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {tadoRooms.slice(1).map((room) => (
-                <TadoWidget
-                  key={room.id}
-                  room={room}
-                  onTargetChange={(target) => handleTadoTargetChange(room.id, target)}
-                  variant="compact"
                 />
               ))}
             </div>

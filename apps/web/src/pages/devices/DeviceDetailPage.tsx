@@ -19,6 +19,7 @@ import {
 } from '@/components/widgets/stat-card';
 import { HueWidget, HueRoom } from '@/components/widgets/hue-widget';
 import { TadoWidget, TadoRoom } from '@/components/widgets/tado-widget';
+import { ZoneMappingSection } from '@/components/widgets/zone-mapping-section';
 import { OfflineState } from '@/components/ui/empty-state';
 import { staggerContainer, fadeInUp } from '@/lib/animations';
 import { cn } from '@/lib/utils';
@@ -459,6 +460,18 @@ export function DeviceDetailPage() {
               />
             ))}
           </div>
+        </motion.div>
+      )}
+
+      {/* Zone Mapping Section - Configure auto-adjust */}
+      {tadoRoomsData && tadoRoomsData.length > 0 && (
+        <motion.div variants={fadeInUp}>
+          <ZoneMappingSection
+            deviceId={device.deviceId}
+            deviceName={device.name}
+            isDeviceOnline={device.isOnline}
+            availableZones={tadoRoomsData}
+          />
         </motion.div>
       )}
     </motion.div>

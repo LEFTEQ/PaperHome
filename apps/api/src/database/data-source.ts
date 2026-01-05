@@ -9,6 +9,7 @@ import {
   TelemetryHourly,
   HueState,
   TadoState,
+  TadoZoneMapping,
   Command,
 } from '../entities/index';
 
@@ -30,6 +31,7 @@ export const dataSourceOptions: DataSourceOptions = {
     TelemetryHourly,
     HueState,
     TadoState,
+    TadoZoneMapping,
     Command,
   ],
   migrations: [join(__dirname, 'migrations', '*{.ts,.js}')],

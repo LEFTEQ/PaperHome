@@ -122,6 +122,8 @@ enum class TadoCommandType : uint8_t {
     ADJUST_TEMPERATURE, // Adjust temperature relatively
     RESUME_SCHEDULE,    // Cancel manual override
     START_AUTH,         // Start OAuth device flow
+    SET_AUTO_ADJUST,    // Enable/disable auto-adjust for a zone
+    SYNC_MAPPING,       // Sync zone mapping from server
 };
 
 /**
@@ -130,13 +132,19 @@ enum class TadoCommandType : uint8_t {
 struct TadoCommand {
     TadoCommandType type;
     int32_t zoneId;
-    float value;        // temperature or delta
+    float value;            // temperature or delta
+    bool autoAdjustEnabled; // for SET_AUTO_ADJUST
+    float hysteresis;       // temperature threshold (default 0.5)
+    char zoneName[32];      // zone name for SYNC_MAPPING
 
     static TadoCommand setTemp(int32_t zoneId, float temp) {
         TadoCommand cmd;
         cmd.type = TadoCommandType::SET_TEMPERATURE;
         cmd.zoneId = zoneId;
         cmd.value = temp;
+        cmd.autoAdjustEnabled = false;
+        cmd.hysteresis = 0.5f;
+        cmd.zoneName[0] = '\0';
         return cmd;
     }
 
@@ -145,6 +153,9 @@ struct TadoCommand {
         cmd.type = TadoCommandType::ADJUST_TEMPERATURE;
         cmd.zoneId = zoneId;
         cmd.value = delta;
+        cmd.autoAdjustEnabled = false;
+        cmd.hysteresis = 0.5f;
+        cmd.zoneName[0] = '\0';
         return cmd;
     }
 
@@ -153,6 +164,9 @@ struct TadoCommand {
         cmd.type = TadoCommandType::RESUME_SCHEDULE;
         cmd.zoneId = zoneId;
         cmd.value = 0;
+        cmd.autoAdjustEnabled = false;
+        cmd.hysteresis = 0.5f;
+        cmd.zoneName[0] = '\0';
         return cmd;
     }
 
@@ -161,6 +175,33 @@ struct TadoCommand {
         cmd.type = TadoCommandType::START_AUTH;
         cmd.zoneId = 0;
         cmd.value = 0;
+        cmd.autoAdjustEnabled = false;
+        cmd.hysteresis = 0.5f;
+        cmd.zoneName[0] = '\0';
+        return cmd;
+    }
+
+    static TadoCommand setAutoAdjust(int32_t zoneId, bool enabled, float targetTemp, float hysteresis = 0.5f) {
+        TadoCommand cmd;
+        cmd.type = TadoCommandType::SET_AUTO_ADJUST;
+        cmd.zoneId = zoneId;
+        cmd.value = targetTemp;
+        cmd.autoAdjustEnabled = enabled;
+        cmd.hysteresis = hysteresis;
+        cmd.zoneName[0] = '\0';
+        return cmd;
+    }
+
+    static TadoCommand syncMapping(int32_t zoneId, const char* zoneName, float targetTemp,
+                                    bool autoAdjustEnabled, float hysteresis = 0.5f) {
+        TadoCommand cmd;
+        cmd.type = TadoCommandType::SYNC_MAPPING;
+        cmd.zoneId = zoneId;
+        cmd.value = targetTemp;
+        cmd.autoAdjustEnabled = autoAdjustEnabled;
+        cmd.hysteresis = hysteresis;
+        strncpy(cmd.zoneName, zoneName, sizeof(cmd.zoneName) - 1);
+        cmd.zoneName[sizeof(cmd.zoneName) - 1] = '\0';
         return cmd;
     }
 };

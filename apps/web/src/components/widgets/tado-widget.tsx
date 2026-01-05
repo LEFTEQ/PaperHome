@@ -1,9 +1,11 @@
-import { Thermometer, Droplets, Flame, Snowflake, Minus, Plus } from 'lucide-react';
+import { Thermometer, Droplets, Flame, Snowflake, Minus, Plus, Zap, AlertTriangle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { GlassCard, BentoCard } from '@/components/ui/glass-card';
-import { CircularGauge, CompactGauge } from '@/components/ui/circular-gauge';
+import { CircularGauge } from '@/components/ui/circular-gauge';
+import { InteractiveGauge } from '@/components/ui/interactive-gauge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Toggle } from '@/components/ui/toggle';
 import { cn } from '@/lib/utils';
 
 export interface TadoRoom {
@@ -16,35 +18,165 @@ export interface TadoRoom {
   mode: 'heat' | 'cool' | 'off' | 'auto';
 }
 
+export interface TadoZoneMappingData {
+  id: string;
+  tadoZoneId: number;
+  tadoZoneName: string;
+  targetTemperature: number;
+  autoAdjustEnabled: boolean;
+  hysteresis: number;
+}
+
 export interface TadoWidgetProps {
   /** Room data */
   room: TadoRoom;
+  /** Zone mapping data (for auto-adjust feature) */
+  zoneMapping?: TadoZoneMappingData;
+  /** ESP32 sensor temperature (for auto-adjust display) */
+  esp32Temp?: number;
+  /** Is device online */
+  isDeviceOnline?: boolean;
   /** Target temperature change callback */
   onTargetChange?: (target: number) => void;
+  /** Auto-adjust toggle callback */
+  onAutoAdjustToggle?: (enabled: boolean) => void;
   /** Bento grid size */
   bentoSize?: '1x1' | '2x1' | '1x2' | '2x2';
   /** Show full gauge or compact */
-  variant?: 'full' | 'compact';
+  variant?: 'full' | 'compact' | 'interactive';
   /** Additional className */
   className?: string;
 }
 
 export function TadoWidget({
   room,
+  zoneMapping,
+  esp32Temp,
+  isDeviceOnline = true,
   onTargetChange,
+  onAutoAdjustToggle,
   bentoSize,
   variant = 'full',
   className,
 }: TadoWidgetProps) {
   const CardComponent = bentoSize ? BentoCard : GlassCard;
+  const isAutoAdjust = zoneMapping?.autoAdjustEnabled ?? false;
 
   const handleIncrement = () => {
-    onTargetChange?.(Math.min(30, room.targetTemp + 0.5));
+    onTargetChange?.(Math.min(25, room.targetTemp + 0.5));
   };
 
   const handleDecrement = () => {
     onTargetChange?.(Math.max(5, room.targetTemp - 0.5));
   };
+
+  // Get status badge
+  const getStatusBadge = () => {
+    if (!isDeviceOnline) {
+      return (
+        <Badge variant="warning" size="xs">
+          <AlertTriangle className="h-3 w-3 mr-1" />
+          Offline
+        </Badge>
+      );
+    }
+    if (isAutoAdjust) {
+      return (
+        <Badge variant="accent" size="xs" withDot>
+          Auto
+        </Badge>
+      );
+    }
+    if (room.isHeating) {
+      return (
+        <Badge variant="heating" size="xs" withDot>
+          Heating
+        </Badge>
+      );
+    }
+    return null;
+  };
+
+  // Interactive variant with draggable gauge
+  if (variant === 'interactive') {
+    const displayTemp = esp32Temp ?? room.currentTemp;
+    const targetTemp = zoneMapping?.targetTemperature ?? room.targetTemp;
+
+    return (
+      <CardComponent
+        bentoSize={bentoSize}
+        className={cn(
+          'flex flex-col items-center',
+          room.isHeating && isDeviceOnline && 'tado-heating-bg',
+          isAutoAdjust && isDeviceOnline && 'tado-auto-adjust',
+          !isDeviceOnline && 'opacity-60',
+          className
+        )}
+      >
+        {/* Header */}
+        <div className="w-full flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <div
+              className={cn(
+                'h-8 w-8 rounded-lg flex items-center justify-center',
+                room.isHeating && isDeviceOnline
+                  ? 'bg-heating/20'
+                  : isAutoAdjust && isDeviceOnline
+                  ? 'bg-accent/20'
+                  : 'bg-glass-hover'
+              )}
+            >
+              {room.isHeating && isDeviceOnline ? (
+                <Flame className="h-4 w-4 text-heating" />
+              ) : isAutoAdjust && isDeviceOnline ? (
+                <Zap className="h-4 w-4 text-accent" />
+              ) : (
+                <Thermometer className="h-4 w-4 text-text-subtle" />
+              )}
+            </div>
+            <span className="text-sm font-medium text-white">{room.name}</span>
+          </div>
+          {getStatusBadge()}
+        </div>
+
+        {/* Interactive Gauge */}
+        <div className="flex-1 flex items-center justify-center">
+          <InteractiveGauge
+            currentTemp={displayTemp}
+            targetTemp={targetTemp}
+            tadoTarget={room.targetTemp}
+            isHeating={room.isHeating}
+            isAutoAdjust={isAutoAdjust}
+            isOffline={!isDeviceOnline}
+            size={180}
+            strokeWidth={10}
+            onTargetChange={onTargetChange}
+          />
+        </div>
+
+        {/* Footer with auto-adjust toggle and humidity */}
+        <div className="w-full flex items-center justify-between mt-4">
+          <div className="flex items-center gap-1 text-xs text-text-muted">
+            <Droplets className="h-3.5 w-3.5" />
+            <span>{room.humidity}%</span>
+          </div>
+
+          {onAutoAdjustToggle && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-text-muted">Auto</span>
+              <Toggle
+                size="sm"
+                variant="default"
+                checked={isAutoAdjust}
+                onCheckedChange={onAutoAdjustToggle}
+                disabled={!isDeviceOnline}
+              />
+            </div>
+          )}
+        </div>
+      </CardComponent>
+    );
+  }
 
   if (variant === 'compact') {
     return (

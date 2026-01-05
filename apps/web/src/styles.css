@@ -1092,3 +1092,108 @@ body {
     font-size: clamp(1.25rem, 5vw, 1.5rem);
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Tado Heating Background Animation
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.tado-heating-bg {
+  position: relative;
+  overflow: hidden;
+}
+
+.tado-heating-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(249, 115, 22, 0.15) 0%,
+    rgba(239, 68, 68, 0.1) 25%,
+    rgba(249, 115, 22, 0.2) 50%,
+    rgba(239, 68, 68, 0.1) 75%,
+    rgba(249, 115, 22, 0.15) 100%
+  );
+  background-size: 200% 200%;
+  animation: heat-pulse 3s ease-in-out infinite;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+@keyframes heat-pulse {
+  0%, 100% {
+    background-position: 0% 50%;
+    opacity: 0.6;
+  }
+  50% {
+    background-position: 100% 50%;
+    opacity: 1;
+  }
+}
+
+/* Auto-adjust mode indicator */
+.tado-auto-adjust {
+  position: relative;
+}
+
+.tado-auto-adjust::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  background: linear-gradient(
+    135deg,
+    rgba(0, 229, 255, 0.2) 0%,
+    rgba(16, 185, 129, 0.1) 50%,
+    rgba(0, 229, 255, 0.2) 100%
+  );
+  background-size: 200% 200%;
+  animation: auto-adjust-glow 4s ease-in-out infinite;
+  pointer-events: none;
+  z-index: -1;
+}
+
+@keyframes auto-adjust-glow {
+  0%, 100% {
+    background-position: 0% 50%;
+    opacity: 0.5;
+  }
+  50% {
+    background-position: 100% 50%;
+    opacity: 0.8;
+  }
+}
+
+/* Toggle switch styles */
+.toggle-auto-adjust {
+  position: relative;
+  width: 48px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.toggle-auto-adjust::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.toggle-auto-adjust.active {
+  background: linear-gradient(135deg, hsl(187, 100%, 50%) 0%, hsl(160, 84%, 45%) 100%);
+  border-color: transparent;
+}
+
+.toggle-auto-adjust.active::before {
+  transform: translateX(24px);
+  box-shadow: 0 0 10px hsla(187, 100%, 50%, 0.5);
+}

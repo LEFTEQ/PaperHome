@@ -34,6 +34,7 @@
 #include "hue/hue_types.h"
 #include "tado/tado_service.h"
 #include "tado/tado_types.h"
+#include "tado/tado_auto_adjust.h"
 #include "sensors/sensor_manager.h"
 
 // Screens
@@ -65,6 +66,7 @@ XboxDriver* xboxDriver = nullptr;
 InputHandler* inputHandler = nullptr;
 HueService* hueService = nullptr;
 TadoService* tadoService = nullptr;
+TadoAutoAdjust* tadoAutoAdjust = nullptr;
 SensorManager* sensorManager = nullptr;
 
 // Core 1 (UI) objects
@@ -530,6 +532,28 @@ void ioTask(void* parameter) {
         Serial.println("[I/O Task] Note: WiFi not connected, Tado auth will require WiFi");
     }
 
+    // Initialize Tado auto-adjust (uses ESP32 sensors to control Tado thermostats)
+    tadoAutoAdjust = new TadoAutoAdjust();
+
+    // Set callback to adjust Tado temperature via TadoService
+    tadoAutoAdjust->setAdjustCallback([](int32_t zoneId, float newTarget) {
+        if (tadoService && tadoService->isConnected()) {
+            Serial.printf("[TadoAuto] Adjusting zone %ld to %.1f°C\n", zoneId, newTarget);
+            tadoService->setZoneTemperature(zoneId, newTarget);
+        }
+    });
+
+    // Set callback to publish status via MQTT (TODO: implement MQTT publishing)
+    tadoAutoAdjust->setStatusCallback([](const AutoAdjustStatus& status) {
+        Serial.printf("[TadoAuto] Status: Zone %ld, Enabled=%s, Target=%.1f, ESP32=%.1f, Tado=%.1f\n",
+                      status.zoneId, status.enabled ? "yes" : "no",
+                      status.targetTemp, status.esp32Temp, status.tadoTarget);
+        // TODO: Publish via MQTT when MqttManager is integrated
+    });
+
+    tadoAutoAdjust->init();
+    Serial.println("[I/O Task] Tado auto-adjust initialized");
+
     // Initialize sensor manager
     sensorManager = new SensorManager();
     if (sensorManager->init()) {
@@ -618,6 +642,27 @@ void ioTask(void* parameter) {
                             tadoService->resumeSchedule(tadoCmd.zoneId);
                         }
                         break;
+
+                    case TadoCommandType::SET_AUTO_ADJUST:
+                        Serial.printf("[Tado] CMD: Set auto-adjust zone %ld, enabled=%s, target=%.1f\n",
+                                      tadoCmd.zoneId, tadoCmd.autoAdjustEnabled ? "yes" : "no", tadoCmd.value);
+                        if (tadoAutoAdjust) {
+                            const AutoAdjustConfig* existing = tadoAutoAdjust->getConfig(tadoCmd.zoneId);
+                            const char* zoneName = existing ? existing->zoneName : "Unknown";
+                            tadoAutoAdjust->setConfig(tadoCmd.zoneId, zoneName, tadoCmd.value,
+                                                       tadoCmd.autoAdjustEnabled, tadoCmd.hysteresis);
+                        }
+                        break;
+
+                    case TadoCommandType::SYNC_MAPPING:
+                        Serial.printf("[Tado] CMD: Sync mapping zone %ld (%s), target=%.1f, auto=%s\n",
+                                      tadoCmd.zoneId, tadoCmd.zoneName, tadoCmd.value,
+                                      tadoCmd.autoAdjustEnabled ? "yes" : "no");
+                        if (tadoAutoAdjust) {
+                            tadoAutoAdjust->setConfig(tadoCmd.zoneId, tadoCmd.zoneName, tadoCmd.value,
+                                                       tadoCmd.autoAdjustEnabled, tadoCmd.hysteresis);
+                        }
+                        break;
                 }
             }
 
@@ -630,6 +675,12 @@ void ioTask(void* parameter) {
         // Update sensor manager (samples at configured interval internally)
         if (sensorManager) {
             sensorManager->update();
+        }
+
+        // Update Tado auto-adjust control loop (runs internally at 5-minute intervals)
+        if (tadoAutoAdjust && sensorManager) {
+            float currentTemp = sensorManager->getTemperature();
+            tadoAutoAdjust->update(currentTemp);
         }
 
         // Periodic status and sensor data update

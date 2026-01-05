@@ -304,6 +304,32 @@ export const hueApi = {
 // Tado API
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Zone mapping types
+export interface TadoZoneMapping {
+  id: string;
+  deviceId: string;
+  tadoZoneId: number;
+  tadoZoneName: string;
+  targetTemperature: number;
+  autoAdjustEnabled: boolean;
+  hysteresis: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateZoneMappingDto {
+  tadoZoneId: number;
+  tadoZoneName: string;
+  targetTemperature?: number;
+  autoAdjustEnabled?: boolean;
+}
+
+export interface UpdateZoneMappingDto {
+  targetTemperature?: number;
+  autoAdjustEnabled?: boolean;
+  hysteresis?: number;
+}
+
 export const tadoApi = {
   getRooms: async (deviceId: string): Promise<TadoRoom[]> => {
     const response = await api.get<TadoRoom[]>(`/tado/${deviceId}/rooms`);
@@ -329,5 +355,52 @@ export const tadoApi = {
     temperature: number
   ): Promise<void> => {
     await api.post(`/tado/${deviceId}/rooms/${roomId}/temperature`, { temperature });
+  },
+
+  // Zone mapping endpoints
+  getZoneMappings: async (deviceId: string): Promise<TadoZoneMapping[]> => {
+    const response = await api.get<TadoZoneMapping[]>(`/tado/${deviceId}/zone-mappings`);
+    return response.data;
+  },
+
+  createZoneMapping: async (
+    deviceId: string,
+    data: CreateZoneMappingDto
+  ): Promise<TadoZoneMapping> => {
+    const response = await api.post<TadoZoneMapping>(`/tado/${deviceId}/zone-mappings`, data);
+    return response.data;
+  },
+
+  updateZoneMapping: async (
+    deviceId: string,
+    mappingId: string,
+    data: UpdateZoneMappingDto
+  ): Promise<TadoZoneMapping> => {
+    const response = await api.patch<TadoZoneMapping>(
+      `/tado/${deviceId}/zone-mappings/${mappingId}`,
+      data
+    );
+    return response.data;
+  },
+
+  deleteZoneMapping: async (deviceId: string, mappingId: string): Promise<void> => {
+    await api.delete(`/tado/${deviceId}/zone-mappings/${mappingId}`);
+  },
+
+  setAutoAdjust: async (
+    deviceId: string,
+    mappingId: string,
+    enabled: boolean,
+    targetTemperature?: number
+  ): Promise<TadoZoneMapping> => {
+    const data: UpdateZoneMappingDto = {
+      autoAdjustEnabled: enabled,
+      ...(targetTemperature !== undefined && { targetTemperature }),
+    };
+    const response = await api.patch<TadoZoneMapping>(
+      `/tado/${deviceId}/zone-mappings/${mappingId}`,
+      data
+    );
+    return response.data;
   },
 };

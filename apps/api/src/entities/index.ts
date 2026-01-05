@@ -5,4 +5,5 @@ export { Telemetry } from './telemetry.entity';
 export { TelemetryHourly } from './telemetry-hourly.entity';
 export { HueState } from './hue-state.entity';
 export { TadoState } from './tado-state.entity';
+export { TadoZoneMapping } from './tado-zone-mapping.entity';
 export { Command } from './command.entity';
