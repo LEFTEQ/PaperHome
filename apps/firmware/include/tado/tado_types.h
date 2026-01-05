@@ -38,13 +38,16 @@ inline const char* getTadoStateName(TadoState state) {
 constexpr uint8_t TADO_MAX_ZONES = 8;
 
 /**
- * @brief Represents a Tado heating zone
+ * @brief Tado heating zone data from API
+ *
+ * Raw data from Tado API. Convert to UI TadoZone (in tado_control.h) for display.
  */
-struct TadoZone {
+struct TadoZoneData {
     int32_t id;                 // Zone ID
     char name[32];              // Zone name
     float currentTemp;          // Current temperature from Tado sensor
     float targetTemp;           // Target/setpoint temperature
+    float humidity;             // Humidity percentage
     bool heating;               // True if heating is active
     bool manualOverride;        // True if in manual mode (not schedule)
     uint8_t heatingPower;       // Heating power percentage (0-100)

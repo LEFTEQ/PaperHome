@@ -366,7 +366,7 @@ bool TadoService::fetchZones() {
         return false;
     }
 
-    TadoZone newZones[TADO_MAX_ZONES];
+    TadoZoneData newZones[TADO_MAX_ZONES];
     uint8_t newCount = 0;
     bool changed = false;
 
@@ -374,7 +374,7 @@ bool TadoService::fetchZones() {
     for (JsonObject zoneObj : zonesArray) {
         if (newCount >= TADO_MAX_ZONES) break;
 
-        TadoZone& zone = newZones[newCount];
+        TadoZoneData& zone = newZones[newCount];
         zone.id = zoneObj["id"].as<int32_t>();
 
         String name = zoneObj["name"].as<String>();
@@ -407,7 +407,7 @@ bool TadoService::fetchZones() {
 
         // Check if this zone changed
         if (newCount < _zoneCount) {
-            const TadoZone& old = _zones[newCount];
+            const TadoZoneData& old = _zones[newCount];
             if (old.id != zone.id ||
                 old.currentTemp != zone.currentTemp ||
                 old.targetTemp != zone.targetTemp ||
@@ -442,8 +442,8 @@ bool TadoService::refreshZones() {
     return fetchZones();
 }
 
-const TadoZone& TadoService::getZone(uint8_t index) const {
-    static TadoZone emptyZone = {};
+const TadoZoneData& TadoService::getZone(uint8_t index) const {
+    static TadoZoneData emptyZone = {};
     if (index >= _zoneCount) {
         return emptyZone;
     }

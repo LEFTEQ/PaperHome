@@ -16,9 +16,11 @@
 #include <Arduino.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <WiFi.h>
 
 #include "core/config.h"
 #include "core/input_queue.h"
+#include "core/service_queue.h"
 #include "display/display_driver.h"
 #include "display/compositor.h"
 #include "navigation/navigation_controller.h"
@@ -26,6 +28,13 @@
 #include "input/input_batcher.h"
 #include "controller/xbox_driver.h"
 #include "controller/input_handler.h"
+
+// Services
+#include "hue/hue_service.h"
+#include "hue/hue_types.h"
+#include "tado/tado_service.h"
+#include "tado/tado_types.h"
+#include "sensors/sensor_manager.h"
 
 // Screens
 #include "ui/screens/hue_dashboard.h"
@@ -45,10 +54,16 @@ using namespace paperhome::config;
 
 // Cross-core communication
 InputQueue inputQueue;
+ServiceDataQueue serviceQueue;
+HueCommandQueue hueCommandQueue;
+TadoCommandQueue tadoCommandQueue;
 
 // Core 0 (I/O) objects
 XboxDriver* xboxDriver = nullptr;
 InputHandler* inputHandler = nullptr;
+HueService* hueService = nullptr;
+TadoService* tadoService = nullptr;
+SensorManager* sensorManager = nullptr;
 
 // Core 1 (UI) objects
 DisplayDriver displayDriver;
@@ -176,11 +191,155 @@ void renderCurrentScreen() {
 }
 
 // =============================================================================
+// Service Data Conversion Helpers
+// =============================================================================
+
+/**
+ * @brief Convert HueService rooms to UI HueRoom format
+ *
+ * HueService uses char arrays and 0-254 brightness (HueRoomData).
+ * UI uses std::string and 0-100 brightness (HueRoom).
+ */
+std::vector<HueRoom> convertHueRooms(const HueRoomData* serviceRooms, uint8_t count) {
+    std::vector<HueRoom> uiRooms;
+    uiRooms.reserve(count);
+
+    for (uint8_t i = 0; i < count; i++) {
+        const auto& src = serviceRooms[i];
+        HueRoom room;
+        room.id = src.id;
+        room.name = src.name;
+        room.isOn = src.anyOn;
+        room.brightness = src.getBrightnessPercent();  // Convert 0-254 to 0-100
+        room.lightCount = src.lightCount;
+        room.reachable = true;  // Service rooms are always reachable
+        uiRooms.push_back(room);
+    }
+
+    return uiRooms;
+}
+
+/**
+ * @brief Send Hue rooms from service to UI via ServiceQueue
+ */
+void sendHueRoomsToUI() {
+    if (!hueService || !hueService->isConnected()) return;
+
+    auto uiRooms = convertHueRooms(hueService->getRooms(), hueService->getRoomCount());
+    serviceQueue.sendHueRooms(uiRooms);
+    Serial.printf("[Hue] Sent %d rooms to UI\n", uiRooms.size());
+}
+
+/**
+ * @brief Convert TadoService zones to UI TadoZone format
+ *
+ * TadoService uses int32_t zoneId and char arrays (TadoZoneData).
+ * UI uses std::string and additional fields (TadoZone).
+ */
+std::vector<TadoZone> convertTadoZones(const TadoZoneData* serviceZones, uint8_t count) {
+    std::vector<TadoZone> uiZones;
+    uiZones.reserve(count);
+
+    for (uint8_t i = 0; i < count; i++) {
+        const auto& src = serviceZones[i];
+        TadoZone zone;
+        zone.id = std::to_string(src.id);
+        zone.name = src.name;
+        zone.currentTemp = src.currentTemp;
+        zone.targetTemp = src.targetTemp;
+        zone.humidity = src.humidity;
+        zone.heatingOn = src.heating;
+        zone.heatingPower = src.heatingPower;
+        zone.isAway = false;  // TODO: Get from Tado API
+        zone.connected = true;
+        uiZones.push_back(zone);
+    }
+
+    return uiZones;
+}
+
+/**
+ * @brief Send Tado zones from service to UI via ServiceQueue
+ */
+void sendTadoZonesToUI() {
+    if (!tadoService || !tadoService->isConnected()) return;
+
+    auto uiZones = convertTadoZones(tadoService->getZones(), tadoService->getZoneCount());
+    serviceQueue.sendTadoZones(uiZones);
+    Serial.printf("[Tado] Sent %d zones to UI\n", uiZones.size());
+}
+
+/**
+ * @brief Send sensor data from SensorManager to UI via ServiceQueue
+ */
+void sendSensorDataToUI() {
+    if (!sensorManager) return;
+
+    SensorData data;
+    data.co2 = sensorManager->getCO2();
+    data.temperature = sensorManager->getTemperature();
+    data.humidity = sensorManager->getHumidity();
+    data.iaq = sensorManager->getIAQ();
+    data.iaqAccuracy = sensorManager->getIAQAccuracy();
+    data.pressure = sensorManager->getPressure();
+    data.stcc4Connected = sensorManager->isSTCC4Ready();
+    data.bme688Connected = sensorManager->isBME688Ready();
+    data.historyCount = static_cast<uint8_t>(std::min(sensorManager->getHistoryCount(), (size_t)60));
+
+    serviceQueue.sendSensorData(data);
+}
+
+// =============================================================================
 // Test Data (replace with real service data later)
 // =============================================================================
 
-void populateTestData() {
-    // Status bar test data
+void populateInitialTestData() {
+    // Initial status bar data (direct set, before service queue is active)
+    StatusBarData statusData;
+    statusData.wifiConnected = false;
+    statusData.wifiRSSI = 0;
+    statusData.mqttConnected = false;
+    statusData.hueConnected = false;
+    statusData.tadoConnected = false;
+    statusData.temperature = 0.0f;
+    statusData.co2 = 0;
+    statusData.batteryPercent = 0;
+    statusData.usbPowered = true;
+    statusBar.setData(statusData);
+
+    // Device info (settings screen)
+    DeviceInfo info;
+    info.wifiConnected = false;
+    info.wifiSSID = "Connecting...";
+    info.ipAddress = "---";
+    info.macAddress = "---";
+    info.rssi = 0;
+    info.mqttConnected = false;
+    info.hueConnected = false;
+    info.hueBridgeIP = "---";
+    info.hueRoomCount = 0;
+    info.tadoConnected = false;
+    info.tadoZoneCount = 0;
+    info.freeHeap = ESP.getFreeHeap();
+    info.freePSRAM = ESP.getFreePsram();
+    info.uptime = 0;
+    info.cpuFreqMHz = getCpuFrequencyMhz();
+    info.batteryPercent = 0;
+    info.batteryMV = 0;
+    info.usbPowered = true;
+    info.charging = false;
+    info.stcc4Connected = false;
+    info.bme688Connected = false;
+    info.bme688IaqAccuracy = 0;
+    info.controllerConnected = false;
+    info.controllerBattery = 0;
+    info.firmwareVersion = "3.2.0";
+    settingsInfo->setDeviceInfo(info);
+}
+
+// Send test data via ServiceQueue (called from I/O task for testing)
+void sendTestDataViaQueue() {
+    // Status bar
     StatusBarData statusData;
     statusData.wifiConnected = true;
     statusData.wifiRSSI = -55;
@@ -191,7 +350,7 @@ void populateTestData() {
     statusData.co2 = 650;
     statusData.batteryPercent = 85;
     statusData.usbPowered = false;
-    statusBar.setData(statusData);
+    serviceQueue.sendStatus(statusData);
 
     // Hue rooms
     std::vector<HueRoom> rooms = {
@@ -202,7 +361,7 @@ void populateTestData() {
         {"r5", "Office", true, 60, 2, true},
         {"r6", "Hallway", true, 40, 2, true},
     };
-    hueDashboard->setRooms(rooms);
+    serviceQueue.sendHueRooms(rooms);
 
     // Sensor data
     SensorData sensorData;
@@ -214,16 +373,8 @@ void populateTestData() {
     sensorData.pressure = 1013.2f;
     sensorData.stcc4Connected = true;
     sensorData.bme688Connected = true;
-    sensorData.historyCount = 30;
-
-    for (int i = 0; i < 30; i++) {
-        sensorData.co2History[i] = 600 + (i * 5) % 100;
-        sensorData.tempHistory[i] = 220 + (i * 2) % 30;
-        sensorData.humidityHistory[i] = 400 + (i * 5) % 100;
-        sensorData.iaqHistory[i] = 30 + (i * 3) % 50;
-        sensorData.pressureHistory[i] = 10100 + (i * 10) % 100;
-    }
-    sensorDashboard->setSensorData(sensorData);
+    sensorData.historyCount = 0;  // No history for now
+    serviceQueue.sendSensorData(sensorData);
 
     // Tado zones
     std::vector<TadoZone> zones = {
@@ -231,36 +382,9 @@ void populateTestData() {
         {"z2", "Bedroom", 20.0f, 19.0f, 52.0f, false, 0, false, true},
         {"z3", "Office", 23.0f, 22.0f, 45.0f, true, 40, false, true},
     };
-    tadoControl->setZones(zones);
+    serviceQueue.sendTadoZones(zones);
 
-    // Device info
-    DeviceInfo info;
-    info.wifiConnected = true;
-    info.wifiSSID = "159159159";
-    info.ipAddress = "192.168.1.100";
-    info.macAddress = "AA:BB:CC:DD:EE:FF";
-    info.rssi = -45;
-    info.mqttConnected = true;
-    info.hueConnected = true;
-    info.hueBridgeIP = "192.168.1.50";
-    info.hueRoomCount = 6;
-    info.tadoConnected = true;
-    info.tadoZoneCount = 3;
-    info.freeHeap = 125 * 1024;
-    info.freePSRAM = 7 * 1024 * 1024;
-    info.uptime = 9500;
-    info.cpuFreqMHz = 240;
-    info.batteryPercent = 85;
-    info.batteryMV = 4100;
-    info.usbPowered = true;
-    info.charging = false;
-    info.stcc4Connected = true;
-    info.bme688Connected = true;
-    info.bme688IaqAccuracy = 3;
-    info.controllerConnected = true;
-    info.controllerBattery = 95;
-    info.firmwareVersion = "3.1.0";
-    settingsInfo->setDeviceInfo(info);
+    Serial.println("[I/O Task] Test data sent via ServiceQueue");
 }
 
 // =============================================================================
@@ -269,6 +393,25 @@ void populateTestData() {
 
 void ioTask(void* parameter) {
     Serial.printf("[I/O Task] Started on Core %d\n", xPortGetCoreID());
+
+    // Initialize WiFi first (required for Hue/Tado services)
+    Serial.println("[WiFi] Connecting...");
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(config::wifi::SSID, config::wifi::PASSWORD);
+
+    uint32_t wifiStartTime = millis();
+    while (WiFi.status() != WL_CONNECTED) {
+        if (millis() - wifiStartTime > config::wifi::CONNECT_TIMEOUT_MS) {
+            Serial.println("[WiFi] Connection timeout - continuing without WiFi");
+            break;
+        }
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+
+    if (WiFi.isConnected()) {
+        Serial.printf("[WiFi] Connected! IP: %s, RSSI: %d dBm\n",
+                      WiFi.localIP().toString().c_str(), WiFi.RSSI());
+    }
 
     // Initialize Xbox driver
     xboxDriver = new XboxDriver();
@@ -279,8 +422,63 @@ void ioTask(void* parameter) {
     inputHandler = new InputHandler(*xboxDriver);
     Serial.println("[I/O Task] Input handler initialized");
 
+    // Initialize Hue service (only if WiFi connected)
+    hueService = new HueService();
+
+    if (WiFi.isConnected()) {
+        // Set up Hue callbacks
+        hueService->setStateCallback([](HueState oldState, HueState newState) {
+            Serial.printf("[Hue] State: %s -> %s\n",
+                          getHueStateName(oldState), getHueStateName(newState));
+        });
+
+        hueService->setRoomsCallback([]() {
+            // Rooms changed, send to UI
+            sendHueRoomsToUI();
+        });
+
+        hueService->init();
+        Serial.println("[I/O Task] Hue service initialized");
+    } else {
+        Serial.println("[I/O Task] Hue service skipped (no WiFi)");
+    }
+
+    // Initialize Tado service (only if WiFi connected)
+    tadoService = new TadoService();
+
+    if (WiFi.isConnected()) {
+        // Set up Tado callbacks
+        tadoService->setStateCallback([](TadoState oldState, TadoState newState) {
+            Serial.printf("[Tado] State: %s -> %s\n",
+                          getTadoStateName(oldState), getTadoStateName(newState));
+        });
+
+        tadoService->setZonesCallback([]() {
+            // Zones changed, send to UI
+            sendTadoZonesToUI();
+        });
+
+        tadoService->init();
+        Serial.println("[I/O Task] Tado service initialized");
+    } else {
+        Serial.println("[I/O Task] Tado service skipped (no WiFi)");
+    }
+
+    // Initialize sensor manager
+    sensorManager = new SensorManager();
+    if (sensorManager->init()) {
+        Serial.println("[I/O Task] Sensor manager initialized");
+    } else {
+        Serial.println("[I/O Task] WARNING: Sensor manager init failed (no sensors found)");
+    }
+
     // Main I/O loop
+    uint32_t lastStatusUpdate = 0;
+    constexpr uint32_t STATUS_UPDATE_INTERVAL_MS = 5000;  // Update status every 5s
+
     while (true) {
+        uint32_t now = millis();
+
         // Update Xbox driver (handles BLE connection)
         xboxDriver->update();
 
@@ -294,7 +492,87 @@ void ioTask(void* parameter) {
             }
         }
 
-        // TODO: Add WiFi, MQTT, sensor polling here
+        // Update Hue service (handles discovery, auth, polling)
+        if (WiFi.isConnected() && hueService) {
+            hueService->update();
+
+            // Process Hue commands from UI
+            HueCommand hueCmd;
+            while (hueCommandQueue.receive(hueCmd)) {
+                switch (hueCmd.type) {
+                    case HueCommandType::TOGGLE_ROOM:
+                        Serial.printf("[Hue] CMD: Toggle room %s\n", hueCmd.roomId);
+                        hueService->toggleRoom(hueCmd.roomId);
+                        break;
+
+                    case HueCommandType::SET_BRIGHTNESS:
+                        Serial.printf("[Hue] CMD: Set brightness %s = %d\n", hueCmd.roomId, hueCmd.value);
+                        // Convert from 0-100 to 0-254
+                        hueService->setRoomBrightness(hueCmd.roomId, (hueCmd.value * 254) / 100);
+                        break;
+
+                    case HueCommandType::ADJUST_BRIGHTNESS:
+                        Serial.printf("[Hue] CMD: Adjust brightness %s %+d\n", hueCmd.roomId, hueCmd.value);
+                        // Convert from 0-100 scale to 0-254 scale
+                        hueService->adjustRoomBrightness(hueCmd.roomId, (hueCmd.value * 254) / 100);
+                        break;
+                }
+            }
+        }
+
+        // Update Tado service (handles auth, token refresh, zone polling)
+        if (WiFi.isConnected() && tadoService) {
+            tadoService->update();
+
+            // Process Tado commands from UI
+            TadoCommand tadoCmd;
+            while (tadoCommandQueue.receive(tadoCmd)) {
+                switch (tadoCmd.type) {
+                    case TadoCommandType::SET_TEMPERATURE:
+                        Serial.printf("[Tado] CMD: Set temp zone %ld = %.1f\n", tadoCmd.zoneId, tadoCmd.value);
+                        tadoService->setZoneTemperature(tadoCmd.zoneId, tadoCmd.value);
+                        break;
+
+                    case TadoCommandType::ADJUST_TEMPERATURE:
+                        Serial.printf("[Tado] CMD: Adjust temp zone %ld %+.1f\n", tadoCmd.zoneId, tadoCmd.value);
+                        tadoService->adjustZoneTemperature(tadoCmd.zoneId, tadoCmd.value);
+                        break;
+
+                    case TadoCommandType::RESUME_SCHEDULE:
+                        Serial.printf("[Tado] CMD: Resume schedule zone %ld\n", tadoCmd.zoneId);
+                        tadoService->resumeSchedule(tadoCmd.zoneId);
+                        break;
+                }
+            }
+        }
+
+        // Update sensor manager (samples at configured interval internally)
+        if (sensorManager) {
+            sensorManager->update();
+        }
+
+        // Periodic status and sensor data update
+        if (now - lastStatusUpdate >= STATUS_UPDATE_INTERVAL_MS) {
+            lastStatusUpdate = now;
+
+            // Status bar data
+            StatusBarData statusData;
+            statusData.wifiConnected = WiFi.isConnected();
+            statusData.wifiRSSI = WiFi.isConnected() ? WiFi.RSSI() : 0;
+            statusData.mqttConnected = false;  // TODO: Add MQTT service
+            statusData.hueConnected = hueService && hueService->isConnected();
+            statusData.tadoConnected = tadoService && tadoService->isConnected();
+            statusData.temperature = sensorManager ? sensorManager->getTemperature() : 0.0f;
+            statusData.co2 = sensorManager ? sensorManager->getCO2() : 0;
+            statusData.batteryPercent = 100;   // TODO: Add power manager
+            statusData.usbPowered = true;      // TODO: Add power manager
+            serviceQueue.sendStatus(statusData);
+
+            // Send sensor data to UI for dashboard
+            sendSensorDataToUI();
+        }
+
+        // TODO: Add MQTT polling here
 
         // Yield to other tasks (10ms = 100Hz polling)
         vTaskDelay(pdMS_TO_TICKS(10));
@@ -353,6 +631,37 @@ void uiTask(void* parameter) {
         // Update navigation controller (handles timing)
         navController.update();
 
+        // Process service data updates from I/O core
+        ServiceUpdate serviceUpdate;
+        while (serviceQueue.receive(serviceUpdate)) {
+            switch (serviceUpdate.type) {
+                case ServiceDataType::STATUS_UPDATE:
+                    statusBar.setData(serviceUpdate.statusData);
+                    needsFullRefresh = true;  // Status bar changed, need full redraw
+                    Serial.println("[Service] Status bar updated");
+                    break;
+
+                case ServiceDataType::HUE_ROOMS: {
+                    auto rooms = serviceQueue.getHueRooms();
+                    hueDashboard->setRooms(rooms);
+                    Serial.printf("[Service] Hue rooms updated: %d rooms\n", rooms.size());
+                    break;
+                }
+
+                case ServiceDataType::TADO_ZONES: {
+                    auto zones = serviceQueue.getTadoZones();
+                    tadoControl->setZones(zones);
+                    Serial.printf("[Service] Tado zones updated: %d zones\n", zones.size());
+                    break;
+                }
+
+                case ServiceDataType::SENSOR_DATA:
+                    sensorDashboard->setSensorData(serviceUpdate.sensorData);
+                    Serial.println("[Service] Sensor data updated");
+                    break;
+            }
+        }
+
         // Render if needed
         renderCurrentScreen();
 
@@ -384,6 +693,27 @@ void setup() {
         while (1) { delay(1000); }
     }
     Serial.println("[Queue] Input queue initialized");
+
+    // Initialize service data queue for I/O -> UI data flow
+    if (!serviceQueue.init()) {
+        Serial.println("[Queue] ERROR: Failed to create service queue!");
+        while (1) { delay(1000); }
+    }
+    Serial.println("[Queue] Service data queue initialized");
+
+    // Initialize Hue command queue for UI -> I/O commands
+    if (!hueCommandQueue.init()) {
+        Serial.println("[Queue] ERROR: Failed to create Hue command queue!");
+        while (1) { delay(1000); }
+    }
+    Serial.println("[Queue] Hue command queue initialized");
+
+    // Initialize Tado command queue for UI -> I/O commands
+    if (!tadoCommandQueue.init()) {
+        Serial.println("[Queue] ERROR: Failed to create Tado command queue!");
+        while (1) { delay(1000); }
+    }
+    Serial.println("[Queue] Tado command queue initialized");
 
     // Initialize display driver
     Serial.println("[Display] Initializing...");
@@ -432,8 +762,29 @@ void setup() {
         }
     });
 
-    // Populate test data
-    populateTestData();
+    // Set up Hue room control callbacks
+    hueDashboard->onRoomToggle([](const std::string& roomId) {
+        Serial.printf("[Hue] Toggle room: %s\n", roomId.c_str());
+        hueCommandQueue.send(HueCommand::toggle(roomId.c_str()));
+    });
+
+    hueDashboard->onBrightnessChange([](const std::string& roomId, int8_t delta) {
+        Serial.printf("[Hue] Brightness delta: %s %+d\n", roomId.c_str(), delta);
+        // Convert delta from UI scale (-100 to +100) to Hue scale
+        // Trigger input gives us small deltas (5-30 mapped to 5-20 brightness)
+        hueCommandQueue.send(HueCommand::adjustBrightness(roomId.c_str(), delta));
+    });
+
+    // Set up Tado temperature control callbacks
+    tadoControl->onTempChange([](const std::string& zoneId, float delta) {
+        Serial.printf("[Tado] Temp delta: %s %+.1f\n", zoneId.c_str(), delta);
+        // Convert zone ID from string to int32_t
+        int32_t zoneIdInt = std::stol(zoneId);
+        tadoCommandQueue.send(TadoCommand::adjustTemp(zoneIdInt, delta));
+    });
+
+    // Populate initial test data (empty/disconnected state)
+    populateInitialTestData();
 
     // Start with Hue Dashboard
     currentScreen = hueDashboard;

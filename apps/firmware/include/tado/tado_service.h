@@ -76,12 +76,12 @@ public:
      * @param index Zone index (0 to zoneCount-1)
      * @return Reference to zone data
      */
-    const TadoZone& getZone(uint8_t index) const;
+    const TadoZoneData& getZone(uint8_t index) const;
 
     /**
      * @brief Get all zones array
      */
-    const TadoZone* getZones() const { return _zones; }
+    const TadoZoneData* getZones() const { return _zones; }
 
     /**
      * @brief Get home name
@@ -185,7 +185,7 @@ private:
     TadoAuthInfo _authInfo;
 
     // Zone data
-    TadoZone _zones[TADO_MAX_ZONES];
+    TadoZoneData _zones[TADO_MAX_ZONES];
     uint8_t _zoneCount;
 
     // Timing

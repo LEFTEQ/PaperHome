@@ -85,19 +85,19 @@ public:
      * @param index Room index (0 to roomCount-1)
      * @return Reference to room data
      */
-    const HueRoom& getRoom(uint8_t index) const;
+    const HueRoomData& getRoom(uint8_t index) const;
 
     /**
      * @brief Get all rooms array
      */
-    const HueRoom* getRooms() const { return _rooms; }
+    const HueRoomData* getRooms() const { return _rooms; }
 
     /**
      * @brief Find room by ID
      * @param roomId Room ID string
      * @return Pointer to room, or nullptr if not found
      */
-    const HueRoom* findRoom(const char* roomId) const;
+    const HueRoomData* findRoom(const char* roomId) const;
 
     // Room control
 
@@ -180,7 +180,7 @@ private:
     char _username[48];
 
     // Room data
-    HueRoom _rooms[HUE_MAX_ROOMS];
+    HueRoomData _rooms[HUE_MAX_ROOMS];
     uint8_t _roomCount;
 
     // Networking
@@ -208,7 +208,7 @@ private:
     // Room management
     bool fetchRooms();
     bool parseRoomsResponse(const String& response);
-    bool roomsChanged(const HueRoom* newRooms, uint8_t newCount);
+    bool roomsChanged(const HueRoomData* newRooms, uint8_t newCount);
 
     // Credentials
     bool loadCredentials();

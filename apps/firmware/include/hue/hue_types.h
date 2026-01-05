@@ -7,12 +7,12 @@
 namespace paperhome {
 
 /**
- * @brief Hue room/group state
+ * @brief Hue room/group data from bridge API
  *
- * Represents a Hue room or zone with its current state.
- * Used for dashboard display and control.
+ * Raw data from Hue bridge. Uses fixed-size buffers for embedded use.
+ * Convert to UI HueRoom (in hue_dashboard.h) for display.
  */
-struct HueRoom {
+struct HueRoomData {
     char id[8];             // Room/group ID (numeric string)
     char name[32];          // Display name
     char className[24];     // Room class (Living room, Bedroom, etc.)

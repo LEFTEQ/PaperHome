@@ -10,7 +10,7 @@ static const IPAddress SSDP_MULTICAST(239, 255, 255, 250);
 static const uint16_t SSDP_PORT = 1900;
 
 // Static empty room for out-of-bounds access
-static const HueRoom EMPTY_ROOM = {};
+static const HueRoomData EMPTY_ROOM = {};
 
 HueService::HueService()
     : _stateMachine(HueState::DISCONNECTED)
@@ -272,7 +272,7 @@ bool HueService::parseRoomsResponse(const String& response) {
         return false;
     }
 
-    HueRoom newRooms[HUE_MAX_ROOMS];
+    HueRoomData newRooms[HUE_MAX_ROOMS];
     uint8_t newCount = 0;
 
     JsonObject root = doc.as<JsonObject>();
@@ -287,7 +287,7 @@ bool HueService::parseRoomsResponse(const String& response) {
             continue;
         }
 
-        HueRoom& room = newRooms[newCount];
+        HueRoomData& room = newRooms[newCount];
 
         // Copy ID
         strncpy(room.id, kv.key().c_str(), sizeof(room.id) - 1);
@@ -332,14 +332,14 @@ bool HueService::parseRoomsResponse(const String& response) {
     return true;
 }
 
-bool HueService::roomsChanged(const HueRoom* newRooms, uint8_t newCount) {
+bool HueService::roomsChanged(const HueRoomData* newRooms, uint8_t newCount) {
     if (_roomCount != newCount) {
         return true;
     }
 
     for (uint8_t i = 0; i < _roomCount; i++) {
-        const HueRoom& oldRoom = _rooms[i];
-        const HueRoom& newRoom = newRooms[i];
+        const HueRoomData& oldRoom = _rooms[i];
+        const HueRoomData& newRoom = newRooms[i];
 
         if (strcmp(oldRoom.id, newRoom.id) != 0) return true;
         if (strcmp(oldRoom.name, newRoom.name) != 0) return true;
@@ -351,14 +351,14 @@ bool HueService::roomsChanged(const HueRoom* newRooms, uint8_t newCount) {
     return false;
 }
 
-const HueRoom& HueService::getRoom(uint8_t index) const {
+const HueRoomData& HueService::getRoom(uint8_t index) const {
     if (index >= _roomCount) {
         return EMPTY_ROOM;
     }
     return _rooms[index];
 }
 
-const HueRoom* HueService::findRoom(const char* roomId) const {
+const HueRoomData* HueService::findRoom(const char* roomId) const {
     for (uint8_t i = 0; i < _roomCount; i++) {
         if (strcmp(_rooms[i].id, roomId) == 0) {
             return &_rooms[i];
@@ -368,7 +368,7 @@ const HueRoom* HueService::findRoom(const char* roomId) const {
 }
 
 bool HueService::toggleRoom(const char* roomId) {
-    const HueRoom* room = findRoom(roomId);
+    const HueRoomData* room = findRoom(roomId);
     if (!room) return false;
 
     return setRoomState(roomId, !room->anyOn);
@@ -413,7 +413,7 @@ bool HueService::setRoomBrightness(const char* roomId, uint8_t brightness) {
 }
 
 bool HueService::adjustRoomBrightness(const char* roomId, int16_t delta) {
-    const HueRoom* room = findRoom(roomId);
+    const HueRoomData* room = findRoom(roomId);
     if (!room) return false;
 
     // Calculate new brightness

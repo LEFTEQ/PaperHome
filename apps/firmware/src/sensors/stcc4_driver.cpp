@@ -115,13 +115,30 @@ bool STCC4Driver::readMeasurement() {
     float tempRaw, humRaw;
     uint16_t statusWord;
 
-    uint16_t error = _sensor.readMeasurement(co2Raw, tempRaw, humRaw, statusWord);
-    if (error) {
-        // Error code 4 often means "not ready yet"
-        if (error != 4) {
-            logf("Read measurement failed: %d", error);
+    // Retry up to 3 times for I2C errors (bus contention with BLE/WiFi)
+    constexpr int MAX_RETRIES = 3;
+    uint16_t error = 0;
+
+    for (int retry = 0; retry < MAX_RETRIES; retry++) {
+        error = _sensor.readMeasurement(co2Raw, tempRaw, humRaw, statusWord);
+
+        if (error == 0) {
+            break;  // Success
         }
-        return error == 4;  // "Not ready" is not a failure
+
+        if (error == 4) {
+            return true;  // "Not ready yet" - not a failure
+        }
+
+        // I2C error - wait briefly and retry
+        if (retry < MAX_RETRIES - 1) {
+            delay(10);  // Brief delay before retry
+        }
+    }
+
+    if (error) {
+        logf("Read measurement failed after %d retries: %d", MAX_RETRIES, error);
+        return false;
     }
 
     // Validate readings
