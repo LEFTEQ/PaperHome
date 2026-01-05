@@ -158,7 +158,7 @@ export function ZoneMappingSection({
         </div>
         <div className="flex items-center gap-2">
           {mappings.some((m) => m.autoAdjustEnabled) && (
-            <Badge variant="accent" size="xs">
+            <Badge variant="primary" size="xs">
               <Zap className="h-3 w-3 mr-1" />
               Auto-Adjust Active
             </Badge>
@@ -310,8 +310,8 @@ function ZoneMappingCard({
   const [isEditing, setIsEditing] = useState(false);
   const [tempValue, setTempValue] = useState(mapping.targetTemperature);
 
-  const handleTempChange = (value: number[]) => {
-    setTempValue(value[0]);
+  const handleTempChange = (value: number) => {
+    setTempValue(value);
   };
 
   const handleTempCommit = () => {
@@ -392,12 +392,12 @@ function ZoneMappingCard({
                   </span>
                 </div>
                 <Slider
-                  value={[tempValue]}
+                  value={tempValue}
                   min={5}
                   max={25}
                   step={0.5}
-                  onValueChange={handleTempChange}
-                  onValueCommit={handleTempCommit}
+                  onChange={handleTempChange}
+                  onChangeEnd={handleTempCommit}
                   disabled={!isDeviceOnline}
                 />
                 <div className="flex justify-between text-xs text-text-subtle mt-1">

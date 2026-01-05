@@ -82,7 +82,7 @@ export function TadoWidget({
     }
     if (isAutoAdjust) {
       return (
-        <Badge variant="accent" size="xs" withDot>
+        <Badge variant="primary" size="xs" withDot>
           Auto
         </Badge>
       );
