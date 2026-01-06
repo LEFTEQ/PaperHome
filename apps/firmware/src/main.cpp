@@ -251,8 +251,11 @@ void sendHueRoomsToUI() {
             json += "\"brightness\":" + String(rooms[i].getBrightnessPercent()) + "}";
         }
         json += "]";
-        mqttClient->publishHueState(json);
-        Serial.printf("[Hue] Sent %d rooms to MQTT\n", count);
+        if (mqttClient->publishHueState(json)) {
+            Serial.printf("[Hue MQTT] Published %d rooms: %s\n", count, json.c_str());
+        } else {
+            Serial.printf("[Hue MQTT] Failed to publish %d rooms\n", count);
+        }
     }
 
     Serial.printf("[Hue] Sent %d rooms to UI\n", uiRooms.size());
@@ -311,8 +314,11 @@ void sendTadoZonesToUI() {
             json += "\"heatingPower\":" + String(zones[i].heatingPower) + "}";
         }
         json += "]";
-        mqttClient->publishTadoState(json);
-        Serial.printf("[Tado] Sent %d zones to MQTT\n", count);
+        if (mqttClient->publishTadoState(json)) {
+            Serial.printf("[Tado MQTT] Published %d zones: %s\n", count, json.c_str());
+        } else {
+            Serial.printf("[Tado MQTT] Failed to publish %d zones\n", count);
+        }
     }
 
     Serial.printf("[Tado] Sent %d zones to UI\n", uiZones.size());

@@ -65,7 +65,6 @@ export interface HueRoom {
 }
 
 export interface TadoRoom {
-  id: string;
   roomId: string;
   roomName: string;
   currentTemp: number;
@@ -73,7 +72,7 @@ export interface TadoRoom {
   humidity: number;
   isHeating: boolean;
   heatingPower: number;
-  time: string;
+  lastUpdated: string;
 }
 
 export interface TelemetryAggregate {
