@@ -400,10 +400,22 @@ bool TadoService::fetchZones() {
         String name = zoneObj["name"].as<String>();
         strncpy(zone.name, name.c_str(), sizeof(zone.name) - 1);
 
-        if (zoneObj.containsKey("currentTemperature")) {
-            zone.currentTemp = zoneObj["currentTemperature"]["value"].as<float>();
+        // Parse sensor data from sensorDataPoints (HOPS API structure)
+        if (zoneObj.containsKey("sensorDataPoints")) {
+            JsonObject sensorData = zoneObj["sensorDataPoints"];
+            if (sensorData.containsKey("insideTemperature")) {
+                zone.currentTemp = sensorData["insideTemperature"]["value"].as<float>();
+            } else {
+                zone.currentTemp = 0;
+            }
+            if (sensorData.containsKey("humidity")) {
+                zone.humidity = sensorData["humidity"]["percentage"].as<float>();
+            } else {
+                zone.humidity = 0;
+            }
         } else {
             zone.currentTemp = 0;
+            zone.humidity = 0;
         }
 
         if (zoneObj.containsKey("setting")) {

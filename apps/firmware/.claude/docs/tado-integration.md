@@ -218,7 +218,8 @@ Authorization: Bearer {access_token}
 
 Response: Array of room objects with:
 - id, name
-- currentTemperature.value
+- sensorDataPoints.insideTemperature.value (current temp)
+- sensorDataPoints.humidity.percentage (humidity %)
 - setting.power, setting.temperature.value
 - manualControlTermination (if manual override active)
 - heatingPower.percentage
