@@ -241,7 +241,7 @@ export function ZoneMappingSection({
                       <div className="space-y-2">
                         {unmappedZones.map((zone) => (
                           <button
-                            key={zone.id}
+                            key={zone.roomId}
                             className="w-full p-3 rounded-lg bg-glass-hover hover:bg-glass-bright border border-glass-border transition-colors flex items-center justify-between"
                             onClick={() => handleAddZone(zone)}
                             disabled={createMapping.isPending}
