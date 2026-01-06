@@ -158,7 +158,6 @@ export function useRealtimeUpdates() {
       if (!old) {
         // If no cache exists, create new entries
         return payload.map((room) => ({
-          id: `${deviceId}-${room.roomId}`,
           roomId: room.roomId,
           roomName: room.roomName,
           currentTemp: room.currentTemp,
@@ -166,7 +165,7 @@ export function useRealtimeUpdates() {
           humidity: room.humidity ?? 0,
           isHeating: room.isHeating,
           heatingPower: 0,
-          time: timestamp,
+          lastUpdated: timestamp,
         }));
       }
 
@@ -174,7 +173,6 @@ export function useRealtimeUpdates() {
       return payload.map((room) => {
         const existing = old.find((r) => r.roomId === room.roomId);
         return {
-          id: existing?.id ?? `${deviceId}-${room.roomId}`,
           roomId: room.roomId,
           roomName: room.roomName,
           currentTemp: room.currentTemp,
@@ -182,7 +180,7 @@ export function useRealtimeUpdates() {
           humidity: room.humidity ?? existing?.humidity ?? 0,
           isHeating: room.isHeating,
           heatingPower: existing?.heatingPower ?? 0,
-          time: timestamp,
+          lastUpdated: timestamp,
         };
       });
     });
