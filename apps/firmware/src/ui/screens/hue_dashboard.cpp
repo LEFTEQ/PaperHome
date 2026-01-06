@@ -1,4 +1,5 @@
 #include "ui/screens/hue_dashboard.h"
+#include "ui/helpers.h"
 #include <Arduino.h>
 
 namespace paperhome {
@@ -98,76 +99,33 @@ void HueDashboard::renderTile(Compositor& compositor, int16_t index, int16_t x, 
     const HueRoom& room = _rooms[index];
     bool isSelected = (index == getSelectedIndex());
 
-    // INVERTED SELECTION: Black background with white content when selected
-    if (isSelected) {
-        // Fill tile with black for selection
-        compositor.fillRect(x, y, TILE_WIDTH, TILE_HEIGHT, true);
-    } else {
-        // Normal: white background with black border
-        compositor.drawRect(x, y, TILE_WIDTH, TILE_HEIGHT, true);
-    }
-
-    // Text color: inverted when selected
-    bool textBlack = !isSelected;
+    // Selection border (thick 2px when selected, 1px otherwise)
+    ui::drawSelectionBorder(compositor, x, y, TILE_WIDTH, TILE_HEIGHT, isSelected);
 
     // Room name (truncated to fit)
     std::string displayName = room.name;
     if (displayName.length() > 10) {
         displayName = displayName.substr(0, 9) + "..";
     }
-    compositor.drawText(displayName.c_str(), x + 8, y + 28, &FreeSansBold9pt7b, textBlack);
+    compositor.drawText(displayName.c_str(), x + 8, y + 28, &FreeSansBold9pt7b, true);
 
-    // Status indicator (ON/OFF)
-    const char* status = room.isOn ? "ON" : "OFF";
-    if (!room.reachable) status = "N/A";
-    compositor.drawText(status, x + TILE_WIDTH - 32, y + 28, &FreeSans9pt7b, textBlack);
+    // Bulb icon (filled=ON, outline=OFF)
+    ui::renderBulbIcon(compositor, x + TILE_WIDTH - 24, y + 8, room.isOn && room.reachable);
 
-    // Brightness bar
-    int16_t barY = y + TILE_HEIGHT - 28;
-    int16_t barWidth = TILE_WIDTH - 16;
-    renderBrightnessBar(compositor, x + 8, barY, barWidth, room.brightness, room.isOn, isSelected);
-}
-
-void HueDashboard::renderBrightnessBar(Compositor& compositor, int16_t x, int16_t y,
-                                        int16_t width, uint8_t brightness, bool isOn, bool inverted) {
-    constexpr int16_t BAR_HEIGHT = 14;
-
-    // Colors swap when inverted (selected)
-    bool borderColor = !inverted;  // Black border normally, white when selected
-    bool fillColor = !inverted;    // Black fill normally, white when selected
-
-    // Bar outline
-    compositor.drawRect(x, y, width, BAR_HEIGHT, borderColor);
-
-    if (isOn && brightness > 0) {
-        // Fill proportional to brightness
-        int16_t fillWidth = (width - 4) * brightness / 100;
-        if (fillWidth > 0) {
-            compositor.fillRect(x + 2, y + 2, fillWidth, BAR_HEIGHT - 4, fillColor);
-        }
-    }
-
-    // Brightness percentage text
+    // Brightness percentage (large, centered)
     char brightnessText[8];
-    snprintf(brightnessText, sizeof(brightnessText), "%d%%", brightness);
-    compositor.drawText(brightnessText, x + width - 35, y + 11, &FreeSans9pt7b, borderColor);
+    if (room.reachable) {
+        snprintf(brightnessText, sizeof(brightnessText), "%d%%", room.brightness);
+    } else {
+        snprintf(brightnessText, sizeof(brightnessText), "N/A");
+    }
+    compositor.drawTextCentered(brightnessText, x, y + TILE_HEIGHT / 2 + 8,
+                                 TILE_WIDTH, &FreeSansBold18pt7b, true);
 }
 
 void HueDashboard::renderPageIndicator(Compositor& compositor, int currentPage, int totalPages) {
-    int16_t indicatorY = config::display::HEIGHT - 20;
-    int16_t dotSpacing = 20;
-    int16_t startX = config::display::WIDTH / 2 - (totalPages - 1) * dotSpacing / 2;
-
-    for (int i = 0; i < totalPages; i++) {
-        int16_t dotX = startX + i * dotSpacing;
-        if (i == currentPage) {
-            // Current page - filled circle (black)
-            compositor.fillCircle(dotX, indicatorY, 5, true);
-        } else {
-            // Other pages - outline circle (black)
-            compositor.drawCircle(dotX, indicatorY, 5, true);
-        }
-    }
+    ui::renderPageDots(compositor, currentPage, totalPages,
+                       config::display::WIDTH, config::display::HEIGHT - 20);
 }
 
 } // namespace paperhome

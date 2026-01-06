@@ -97,8 +97,6 @@ private:
     static constexpr int16_t ZONE_SPACING = 10;
 
     void renderZone(Compositor& compositor, int16_t index, int16_t y);
-    void renderHeatingBar(Compositor& compositor, int16_t x, int16_t y, int16_t width,
-                          uint8_t heatingPower, bool inverted);
     void renderPageIndicator(Compositor& compositor, int currentPage, int totalPages);
 };
 

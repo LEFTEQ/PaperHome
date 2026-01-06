@@ -8,6 +8,7 @@
 #include "ui/screens/hue_dashboard.h"
 #include "ui/screens/sensor_dashboard.h"
 #include "ui/screens/tado_control.h"
+#include "ui/screens/settings_info.h"
 #include "hue/hue_types.h"
 #include "tado/tado_types.h"
 #include <vector>
@@ -25,6 +26,7 @@ enum class ServiceDataType : uint8_t {
     TADO_ZONES,         // std::vector<TadoZone> update
     TADO_STATE,         // TadoState update (with auth info if applicable)
     SENSOR_DATA,        // SensorData update
+    DEVICE_INFO,        // DeviceInfo for settings screen
 };
 
 // =============================================================================
@@ -259,6 +261,87 @@ struct TadoStateData {
 };
 
 /**
+ * @brief Queue-safe device info data (fixed-size char arrays)
+ */
+struct DeviceInfoData {
+    // Network
+    char wifiSSID[32];
+    char ipAddress[16];
+    char macAddress[18];
+    int8_t rssi;
+    bool wifiConnected;
+
+    // MQTT
+    bool mqttConnected;
+
+    // Hue
+    bool hueConnected;
+    char hueBridgeIP[16];
+    uint8_t hueRoomCount;
+
+    // Tado
+    bool tadoConnected;
+    uint8_t tadoZoneCount;
+
+    // System
+    uint32_t freeHeap;
+    uint32_t freePSRAM;
+    uint32_t uptime;
+    uint16_t cpuFreqMHz;
+
+    // Power
+    uint8_t batteryPercent;
+    uint16_t batteryMV;
+    bool usbPowered;
+    bool charging;
+
+    // Sensors
+    bool stcc4Connected;
+    bool bme688Connected;
+    uint8_t bme688IaqAccuracy;
+
+    // Controller
+    bool controllerConnected;
+    uint8_t controllerBattery;
+
+    // Firmware
+    char firmwareVersion[16];
+
+    /**
+     * @brief Convert to DeviceInfo (with std::string)
+     */
+    DeviceInfo toDeviceInfo() const {
+        DeviceInfo info;
+        info.wifiSSID = wifiSSID;
+        info.ipAddress = ipAddress;
+        info.macAddress = macAddress;
+        info.rssi = rssi;
+        info.wifiConnected = wifiConnected;
+        info.mqttConnected = mqttConnected;
+        info.hueConnected = hueConnected;
+        info.hueBridgeIP = hueBridgeIP;
+        info.hueRoomCount = hueRoomCount;
+        info.tadoConnected = tadoConnected;
+        info.tadoZoneCount = tadoZoneCount;
+        info.freeHeap = freeHeap;
+        info.freePSRAM = freePSRAM;
+        info.uptime = uptime;
+        info.cpuFreqMHz = cpuFreqMHz;
+        info.batteryPercent = batteryPercent;
+        info.batteryMV = batteryMV;
+        info.usbPowered = usbPowered;
+        info.charging = charging;
+        info.stcc4Connected = stcc4Connected;
+        info.bme688Connected = bme688Connected;
+        info.bme688IaqAccuracy = bme688IaqAccuracy;
+        info.controllerConnected = controllerConnected;
+        info.controllerBattery = controllerBattery;
+        info.firmwareVersion = firmwareVersion;
+        return info;
+    }
+};
+
+/**
  * @brief Service data update message
  *
  * Uses shared_ptr for variable-size data (rooms, zones).
@@ -273,6 +356,7 @@ struct ServiceUpdate {
     SensorData sensorData;
     HueStateData hueStateData;
     TadoStateData tadoStateData;
+    DeviceInfoData deviceInfoData;
 
     // For variable-size data, we use indices into a shared buffer
     // managed by the ServiceDataQueue
@@ -325,6 +409,14 @@ struct ServiceUpdate {
         update.type = ServiceDataType::TADO_STATE;
         update.timestamp = millis();
         update.tadoStateData = data;
+        return update;
+    }
+
+    static ServiceUpdate deviceInfo(const DeviceInfoData& data) {
+        ServiceUpdate update;
+        update.type = ServiceDataType::DEVICE_INFO;
+        update.timestamp = millis();
+        update.deviceInfoData = data;
         return update;
     }
 };
@@ -469,6 +561,15 @@ public:
         }
 
         ServiceUpdate update = ServiceUpdate::tadoState(data);
+        return xQueueSend(_queue, &update, 0) == pdTRUE;
+    }
+
+    /**
+     * @brief Send device info update
+     */
+    bool sendDeviceInfo(const DeviceInfoData& data) {
+        if (!_queue) return false;
+        ServiceUpdate update = ServiceUpdate::deviceInfo(data);
         return xQueueSend(_queue, &update, 0) == pdTRUE;
     }
 

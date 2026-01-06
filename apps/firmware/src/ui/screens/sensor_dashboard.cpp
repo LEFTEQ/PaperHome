@@ -1,4 +1,5 @@
 #include "ui/screens/sensor_dashboard.h"
+#include "ui/helpers.h"
 #include <Arduino.h>
 
 namespace paperhome {
@@ -47,28 +48,21 @@ void SensorDashboard::render(Compositor& compositor) {
 void SensorDashboard::renderPanel(Compositor& compositor, int16_t index, int16_t x, int16_t y) {
     bool isSelected = (index == getSelectedIndex());
 
-    // INVERTED SELECTION: Black background with white content when selected
-    if (isSelected) {
-        compositor.fillRect(x, y, PANEL_WIDTH, PANEL_HEIGHT, true);
-    } else {
-        compositor.drawRect(x, y, PANEL_WIDTH, PANEL_HEIGHT, true);
-    }
-
-    // Text color inverts when selected
-    bool textBlack = !isSelected;
+    // Selection border (thick 2px when selected, 1px otherwise)
+    ui::drawSelectionBorder(compositor, x, y, PANEL_WIDTH, PANEL_HEIGHT, isSelected);
 
     // Label at top
     const char* label = getLabel(index);
-    compositor.drawText(label, x + 10, y + 28, &FreeSansBold9pt7b, textBlack);
+    compositor.drawText(label, x + 10, y + 28, &FreeSansBold9pt7b, true);
 
     // Value (large, centered vertically)
     char valueBuffer[32];
     formatValue(index, valueBuffer, sizeof(valueBuffer));
-    compositor.drawText(valueBuffer, x + 10, y + PANEL_HEIGHT / 2 + 15, &FreeSansBold18pt7b, textBlack);
+    compositor.drawText(valueBuffer, x + 10, y + PANEL_HEIGHT / 2 + 15, &FreeSansBold18pt7b, true);
 
     // Unit below value
     const char* unit = getUnit(index);
-    compositor.drawText(unit, x + 10, y + PANEL_HEIGHT / 2 + 40, &FreeSans9pt7b, textBlack);
+    compositor.drawText(unit, x + 10, y + PANEL_HEIGHT / 2 + 40, &FreeSans9pt7b, true);
 
     // Connection status indicator (small dot in corner)
     bool connected = false;
@@ -82,8 +76,48 @@ void SensorDashboard::renderPanel(Compositor& compositor, int16_t index, int16_t
         // Draw X in corner for disconnected
         int16_t cornerX = x + PANEL_WIDTH - 15;
         int16_t cornerY = y + 15;
-        compositor.drawLine(cornerX - 4, cornerY - 4, cornerX + 4, cornerY + 4, textBlack);
-        compositor.drawLine(cornerX + 4, cornerY - 4, cornerX - 4, cornerY + 4, textBlack);
+        compositor.drawLine(cornerX - 4, cornerY - 4, cornerX + 4, cornerY + 4, true);
+        compositor.drawLine(cornerX + 4, cornerY - 4, cornerX - 4, cornerY + 4, true);
+    }
+
+    // Trend arrow (if we have history data)
+    if (connected && _data.historyCount > 1) {
+        int16_t arrowX = x + PANEL_WIDTH - 20;
+        int16_t arrowY = y + 28;
+
+        // Get previous value from history
+        float current = 0, previous = 0;
+        int histIdx = _data.historyCount - 1;
+        int prevIdx = histIdx > 0 ? histIdx - 1 : 0;
+
+        switch (index) {
+            case 0:  // CO2
+                current = static_cast<float>(_data.co2);
+                previous = static_cast<float>(_data.co2History[prevIdx]);
+                break;
+            case 1:  // Temperature
+                current = _data.temperature;
+                previous = static_cast<float>(_data.tempHistory[prevIdx]) / 10.0f;
+                break;
+            case 2:  // Humidity
+                current = _data.humidity;
+                previous = static_cast<float>(_data.humidityHistory[prevIdx]) / 10.0f;
+                break;
+            case 3:  // IAQ
+                current = static_cast<float>(_data.iaq);
+                previous = static_cast<float>(_data.iaqHistory[prevIdx]);
+                break;
+            case 4:  // Pressure
+                current = _data.pressure;
+                previous = static_cast<float>(_data.pressureHistory[prevIdx]) / 10.0f;
+                break;
+            default:
+                break;  // No trend for IAQ Accuracy
+        }
+
+        if (index < 5) {  // Show trend for all except IAQ Accuracy
+            ui::renderTrendArrow(compositor, arrowX, arrowY, current, previous);
+        }
     }
 }
 
@@ -175,20 +209,8 @@ void SensorDashboard::formatValue(int16_t index, char* buffer, size_t size) cons
 }
 
 void SensorDashboard::renderPageIndicator(Compositor& compositor, int currentPage, int totalPages) {
-    int16_t indicatorY = config::display::HEIGHT - 20;
-    int16_t dotSpacing = 20;
-    int16_t startX = config::display::WIDTH / 2 - (totalPages - 1) * dotSpacing / 2;
-
-    for (int i = 0; i < totalPages; i++) {
-        int16_t dotX = startX + i * dotSpacing;
-        if (i == currentPage) {
-            // Current page - filled circle (black)
-            compositor.fillCircle(dotX, indicatorY, 5, true);
-        } else {
-            // Other pages - outline circle (black)
-            compositor.drawCircle(dotX, indicatorY, 5, true);
-        }
-    }
+    ui::renderPageDots(compositor, currentPage, totalPages,
+                       config::display::WIDTH, config::display::HEIGHT - 20);
 }
 
 } // namespace paperhome

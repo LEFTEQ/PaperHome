@@ -36,6 +36,7 @@
 #include "tado/tado_types.h"
 #include "tado/tado_auto_adjust.h"
 #include "sensors/sensor_manager.h"
+#include "connectivity/mqtt_client.h"
 
 // Screens
 #include "ui/screens/hue_dashboard.h"
@@ -68,6 +69,7 @@ HueService* hueService = nullptr;
 TadoService* tadoService = nullptr;
 TadoAutoAdjust* tadoAutoAdjust = nullptr;
 SensorManager* sensorManager = nullptr;
+MqttClient* mqttClient = nullptr;
 
 // Core 1 (UI) objects
 DisplayDriver displayDriver;
@@ -235,6 +237,24 @@ void sendHueRoomsToUI() {
 
     auto uiRooms = convertHueRooms(hueService->getRooms(), hueService->getRoomCount());
     serviceQueue.sendHueRooms(uiRooms);
+
+    // Also publish to MQTT for web app
+    if (mqttClient && mqttClient->isConnected()) {
+        String json = "[";
+        const HueRoomData* rooms = hueService->getRooms();
+        uint8_t count = hueService->getRoomCount();
+        for (uint8_t i = 0; i < count; i++) {
+            if (i > 0) json += ",";
+            json += "{\"id\":\"" + String(rooms[i].id) + "\",";
+            json += "\"name\":\"" + String(rooms[i].name) + "\",";
+            json += "\"anyOn\":" + String(rooms[i].anyOn ? "true" : "false") + ",";
+            json += "\"brightness\":" + String(rooms[i].getBrightnessPercent()) + "}";
+        }
+        json += "]";
+        mqttClient->publishHueState(json);
+        Serial.printf("[Hue] Sent %d rooms to MQTT\n", count);
+    }
+
     Serial.printf("[Hue] Sent %d rooms to UI\n", uiRooms.size());
 }
 
@@ -274,6 +294,27 @@ void sendTadoZonesToUI() {
 
     auto uiZones = convertTadoZones(tadoService->getZones(), tadoService->getZoneCount());
     serviceQueue.sendTadoZones(uiZones);
+
+    // Also publish to MQTT for web app
+    if (mqttClient && mqttClient->isConnected()) {
+        String json = "[";
+        const TadoZoneData* zones = tadoService->getZones();
+        uint8_t count = tadoService->getZoneCount();
+        for (uint8_t i = 0; i < count; i++) {
+            if (i > 0) json += ",";
+            json += "{\"id\":" + String(zones[i].id) + ",";
+            json += "\"name\":\"" + String(zones[i].name) + "\",";
+            json += "\"currentTemp\":" + String(zones[i].currentTemp, 1) + ",";
+            json += "\"targetTemp\":" + String(zones[i].targetTemp, 1) + ",";
+            json += "\"humidity\":" + String(zones[i].humidity, 0) + ",";
+            json += "\"isHeating\":" + String(zones[i].heating ? "true" : "false") + ",";
+            json += "\"heatingPower\":" + String(zones[i].heatingPower) + "}";
+        }
+        json += "]";
+        mqttClient->publishTadoState(json);
+        Serial.printf("[Tado] Sent %d zones to MQTT\n", count);
+    }
+
     Serial.printf("[Tado] Sent %d zones to UI\n", uiZones.size());
 }
 
@@ -562,6 +603,20 @@ void ioTask(void* parameter) {
         Serial.println("[I/O Task] WARNING: Sensor manager init failed (no sensors found)");
     }
 
+    // Initialize MQTT client (only if WiFi connected)
+    mqttClient = new MqttClient();
+    if (WiFi.isConnected()) {
+        // Use MAC address as device ID (without colons, uppercase)
+        String macAddress = WiFi.macAddress();
+        macAddress.replace(":", "");
+        // MAC address is already uppercase from WiFi.macAddress()
+
+        mqttClient->init(macAddress);
+        Serial.printf("[I/O Task] MQTT client initialized with device ID: %s\n", macAddress.c_str());
+    } else {
+        Serial.println("[I/O Task] MQTT client created but not initialized (no WiFi)");
+    }
+
     // Main I/O loop
     uint32_t lastStatusUpdate = 0;
     constexpr uint32_t STATUS_UPDATE_INTERVAL_MS = 5000;  // Update status every 5s
@@ -683,6 +738,11 @@ void ioTask(void* parameter) {
             tadoAutoAdjust->update(currentTemp);
         }
 
+        // Update MQTT client (handles connection and reconnection)
+        if (mqttClient && WiFi.isConnected()) {
+            mqttClient->update();
+        }
+
         // Periodic status and sensor data update
         if (now - lastStatusUpdate >= STATUS_UPDATE_INTERVAL_MS) {
             lastStatusUpdate = now;
@@ -691,7 +751,7 @@ void ioTask(void* parameter) {
             StatusBarData statusData;
             statusData.wifiConnected = WiFi.isConnected();
             statusData.wifiRSSI = WiFi.isConnected() ? WiFi.RSSI() : 0;
-            statusData.mqttConnected = false;  // TODO: Add MQTT service
+            statusData.mqttConnected = mqttClient && mqttClient->isConnected();
             statusData.hueConnected = hueService && hueService->isConnected();
             statusData.tadoConnected = tadoService && tadoService->isConnected();
             statusData.temperature = sensorManager ? sensorManager->getTemperature() : 0.0f;
@@ -700,11 +760,88 @@ void ioTask(void* parameter) {
             statusData.usbPowered = true;      // TODO: Add power manager
             serviceQueue.sendStatus(statusData);
 
+            // Device info for settings screen
+            DeviceInfoData deviceInfo;
+            memset(&deviceInfo, 0, sizeof(deviceInfo));
+
+            // Network
+            deviceInfo.wifiConnected = WiFi.isConnected();
+            if (WiFi.isConnected()) {
+                strncpy(deviceInfo.wifiSSID, WiFi.SSID().c_str(), sizeof(deviceInfo.wifiSSID) - 1);
+                strncpy(deviceInfo.ipAddress, WiFi.localIP().toString().c_str(), sizeof(deviceInfo.ipAddress) - 1);
+                deviceInfo.rssi = WiFi.RSSI();
+            }
+            strncpy(deviceInfo.macAddress, WiFi.macAddress().c_str(), sizeof(deviceInfo.macAddress) - 1);
+
+            // MQTT
+            deviceInfo.mqttConnected = mqttClient && mqttClient->isConnected();
+
+            // Hue
+            deviceInfo.hueConnected = hueService && hueService->isConnected();
+            if (hueService && hueService->isConnected()) {
+                strncpy(deviceInfo.hueBridgeIP, hueService->getBridgeIP(), sizeof(deviceInfo.hueBridgeIP) - 1);
+                deviceInfo.hueRoomCount = hueService->getRoomCount();
+            }
+
+            // Tado
+            deviceInfo.tadoConnected = tadoService && tadoService->isConnected();
+            if (tadoService && tadoService->isConnected()) {
+                deviceInfo.tadoZoneCount = tadoService->getZoneCount();
+            }
+
+            // System
+            deviceInfo.freeHeap = ESP.getFreeHeap();
+            deviceInfo.freePSRAM = ESP.getFreePsram();
+            deviceInfo.uptime = millis() / 1000;
+            deviceInfo.cpuFreqMHz = getCpuFrequencyMhz();
+
+            // Power
+            deviceInfo.batteryPercent = 100;  // TODO: Add power manager
+            deviceInfo.batteryMV = 4200;      // TODO: Add power manager
+            deviceInfo.usbPowered = true;     // TODO: Add power manager
+            deviceInfo.charging = false;
+
+            // Sensors
+            if (sensorManager) {
+                SensorState stcc4State = sensorManager->getSTCC4State();
+                SensorState bme688State = sensorManager->getBME688State();
+                deviceInfo.stcc4Connected = (stcc4State == SensorState::ACTIVE || stcc4State == SensorState::WARMING_UP);
+                deviceInfo.bme688Connected = (bme688State == SensorState::ACTIVE || bme688State == SensorState::WARMING_UP);
+                deviceInfo.bme688IaqAccuracy = sensorManager->getIAQAccuracy();
+            }
+
+            // Controller
+            deviceInfo.controllerConnected = xboxDriver && xboxDriver->isConnected();
+            deviceInfo.controllerBattery = 100;  // TODO: Get from Xbox driver
+
+            // Firmware
+            strncpy(deviceInfo.firmwareVersion, "3.2.0", sizeof(deviceInfo.firmwareVersion) - 1);
+
+            serviceQueue.sendDeviceInfo(deviceInfo);
+
             // Send sensor data to UI for dashboard
             sendSensorDataToUI();
-        }
 
-        // TODO: Add MQTT polling here
+            // Publish telemetry via MQTT
+            if (mqttClient && mqttClient->isConnected() && sensorManager) {
+                String telemetryJson = "{";
+                telemetryJson += "\"co2\":" + String(sensorManager->getCO2()) + ",";
+                telemetryJson += "\"temperature\":" + String(sensorManager->getTemperature(), 1) + ",";
+                telemetryJson += "\"humidity\":" + String(sensorManager->getHumidity(), 1) + ",";
+                telemetryJson += "\"battery\":" + String(100) + ",";  // TODO: Add power manager
+                telemetryJson += "\"iaq\":" + String(sensorManager->getIAQ()) + ",";
+                telemetryJson += "\"iaqAccuracy\":" + String(sensorManager->getIAQAccuracy()) + ",";
+                telemetryJson += "\"pressure\":" + String(sensorManager->getPressure(), 1) + ",";
+                telemetryJson += "\"bme688Temperature\":" + String(sensorManager->getBME688Temperature(), 1) + ",";
+                telemetryJson += "\"bme688Humidity\":" + String(sensorManager->getBME688Humidity(), 1) + ",";
+                telemetryJson += "\"timestamp\":" + String(millis());
+                telemetryJson += "}";
+
+                if (mqttClient->publishTelemetry(telemetryJson)) {
+                    Serial.println("[MQTT] Telemetry published");
+                }
+            }
+        }
 
         // Yield to other tasks (10ms = 100Hz polling)
         vTaskDelay(pdMS_TO_TICKS(10));
@@ -807,6 +944,11 @@ void uiTask(void* parameter) {
                 case ServiceDataType::SENSOR_DATA:
                     sensorDashboard->setSensorData(serviceUpdate.sensorData);
                     Serial.println("[Service] Sensor data updated");
+                    break;
+
+                case ServiceDataType::DEVICE_INFO:
+                    settingsInfo->setDeviceInfo(serviceUpdate.deviceInfoData.toDeviceInfo());
+                    Serial.println("[Service] Device info updated");
                     break;
             }
         }

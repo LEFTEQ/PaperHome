@@ -107,8 +107,6 @@ private:
     static constexpr int16_t TILE_HEIGHT = (CONTENT_HEIGHT - (ROWS - 1) * SPACING) / ROWS;
 
     void renderTile(Compositor& compositor, int16_t index, int16_t x, int16_t y);
-    void renderBrightnessBar(Compositor& compositor, int16_t x, int16_t y, int16_t width,
-                             uint8_t brightness, bool isOn, bool inverted);
     void renderPageIndicator(Compositor& compositor, int currentPage, int totalPages);
 };
 

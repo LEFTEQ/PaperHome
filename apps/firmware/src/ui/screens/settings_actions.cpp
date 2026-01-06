@@ -1,4 +1,5 @@
 #include "ui/screens/settings_actions.h"
+#include "ui/helpers.h"
 
 namespace paperhome {
 
@@ -22,14 +23,14 @@ bool SettingsActions::onConfirm() {
 
 void SettingsActions::render(Compositor& compositor) {
     // Background
-    compositor.submit(DrawCommand::fillScreen(true));
+    compositor.fillScreen(true);  // White
 
     // Header
-    compositor.submitText("Settings", 20, 30, &FreeSansBold12pt7b, true);
-    compositor.submitText("Actions", config::display::WIDTH - 100, 30, &FreeSans9pt7b, true);
+    compositor.drawText("Settings", 20, 30, &FreeSansBold12pt7b, true);
+    compositor.drawText("Actions", config::display::WIDTH - 100, 30, &FreeSans9pt7b, true);
 
     // Divider
-    compositor.submit(DrawCommand::drawHLine(10, 45, config::display::WIDTH - 20, false));
+    compositor.drawHLine(10, 45, config::display::WIDTH - 20, true);
 
     // Render action items
     int16_t y = START_Y;
@@ -37,30 +38,31 @@ void SettingsActions::render(Compositor& compositor) {
 
     for (int i = 0; i < static_cast<int>(DeviceAction::COUNT); i++) {
         DeviceAction action = static_cast<DeviceAction>(i);
+        bool isSelected = (i == getSelectedIndex());
 
-        // Item border
-        compositor.submit(DrawCommand::drawRect(20, y, width, ITEM_HEIGHT - 5, false));
+        // Selection border (thick 2px when selected, 1px otherwise)
+        ui::drawSelectionBorder(compositor, 20, y, width, ITEM_HEIGHT - 5, isSelected);
 
         // Action name
-        compositor.submitText(getActionName(action), 35, y + 25, &FreeSansBold12pt7b, true);
+        compositor.drawText(getActionName(action), 35, y + 25, &FreeSansBold12pt7b, true);
 
         // Action description
-        compositor.submitText(getActionDescription(action), 35, y + 45, &FreeSans9pt7b, true);
+        compositor.drawText(getActionDescription(action), 35, y + 45, &FreeSans9pt7b, true);
 
         y += ITEM_HEIGHT;
     }
 
-    // Warning for dangerous actions
-    compositor.submitText("A: Execute selected action", 20, config::display::HEIGHT - 60,
+    // Action hint
+    compositor.drawText("A: Execute selected action", 20, config::display::HEIGHT - 60,
                          &FreeSans9pt7b, true);
 
     // Page indicator
     int16_t indicatorY = config::display::HEIGHT - 20;
-    compositor.submitText("Settings 3/3", config::display::WIDTH / 2 - 40, indicatorY,
+    compositor.drawText("Settings 3/3", config::display::WIDTH / 2 - 40, indicatorY,
                          &FreeSans9pt7b, true);
 
     // Navigation hint
-    compositor.submitText("LB/RB: cycle  B: back", 10, config::display::HEIGHT - 5,
+    compositor.drawText("LB/RB: cycle  B: back", 10, config::display::HEIGHT - 5,
                          &FreeSans9pt7b, true);
 }
 
