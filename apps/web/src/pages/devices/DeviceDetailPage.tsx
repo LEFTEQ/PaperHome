@@ -471,6 +471,7 @@ export function DeviceDetailPage() {
             deviceName={device.name}
             isDeviceOnline={device.isOnline}
             availableZones={tadoRoomsData}
+            esp32Temp={temperature ?? undefined}
           />
         </motion.div>
       )}

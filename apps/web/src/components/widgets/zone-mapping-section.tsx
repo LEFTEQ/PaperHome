@@ -9,6 +9,9 @@ import {
   ChevronDown,
   ChevronUp,
   AlertTriangle,
+  ArrowRight,
+  Info,
+  Gauge,
 } from 'lucide-react';
 import { GlassCard } from '@/components/ui/glass-card';
 import { Button } from '@/components/ui/button';
@@ -35,6 +38,8 @@ export interface ZoneMappingSectionProps {
   isDeviceOnline?: boolean;
   /** Available Tado zones from the device */
   availableZones?: TadoRoom[];
+  /** Current ESP32 sensor temperature */
+  esp32Temp?: number;
   /** Additional className */
   className?: string;
 }
@@ -54,10 +59,12 @@ export function ZoneMappingSection({
   deviceName,
   isDeviceOnline = true,
   availableZones = [],
+  esp32Temp,
   className,
 }: ZoneMappingSectionProps) {
   const [isExpanded, setIsExpanded] = useState(true);
   const [showAddZone, setShowAddZone] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
   // Fetch zone mappings
   const { data: mappings = [], isLoading, error } = useZoneMappings(deviceId);
@@ -145,13 +152,15 @@ export function ZoneMappingSection({
       >
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-xl bg-accent/10 flex items-center justify-center">
-            <Settings className="h-5 w-5 text-accent" />
+            <Gauge className="h-5 w-5 text-accent" />
           </div>
           <div className="text-left">
-            <h3 className="text-sm font-medium text-white">Zone Mapping</h3>
+            <h3 className="text-sm font-medium text-white">Sensor Calibration</h3>
             <p className="text-xs text-text-muted">
               {mappings.length === 0
-                ? 'Link Tado zones to use ESP32 sensors'
+                ? 'Use ESP32 sensor to calibrate Tado thermostats'
+                : mappings.some((m) => m.autoAdjustEnabled)
+                ? `${mappings.filter((m) => m.autoAdjustEnabled).length} zone${mappings.filter((m) => m.autoAdjustEnabled).length !== 1 ? 's' : ''} being calibrated`
                 : `${mappings.length} zone${mappings.length !== 1 ? 's' : ''} configured`}
             </p>
           </div>
@@ -160,7 +169,7 @@ export function ZoneMappingSection({
           {mappings.some((m) => m.autoAdjustEnabled) && (
             <Badge variant="primary" size="xs">
               <Zap className="h-3 w-3 mr-1" />
-              Auto-Adjust Active
+              Active
             </Badge>
           )}
           {isExpanded ? (
@@ -181,12 +190,87 @@ export function ZoneMappingSection({
             transition={{ duration: 0.2 }}
           >
             <div className="px-6 pb-6 space-y-4">
+              {/* How it works - collapsible */}
+              <div className="rounded-lg bg-accent/5 border border-accent/10 overflow-hidden">
+                <button
+                  className="w-full p-3 flex items-center justify-between text-left hover:bg-accent/5 transition-colors"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowHelp(!showHelp);
+                  }}
+                >
+                  <div className="flex items-center gap-2">
+                    <Info className="h-4 w-4 text-accent" />
+                    <span className="text-sm font-medium text-text-secondary">
+                      How does this work?
+                    </span>
+                  </div>
+                  <ChevronDown
+                    className={cn(
+                      'h-4 w-4 text-text-muted transition-transform',
+                      showHelp && 'rotate-180'
+                    )}
+                  />
+                </button>
+                <AnimatePresence>
+                  {showHelp && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="px-3 pb-3 space-y-3 text-xs text-text-muted">
+                        <p>
+                          <strong className="text-text-secondary">The Problem:</strong> Tado thermostats
+                          measure temperature near the radiator, which is often warmer than the actual room
+                          temperature.
+                        </p>
+                        <p>
+                          <strong className="text-text-secondary">The Solution:</strong> This device has a
+                          precise sensor placed in the room. When calibration is enabled, it tells Tado
+                          how much to adjust its readings.
+                        </p>
+                        <div className="p-2 rounded bg-glass border border-glass-border">
+                          <div className="flex items-center justify-center gap-2 text-text-secondary">
+                            <span>ESP32 Sensor</span>
+                            <ArrowRight className="h-3 w-3" />
+                            <span>Calculates Offset</span>
+                            <ArrowRight className="h-3 w-3" />
+                            <span>Tado Calibrated</span>
+                          </div>
+                        </div>
+                        <p className="text-text-subtle">
+                          Example: If ESP32 reads 22°C but Tado reads 24°C, a -2°C offset is applied
+                          so Tado knows the real room temperature.
+                        </p>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
               {/* Device offline warning */}
               {!isDeviceOnline && (
                 <div className="p-3 rounded-lg bg-warning/10 border border-warning/20">
                   <div className="flex items-center gap-2 text-warning text-sm">
                     <AlertTriangle className="h-4 w-4 flex-shrink-0" />
-                    <span>Device is offline. Auto-adjust is paused.</span>
+                    <span>Device is offline. Calibration is paused.</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Current sensor reading */}
+              {esp32Temp !== undefined && isDeviceOnline && (
+                <div className="p-3 rounded-lg bg-glass border border-glass-border">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Thermometer className="h-4 w-4 text-accent" />
+                      <span className="text-sm text-text-secondary">ESP32 Sensor</span>
+                    </div>
+                    <span className="text-lg font-mono font-bold text-white">
+                      {esp32Temp.toFixed(1)}°C
+                    </span>
                   </div>
                 </div>
               )}
@@ -194,18 +278,26 @@ export function ZoneMappingSection({
               {/* Mapped zones list */}
               {mappings.length > 0 ? (
                 <div className="space-y-3">
-                  {mappings.map((mapping) => (
-                    <ZoneMappingCard
-                      key={mapping.id}
-                      mapping={mapping}
-                      isDeviceOnline={isDeviceOnline}
-                      onToggleAutoAdjust={(enabled) =>
-                        handleToggleAutoAdjust(mapping, enabled)
-                      }
-                      onTargetChange={(temp) => handleTargetChange(mapping, temp)}
-                      onDelete={() => handleDeleteMapping(mapping.id)}
-                    />
-                  ))}
+                  {mappings.map((mapping) => {
+                    // Find the matching Tado zone to get its current temperature
+                    const tadoZone = availableZones.find(
+                      (z) => parseInt(z.roomId, 10) === mapping.tadoZoneId
+                    );
+                    return (
+                      <ZoneMappingCard
+                        key={mapping.id}
+                        mapping={mapping}
+                        isDeviceOnline={isDeviceOnline}
+                        esp32Temp={esp32Temp}
+                        tadoTemp={tadoZone?.currentTemp}
+                        onToggleAutoAdjust={(enabled) =>
+                          handleToggleAutoAdjust(mapping, enabled)
+                        }
+                        onTargetChange={(temp) => handleTargetChange(mapping, temp)}
+                        onDelete={() => handleDeleteMapping(mapping.id)}
+                      />
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="py-8 text-center">
@@ -239,22 +331,47 @@ export function ZoneMappingSection({
                         </Button>
                       </div>
                       <div className="space-y-2">
-                        {unmappedZones.map((zone) => (
-                          <button
-                            key={zone.roomId}
-                            className="w-full p-3 rounded-lg bg-glass-hover hover:bg-glass-bright border border-glass-border transition-colors flex items-center justify-between"
-                            onClick={() => handleAddZone(zone)}
-                            disabled={createMapping.isPending}
-                          >
-                            <div className="flex items-center gap-3">
-                              <Thermometer className="h-4 w-4 text-text-muted" />
-                              <span className="text-sm text-white">{zone.roomName}</span>
-                            </div>
-                            <span className="text-xs text-text-muted">
-                              {zone.currentTemp.toFixed(1)}°C
-                            </span>
-                          </button>
-                        ))}
+                        {unmappedZones.map((zone) => {
+                          const potentialOffset =
+                            esp32Temp !== undefined
+                              ? esp32Temp - zone.currentTemp
+                              : null;
+                          return (
+                            <button
+                              key={zone.roomId}
+                              className="w-full p-3 rounded-lg bg-glass-hover hover:bg-glass-bright border border-glass-border transition-colors"
+                              onClick={() => handleAddZone(zone)}
+                              disabled={createMapping.isPending}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <Thermometer className="h-4 w-4 text-text-muted" />
+                                  <span className="text-sm text-white">{zone.roomName}</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-xs">
+                                  <span className="text-text-muted">
+                                    Tado: {zone.currentTemp.toFixed(1)}°C
+                                  </span>
+                                  {potentialOffset !== null && (
+                                    <span
+                                      className={cn(
+                                        'font-mono px-1.5 py-0.5 rounded',
+                                        potentialOffset > 0
+                                          ? 'text-orange-400 bg-orange-400/10'
+                                          : potentialOffset < 0
+                                            ? 'text-blue-400 bg-blue-400/10'
+                                            : 'text-text-secondary bg-glass-hover'
+                                      )}
+                                    >
+                                      {potentialOffset > 0 ? '+' : ''}
+                                      {potentialOffset.toFixed(1)}°C
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })}
                       </div>
                     </motion.div>
                   ) : (
@@ -271,15 +388,6 @@ export function ZoneMappingSection({
                 </>
               )}
 
-              {/* Info about auto-adjust */}
-              <div className="p-3 rounded-lg bg-accent/5 border border-accent/10">
-                <p className="text-xs text-text-muted">
-                  <strong className="text-text-secondary">Auto-Adjust:</strong> When enabled,
-                  {deviceName || 'this device'}'s ESP32 sensor will control Tado thermostats
-                  instead of Tado's built-in sensors, providing more accurate room temperature
-                  control.
-                </p>
-              </div>
             </div>
           </motion.div>
         )}
@@ -295,6 +403,8 @@ export function ZoneMappingSection({
 interface ZoneMappingCardProps {
   mapping: TadoZoneMapping;
   isDeviceOnline?: boolean;
+  esp32Temp?: number;
+  tadoTemp?: number;
   onToggleAutoAdjust: (enabled: boolean) => void;
   onTargetChange: (temp: number) => void;
   onDelete: () => void;
@@ -303,12 +413,18 @@ interface ZoneMappingCardProps {
 function ZoneMappingCard({
   mapping,
   isDeviceOnline = true,
+  esp32Temp,
+  tadoTemp,
   onToggleAutoAdjust,
   onTargetChange,
   onDelete,
 }: ZoneMappingCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [tempValue, setTempValue] = useState(mapping.targetTemperature);
+
+  // Calculate current offset
+  const currentOffset =
+    esp32Temp !== undefined && tadoTemp !== undefined ? esp32Temp - tadoTemp : null;
 
   const handleTempChange = (value: number) => {
     setTempValue(value);
@@ -329,6 +445,7 @@ function ZoneMappingCard({
           : 'bg-glass border-glass-border'
       )}
     >
+      {/* Header row with zone name and controls */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <div
@@ -349,19 +466,22 @@ function ZoneMappingCard({
             <span className="text-sm font-medium text-white block">
               {mapping.tadoZoneName}
             </span>
-            <span className="text-xs text-text-muted">
-              Target: {mapping.targetTemperature.toFixed(1)}°C
-            </span>
+            {!mapping.autoAdjustEnabled && (
+              <span className="text-xs text-text-muted">Calibration disabled</span>
+            )}
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <Toggle
-            size="sm"
-            checked={mapping.autoAdjustEnabled}
-            onCheckedChange={onToggleAutoAdjust}
-            disabled={!isDeviceOnline}
-          />
+          <div className="flex items-center gap-1.5 mr-1">
+            <span className="text-xs text-text-muted">Calibrate</span>
+            <Toggle
+              size="sm"
+              checked={mapping.autoAdjustEnabled}
+              onCheckedChange={onToggleAutoAdjust}
+              disabled={!isDeviceOnline}
+            />
+          </div>
           <Button
             variant="ghost"
             size="icon-sm"
@@ -372,6 +492,54 @@ function ZoneMappingCard({
           </Button>
         </div>
       </div>
+
+      {/* Offset display - only when calibration is active and we have both temps */}
+      {mapping.autoAdjustEnabled && isDeviceOnline && currentOffset !== null && (
+        <div className="mb-3 p-3 rounded-lg bg-glass border border-glass-border">
+          <div className="grid grid-cols-3 gap-2 text-center">
+            {/* ESP32 reading */}
+            <div>
+              <div className="text-xs text-text-muted mb-1">ESP32</div>
+              <div className="text-sm font-mono font-semibold text-accent">
+                {esp32Temp!.toFixed(1)}°C
+              </div>
+            </div>
+
+            {/* Offset indicator */}
+            <div className="flex flex-col items-center justify-center">
+              <div className="text-xs text-text-muted mb-1">Offset</div>
+              <div
+                className={cn(
+                  'text-sm font-mono font-bold px-2 py-0.5 rounded',
+                  currentOffset > 0
+                    ? 'text-orange-400 bg-orange-400/10'
+                    : currentOffset < 0
+                      ? 'text-blue-400 bg-blue-400/10'
+                      : 'text-text-secondary bg-glass-hover'
+                )}
+              >
+                {currentOffset > 0 ? '+' : ''}
+                {currentOffset.toFixed(1)}°C
+              </div>
+            </div>
+
+            {/* Tado reading */}
+            <div>
+              <div className="text-xs text-text-muted mb-1">Tado</div>
+              <div className="text-sm font-mono font-semibold text-text-secondary">
+                {tadoTemp!.toFixed(1)}°C
+              </div>
+            </div>
+          </div>
+          <p className="text-xs text-text-subtle text-center mt-2">
+            {currentOffset > 0
+              ? 'Room is warmer than Tado reads'
+              : currentOffset < 0
+                ? 'Room is cooler than Tado reads'
+                : 'Tado is reading accurately'}
+          </p>
+        </div>
+      )}
 
       {/* Expandable edit section */}
       <AnimatePresence>
